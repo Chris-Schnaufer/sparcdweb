@@ -569,13 +569,14 @@ class SPARCdDatabase:
         """
         return self._db.admin_count()
 
-    def update_user(self, old_name: str, new_email: str) -> None:
+    def update_user(self, old_name: str, new_email: str, admin: bool=None) -> None:
         """ Updates the user in the database
         Arguments:
             old_name: the old user name
             new_email: the new email to set for the user
+            admin: if set to True the user as admin privileges, if None this permission is unchanged
         """
-        self._db.update_user(old_name, new_email)
+        self._db.update_user(old_name, new_email, admin)
 
     def update_species(self, s3_url: str, username: str, old_scientific: str, new_scientific: str, \
                                         new_name: str, new_keybind: str, new_icon_url: str) -> bool:

@@ -1104,19 +1104,27 @@ class SPDSQLite:
 
         return int(res[0])
 
-    def update_user(self, old_name: str, new_email: str):
+    def update_user(self, old_name: str, new_email: str, admin: bool=None) -> None:
         """ Updates the user in the database
         Arguments:
             old_name: the old user name
             new_email: the new email to set for the user
+            admin: if set to True the user as admin privileges, if None this permission is unchanged
         """
         if self._conn is None:
             raise RuntimeError('Attempting to update the user name & email in the database before '\
                                     'connecting')
 
+        if admin is None:
+            query = 'UPDATE users SET email=? WHERE name=?'
+            params = (new_email, old_name)
+        else:
+            query = 'UPDATE users SET email=?, administrator=? WHERE name=?'
+            params = (new_email, isinstance(admin, bool) and admin == True, old_name)
+
         cursor = self._conn.cursor()
-        cursor.execute('UPDATE users SET email=? WHERE name=?',
-                                                                    (new_email, old_name))
+        cursor.execute(query, params)
+
         self._conn.commit()
         cursor.close()
 

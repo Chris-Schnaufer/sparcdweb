@@ -33,10 +33,10 @@ const Input = styled(MuiInput)`
 export default function ImageEditSpecies({name, count, onDelete, onChange, onBlur}) {
 
   return (
-    <Grid id={'image-edit-species-'+name} key={'image-edit-species-'+name} container direction="row"
+    <Grid id={'image-edit-species-'+name} key={'image-edit-species-'+name} container direction="row"  alignItems="center"
           sx={{padding:'0px 5px 0px 5px', width:'200px', color:'#4f4f4f',
              backgroundColor:'rgba(255,255,255,0.45)', '&:hover':{backgroundColor:'rgba(255,255,255,0.8)',color:'black'},
-             borderRadius:'5px', minWidth:'400px'
+             borderRadius:'5px', minWidth:'400px', height:'2em'
           }}
     >
           <Grid size={8}>

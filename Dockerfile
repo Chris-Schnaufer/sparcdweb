@@ -92,7 +92,7 @@ ENV SERVER_DIR=${WORKDIR} \
     SPARCD_DB=${WORKDIR}/sparcd.sqlite 
 
 RUN echo
-RUN echo gunicorn -w 4 -b "0.0.0.0:${PORT_NUMBER}" --access-logfile '-' sparcd:app --timeout 18000 > ${WORKDIR}/startup_server.sh
+RUN echo gunicorn -b "0.0.0.0:${PORT_NUMBER}" --access-logfile '-' sparcd:app --timeout 18000 > ${WORKDIR}/startup_server.sh
 RUN chmod +x ${WORKDIR}/startup_server.sh
 
 ENTRYPOINT ["sh", "./startup_server.sh"]

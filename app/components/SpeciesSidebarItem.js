@@ -25,7 +25,7 @@ import { useTheme } from '@mui/material/styles';
 export default function SpeciesSidebarItem({id, species, size, onKeybindClick, onZoomClick}) {
   const theme = useTheme();
 
-  let cardSx = size === "small" ? {'maxWidth':'120px'} : {'maxWidth':'150px'}
+  let cardSx = size === "small" ? {'maxWidth':'120px'} : {'maxWidth':'200px'}
   let mediaSx = size === "small" ? theme.palette.species_sidebar_item_media_small : theme.palette.species_sidebar_item_media;
   let nameSx = size === "small" ? {fontSize:"xx-small"} : {};
 
