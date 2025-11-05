@@ -2370,19 +2370,24 @@ def admin_user_update():
     # Get the rest of the request parameters
     old_name = request.form.get('oldName', None)
     new_email = request.form.get('newEmail', None)
+    admin = request.form.get('admin', None)
 
     # Check what we have from the requestor
-    if not all(item for item in [old_name, new_email]):
+    if not all(item for item in [old_name]) or new_email is None:
         return "Not Found", 406
 
-    # Make sure this user is an admin
+    # Make sure the user requesting the change is an admin
     if user_info.admin != 1:
         return "Not Found", 404
 
-    if not user_info.name == old_name:
+    old_user_info = db.get_user(old_name)
+    if old_user_info is None:
         return {'success': False, 'message': f'User "{old_name}" not found'}
 
-    db.update_user(old_name, new_email)
+    if admin is not None:
+        admin = sdu.make_boolean(admin)
+
+    db.update_user(old_name, new_email, admin)
     return {'success': True, 'message': f'Successfully updated user "{old_name}"', \
             'email': sdu.secure_email(new_email)}
 

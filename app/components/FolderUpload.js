@@ -1161,7 +1161,7 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
             </Typography>
           </CardContent>
           <CardActions>
-            <Button id="sandbox-upload-continue-continue" sx={{'flex':'1'}} size="small" onClick={prevUploadContinue}>Continue Upload</Button>
+            <Button id="sandbox-upload-continue-continue" sx={{'flex':'1'}} size="small" onClick={prevUploadContinue}>Resume Upload</Button>
             <Button id="sandbox-upload-continue-restart" sx={{'flex':'1'}} size="small" onClick={prevUploadRestart}>Restart Upload</Button>
             <Button id="sandbox-upload-continue-create" sx={{'flex':'1'}} size="small" onClick={prevUploadCreateNew}>Create New Upload</Button>
             <Button id="sandbox-upload-continue-abandon" sx={{'flex':'1'}} size="small" onClick={prevUploadAbandon}>Abandon Upload</Button>

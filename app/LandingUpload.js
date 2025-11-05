@@ -40,7 +40,7 @@ export default function LandingUpload({loadingSandbox, onChange}) {
             <Grid size={{sm:4, md:4, lg:4}} sx={{left:'auto'}}>
               <Typography gutterBottom sx={{ ...theme.palette.landing_upload_prompt,
                           visibility: !loadingSandbox?"visible":"hidden" }} >
-                Unpublished uploads
+                Unfinished uploads
               </Typography>
             </Grid>
             <Grid size={{sm:4, md:4, lg:4}}>

@@ -30,6 +30,34 @@ TEMP_LOCATIONS_FILE_NAME = SPARCD_PREFIX + 'locations.json'
 LOCATIONS_JSON_FILE_NAME = 'locations.json'
 
 
+def make_boolean(value) -> bool:
+    """ Converts the parameter to a boolean value
+    Arguments:
+        value: The value to convert
+    Return:
+        Returns the boolean equivalent of the value
+    Notes:
+        Boolean values are returned as is. Strings that are "true" or "false" are converted
+        to their boolean equivalent and returned, regardless of case.  Otherwise, the 
+        truthy-ness of the value is returned as defined by Python
+    """
+    if isinstance(value, bool):
+        return value
+
+    if isinstance(value, str):
+        if value.lower() == 'true':
+            return True
+        if value.lower() == 'false':
+            return False
+
+    # Default to the truthy-ness of the value
+    if value:
+        return True
+
+    # Default to a False boolean value
+    return False
+
+
 def secure_email(email: str) -> Optional[str]:
     """ Secures the email address by replacing characters with asterisks while
         retaining legibility

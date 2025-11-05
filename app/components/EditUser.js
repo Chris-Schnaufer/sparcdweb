@@ -150,7 +150,8 @@ export default function EditUser({data, onUpdate, onConfirmPassword, onClose}) {
     if (email1 === null && email2 === null){
       return;
     }
-    if (email1.length < 5 && email2.length < 5){
+    if ((email1.length < 5 && email2.length < 5) && 
+        (email1.length != 0 && email2.length != 0)){
       setEmailMessage("An invalid email was entered. Please correct and try again")
       email1Ref.current.focus();
       email1Ref.current.select();
@@ -219,6 +220,7 @@ export default function EditUser({data, onUpdate, onConfirmPassword, onClose}) {
               </Typography>
             </Grid>
           </Grid>
+        <div style={{maxHeight:'30vh', overflowX:"scroll"}}>
         { data && data.collections && data.collections.map((item) =>
           <Grid container key={'user-edit-coll-'+item.id} direction="row" justifyContent="space-between" alignItems="center" sx={{height:'2em'}}>
             <Grid size={{sm:9}} sx={{paddingLeft:'5px'}} >
@@ -243,6 +245,7 @@ export default function EditUser({data, onUpdate, onConfirmPassword, onClose}) {
             </Grid>
           </Grid>
         )}
+        </div>
       </Grid>
     );
   }
