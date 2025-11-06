@@ -29,12 +29,33 @@ export default function LandingUpload({loadingSandbox, onChange}) {
   const curSandboxInfo = React.useContext(SandboxInfoContext);
 
   const sandboxItems = curSandboxInfo;
-  const firstItem = sandboxItems && sandboxItems.length > 0 ? sandboxItems[0] : null;
+
+  const unfinished = React.useMemo(() => {
+    let found = null;
+    if (sandboxItems && sandboxItems.length > 0) {
+      for (let oneItem of sandboxItems) {
+        if (oneItem && oneItem.uploads && oneItem.uploads.length > 0) {
+          for (let oneUp of oneItem.uploads) {
+            if (oneUp && oneUp.uploadCompleted !== undefined) {
+              if (oneUp.uploadCompleted === false) {
+                found = oneItem;
+                break;
+              }
+            }
+          }
+        }
+        if (found !== null) {
+          break;
+        }
+      }
+    }
+    return found !== null;
+  }, [sandboxItems]);
 
   // Render the UI
   return (
     <React.Fragment>
-      { firstItem || loadingSandbox  ? (
+      { unfinished || loadingSandbox  ? (
         <React.Fragment>
           <Grid container direction="row" alignItems="sflex-tart" justifyContent="flex-start">
             <Grid size={{sm:4, md:4, lg:4}} sx={{left:'auto'}}>
