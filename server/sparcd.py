@@ -113,10 +113,10 @@ app.config.update(
 app.config.from_object(__name__)
 
 # Intialize the database connection
-DB = SPARCdDatabase(DEFAULT_DB_PATH)
-DB.connect()
-del DB
-DB = None
+_db = SPARCdDatabase(DEFAULT_DB_PATH)
+_db.connect()
+del _db
+_db = None
 print(f'Using database at {DEFAULT_DB_PATH}', flush=True)
 print(f'Temporary folder at {tempfile.gettempdir()}', flush=True)
 
@@ -1234,13 +1234,12 @@ def sandbox_new():
         updated_collection = sdu.normalize_collection(updated_collection)
 
         # Check if we have a stored temporary file containing the collections information
-        return_colls = sdu.load_timed_temp_colls(user_info.name, bool(user_info.admin),
-                                                    hash2str(s3_url))
-        if return_colls:
-            return_colls = [one_coll if one_coll['bucket'] != s3_bucket else updated_collection \
-                                                                    for one_coll in return_colls ]
-            # Save the collections temporarily
-            sdu.save_timed_temp_colls(return_colls, hash2str(s3_url))
+        # and update that
+        all_colls = sdu.load_timed_temp_colls(user_info.name, True, hash2str(s3_url))
+        if all_colls:
+            all_colls = [one_coll if one_coll['bucket'] != s3_bucket else updated_collection \
+                                                                    for one_coll in all_colls ]
+            sdu.save_timed_temp_colls(all_colls, hash2str(s3_url))
 
     # Return the new ID
     return json.dumps({'id': upload_id})
@@ -1551,13 +1550,12 @@ def sandbox_completed():
         updated_collection = sdu.normalize_collection(updated_collection)
 
         # Check if we have a stored temporary file containing the collections information
-        return_colls = sdu.load_timed_temp_colls(user_info.name, bool(user_info.admin),
-                                                        hash2str(s3_url))
-        if return_colls:
-            return_colls = [one_coll if one_coll['bucket'] != s3_bucket else updated_collection \
-                                                                    for one_coll in return_colls ]
+        all_colls = sdu.load_timed_temp_colls(user_info.name, True, hash2str(s3_url))
+        if all_colls:
+            all_colls = [one_coll if one_coll['bucket'] != s3_bucket else updated_collection \
+                                                                    for one_coll in all_colls ]
             # Save the collections temporarily
-            sdu.save_timed_temp_colls(return_colls, hash2str(s3_url))
+            sdu.save_timed_temp_colls(all_colls, hash2str(s3_url))
 
     # Mark the upload as completed
     db.sandbox_upload_complete(user_info.name, upload_id)
@@ -1668,13 +1666,12 @@ def image_location():
         updated_collection = sdu.normalize_collection(updated_collection)
 
         # Check if we have a stored temporary file containing the collections information
-        return_colls = sdu.load_timed_temp_colls(user_info.name, bool(user_info.admin),
-                                                            hash2str(s3_url))
-        if return_colls:
-            return_colls = [one_coll if one_coll['bucket'] != bucket else updated_collection \
-                                                                    for one_coll in return_colls ]
+        all_colls = sdu.load_timed_temp_colls(user_info.name, True, hash2str(s3_url))
+        if all_colls:
+            all_colls = [one_coll if one_coll['bucket'] != bucket else updated_collection \
+                                                                    for one_coll in all_colls ]
             # Save the collections temporarily
-            sdu.save_timed_temp_colls(return_colls, hash2str(s3_url))
+            sdu.save_timed_temp_colls(all_colls, hash2str(s3_url))
 
     return json.dumps({'success': True})
 
@@ -2193,7 +2190,7 @@ def owner_collection_details():
         return "Not Found", 404
 
     if not collection['permissions']['usernameProperty'] == user_info.name or not \
-                                                collection['permissions']['ownerProperty'] == True:
+                                                collection['permissions']['ownerProperty'] is True:
         return "Not Found", 404
 
     return json.dumps(collection)
@@ -2675,13 +2672,12 @@ def admin_collection_update():
 
         # Check if we have a stored temporary file containing the collections information
         # TODO: why not just save what we got from S3 to file instead of updating?
-        return_colls = sdu.load_timed_temp_colls(user_info.name, bool(user_info.admin),
-                                                                hash2str(s3_url))
-        if return_colls:
-            return_colls = [one_coll if one_coll['bucket'] != s3_bucket else updated_collection \
-                                                                    for one_coll in return_colls ]
+        all_colls = sdu.load_timed_temp_colls(user_info.name, True, hash2str(s3_url))
+        if all_colls:
+            all_colls = [one_coll if one_coll['bucket'] != s3_bucket else updated_collection \
+                                                                    for one_coll in all_colls ]
             # Save the collections temporarily
-            sdu.save_timed_temp_colls(return_colls, hash2str(s3_url))
+            sdu.save_timed_temp_colls(all_colls, hash2str(s3_url))
 
     return {'success':True, 'data': updated_collection, \
             'message': "Successfully updated the collection"}
@@ -2756,7 +2752,7 @@ def ownercollection_update():
     if found_coll is None:
         return {'success': False, 'message': "Unable to find collection in list to update"}
     if not found_coll['permissions']['usernameProperty'] == user_info.name or not \
-                                                found_coll['permissions']['ownerProperty'] == True:
+                                                found_coll['permissions']['ownerProperty'] is True:
         return "Not Found", 404
 
     # Upload the changes
@@ -2778,13 +2774,12 @@ def ownercollection_update():
 
         # Check if we have a stored temporary file containing the collections information
         # TODO: why not just save what we got from S3 to file instead of updating?
-        return_colls = sdu.load_timed_temp_colls(user_info.name, bool(user_info.admin),
-                                                                hash2str(s3_url))
-        if return_colls:
-            return_colls = [one_coll if one_coll['bucket'] != s3_bucket else updated_collection \
-                                                                    for one_coll in return_colls ]
+        all_colls = sdu.load_timed_temp_colls(user_info.name, True, hash2str(s3_url))
+        if all_colls:
+            all_colls = [one_coll if one_coll['bucket'] != s3_bucket else updated_collection \
+                                                                    for one_coll in all_colls ]
             # Save the collections temporarily
-            sdu.save_timed_temp_colls(return_colls, hash2str(s3_url))
+            sdu.save_timed_temp_colls(all_colls, hash2str(s3_url))
 
     return {'success':True, 'data': updated_collection, \
             'message': "Successfully updated the collection"}

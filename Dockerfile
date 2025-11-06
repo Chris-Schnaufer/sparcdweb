@@ -42,7 +42,7 @@ ENV WORKDIR=/website
 WORKDIR ${WORKDIR}
 
 # Allow port number overrides
-ARG PORT_NUMBER=3000
+ENV PORT_NUMBER=3000
 
 # Allow override of the admin name
 ARG ADMIN_NAME=admin
@@ -92,10 +92,11 @@ EXPOSE ${PORT_NUMBER}
 # Setup the gunicorn environment
 ENV SERVER_DIR=${WORKDIR} \
     WEB_SITE_URL="0.0.0.0:"${PORT_NUMBER} \
-    SPARCD_DB=${WORKDIR}/sparcd.sqlite
+    SPARCD_DB=${WORKDIR}/sparcd.sqlite \
+    SERVER_WORKERS=4
 
 RUN echo
-RUN echo gunicorn -w \$\{SERVER_WORKERS\} -b "0.0.0.0:${PORT_NUMBER}" --access-logfile '-' sparcd:app --timeout 18000 > ${WORKDIR}/startup_server.sh
+RUN echo gunicorn -w \$\{SERVER_WORKERS\} -b \$\{WEB_SITE_URL\} --access-logfile '-' sparcd:app --timeout 18000 > ${WORKDIR}/startup_server.sh
 RUN chmod +x ${WORKDIR}/startup_server.sh
 
 ENTRYPOINT ["sh", "./startup_server.sh"]
