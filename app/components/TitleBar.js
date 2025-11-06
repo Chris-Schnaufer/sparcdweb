@@ -15,7 +15,7 @@ import Typography from '@mui/material/Typography';
 import { Level } from './Messages';
 import Settings from './Settings';
 import styles from './components.module.css';
-import { AddMessageContext, UserNameContext, UserSettingsContext } from '../serverInfo';
+import { AddMessageContext, TokenContext, UserNameContext, UserSettingsContext } from '../serverInfo';
 
 /**
  * Renders the title bar
@@ -34,6 +34,7 @@ import { AddMessageContext, UserNameContext, UserSettingsContext } from '../serv
 export default function TitleBar({searchTitle, breadcrumbs, size, onSearch, onBreadcrumb, onSettings, onLogout, onAdminSettings, onOwnerSettings}) {
   const searchId = React.useMemo(() => "search-" + (searchTitle ? searchTitle.toLowerCase().replaceAll(' ', '-') : "sparcd"), [searchTitle]);
   const addMessage = React.useContext(AddMessageContext); // Function adds messages for display
+  const loginToken = React.useContext(TokenContext);  // Login token
   const userName = React.useContext(UserNameContext);  // User display name
   const userSettings = React.useContext(UserSettingsContext);  // User display settings
   const [showSettings, setShowSettings] = React.useState(false);
@@ -44,13 +45,13 @@ export default function TitleBar({searchTitle, breadcrumbs, size, onSearch, onBr
 
   // Used to setup the welcome message
   React.useLayoutEffect(() => {
-    if (!welcomeShown) {
+    if (!welcomeShown && loginToken) {
       setWelcomeShown(true);
       if (!welcomeTimeoutId) {
         setWelcomeTimeoutId(window.setTimeout(() => setWelcomeTimeoutId(null), WELCOME_TIMEOUT_SEC));
       }
     }
-  }, [setWelcomeShown, setWelcomeTimeoutId, welcomeShown, welcomeTimeoutId]);
+  }, [loginToken, setWelcomeShown, setWelcomeTimeoutId, welcomeShown, welcomeTimeoutId]);
 
   /**
    * Handles the clicking of the search icon
@@ -128,13 +129,13 @@ export default function TitleBar({searchTitle, breadcrumbs, size, onSearch, onBr
             </Grid>
             <Grid id='sparcd-header-search-wrapper' sx={{marginLeft:'auto'}} style={{paddingLeft:'0px'}}>
               <Grid id='sparcd-header-search' container direction="row">
-                { welcomeTimeoutId !== null && 
+                { welcomeTimeoutId !== null && loginToken !== null && 
                   <Grid container alignItems="center" justifyContent="center" sx={{paddingRight:'10px', color:'dimgrey'}}>
                     <Typography style={{fontSize:'larger'}}>
                       Welcome back
                     </Typography>
                     <Typography style={{fontSize:'larger', fontFamily:'cursive', fontWeight:'bold'}}>
-                      &nbsp;{userName}&nbsp;
+                      &nbsp;{userName}
                     </Typography>
                     <Typography style={{fontSize:'larger'}}>
                       !
@@ -159,9 +160,11 @@ export default function TitleBar({searchTitle, breadcrumbs, size, onSearch, onBr
                             }}
                  />
                 }
-                <IconButton onClick={() => setShowSettings(true)}>
-                  <MenuOutlinedIcon />
-                </IconButton>
+                { loginToken !== null && 
+                  <IconButton onClick={() => setShowSettings(true)}>
+                    <MenuOutlinedIcon />
+                  </IconButton>
+                }
               </Grid>
             </Grid>
           </Grid>
