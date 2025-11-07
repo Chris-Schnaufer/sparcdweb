@@ -15,11 +15,73 @@ let theme = createTheme({
       default: grey[500],
       paper: grey[500],
     },
+    main: {
+      position: 'relative',
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      minHeight: '100vh',
+      backgroundColor: '#EFEFEF',
+    },
+    login_wrapper: {
+      width: '100vw',
+      height: '100%',
+      display: 'grid',
+      gridTemplateColumns: '1fr auto 1fr',
+      gridTemplateRows: '29% 42% 29%',
+    },
+    login_dialog_wrapper: {
+      alignSelf: 'center',
+      maxHeight: '360px',
+      gridColumn: 2,
+      gridRow: 2,
+      width: '338px',
+      border: '2px solid white',
+      borderRadius: '20px',
+      backgroundColor: 'rgba(200, 200, 200, 0.50)',
+    },
+    login_dialog: {
+    },
+    login_dialog_items: {
+      display: 'grid',
+      gridTemplateColumns: '1fr 2fr',
+      fontSize: 'smaller',
+    },
+    login_checking_wrapper: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      width: '100vw',
+      height: '100vh',
+      backgroundColor: 'rgb(0,0,0,0.5)',
+      zIndex: 11111,
+    },
+    login_checking: {
+      backgroundColor: 'rgb(0,0,0,0.8)',
+      border: '1px solid grey',
+      borderRadius: '15px',
+      padding: '25px 10px',
+    },
     login_button: {
       main: '#EFEFEF',
       light: '#FFFFFF',
       dark: '#E0E0E0',
-      contrastText: '#000000'
+      contrastText: '#000000',
+    },
+    login_dialog_login_button_wrap: {
+      marginRight: '10px',
+      gridColumn: 2,
+      display: 'flex',
+      alignItems: 'flex-end',
+      justifyContent: 'flex-end',
+    },
+    messages_wrapper: {
+      position: 'absolute',
+      top:  '40px',
+      right: '0px',
+      bottom: '0px',
+      left: '0px',
     },
     landing_card: {
       background: 'rgba(224, 227, 232, 0.8)',
@@ -59,6 +121,12 @@ let theme = createTheme({
       color: 'text.secondary',
       fontSize: 'x-small', 
       textAlign: 'center'
+    },
+    landing_page_map_image_wrapper: {
+      maxHeight:'180px',
+      border:'1px solid grey',
+      borderRadius:'10px',
+      overflow:"clip",
     },
     folder_upload: {
       background: 'rgb(240, 240, 255)',

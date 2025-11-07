@@ -9,10 +9,11 @@ import Grid from '@mui/material/Grid';
 import { useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 
-import FolderUpload from './components/FolderUpload';
-import LandingCard from './components/LandingCard';
-import LandingCollections from './LandingCollections';
-import LandingUpload from './LandingUpload';
+import FolderUpload from './landing/FolderUpload';
+import LandingCard from './landing/LandingCard';
+import LandingCollections from './landing/LandingCollections';
+import LandingMaps from './landing/LandingMaps';
+import LandingUpload from './landing/LandingUpload';
 import UserActions from './components/userActions';
 import { CollectionsInfoContext, MobileDeviceContext, SandboxInfoContext, SizeContext } from './serverInfo';
 
@@ -121,9 +122,7 @@ export default function Landing({loadingCollections, loadingSandbox, onUserActio
             <LandingCard title="Maps" subtitle="View locations images have been captured on a variety of maps"
                          action={{'title':'Maps', 'onClick':() => {onUserAction(UserActions.Maps, null, false, 'Home');} }}
             >
-              <div id='landing-page-map-image-wrapper' style={{maxHeight:'180px', border:'1px solid grey', borderRadius:'10px', overflow:"clip"}} >
-                <img id='landing-page-map-image' alt='Portion of a map for display purposes only' src='mapImage.png' onLoad={handleMapImageLoad} />
-              </div>
+              <LandingMaps onMapImageLoad={handleMapImageLoad} />
             </LandingCard>
         </Grid>
       </Box>

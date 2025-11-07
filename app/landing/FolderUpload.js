@@ -19,14 +19,17 @@ import Select from '@mui/material/Select';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 
-import { allTimezones, useTimezoneSelect } from "react-timezone-select"
+import { allTimezones, useTimezoneSelect } from "react-timezone-select";
 
-import { Level } from './Messages';
-import LocationItem from './LocationItem'
+import FolderUploadConfirm from './FolderUploadConfirm';
+import FolderUploadContinue from './FolderUploadContinue';
+import FolderUploadForm from './FolderUploadForm';
+import { Level } from '../components/Messages';
+import LocationItem from '../components/LocationItem';
 import { meters2feet } from '../utils';
-import ProgressWithLabel from './ProgressWithLabel'
+import ProgressWithLabel from '../components/ProgressWithLabel';
 import { AddMessageContext, AllowedImageMime, BaseURLContext, CollectionsInfoContext, LocationsInfoContext,
-                SizeContext, TokenContext, UserSettingsContext } from '../serverInfo'
+                SizeContext, TokenContext, UserSettingsContext } from '../serverInfo';
 
 
 const MAX_FILE_SIZE = 80 * 1000 * 1024; // Number of bytes before a file is too large
@@ -61,7 +64,6 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
   const [collectionSelection, setCollectionSelection] = React.useState(null);
   const [comment, setComment] = React.useState(null);
   const [continueUploadInfo, setContinueUploadInfo] = React.useState(null); // Used when continuing a previous upload
-  const [curLocationInfo, setCurLocationInfo] = React.useState(null);   // Working location when fetching tooltip
   const [filesSelected, setFilesSelected] = React.useState(0);
   const [finishingUpload, setFinishingUpload] = React.useState(false); // Used when finishing up an upload
   const [forceRedraw, setForceRedraw] = React.useState(0);
@@ -71,7 +73,6 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
   const [newUploadFiles, setNewUploadFiles] = React.useState(null); // The list of files to upload
   const [prevUploadCheck, setPrevUploadCheck] = React.useState(prevUploadCheckState.noCheck); // Used to check if the user wants to perform a reset or new upload
   const [uploadPath, setUploadPath] = React.useState(null);
-  const [tooltipData, setTooltipData] = React.useState(null);       // Data for tooltip
   const [uploadCompleted, setUploadCompleted] = React.useState(false); // Uploads are done
   const [uploadingFiles, setUploadingFiles] = React.useState(false);
   const [uploadingFileCounts, setUploadingFileCounts] = React.useState({total:0, uploaded:0});
@@ -80,7 +81,6 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
   const { options, parseTimezone } = useTimezoneSelect({ labelStyle:'altName', allTimezones });
   const [selectedTimezone, setSelectedTimezone] = React.useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
 
-  let curLocationFetchIdx = -1; // Working index of location data to fetch
   let cancelUploadCountCheck = false; // Used to stop the checks for upload counts (which would go until the counts match)
   let disableUploadDetails = false; // Used to lock out multiple clicks
   let disableUploadPrev = false; // Used to lock out multiple clicks
@@ -89,65 +89,6 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
   let displayCoordSystem = 'LATLON';
   if (userSettings['coordinatesDisplay']) {
     displayCoordSystem = userSettings['coordinatesDisplay'];
-  }
-
-  /**
-   * Calls the server to get location details for tooltips
-   * @function
-   * @param {int} locIdx The index of the location to get the details for
-   */
-  const getTooltipInfo = React.useCallback((locIdx) => {
-    if (curLocationFetchIdx != locIdx) {
-      curLocationFetchIdx = locIdx;
-      const cur_loc = locationItems[curLocationFetchIdx];
-      const locationInfoUrl = serverURL + '/locationInfo?t=' + encodeURIComponent(uploadToken);
-
-      const formData = new FormData();
-
-      formData.append('id', cur_loc.idProperty);
-      formData.append('name', cur_loc.nameProperty);
-      formData.append('lat', cur_loc.latProperty);
-      formData.append('lon', cur_loc.lngProperty);
-      formData.append('ele', cur_loc.elevationProperty);
-      try {
-        const resp = fetch(locationInfoUrl, {
-          credentials: 'include',
-          method: 'POST',
-          body: formData
-        }).then(async (resp) => {
-              if (resp.ok) {
-                return resp.json();
-              } else {
-                throw new Error(`Failed to get location information: ${resp.status}`, {cause:resp});
-              }
-            })
-          .then((respData) => {
-              // Save tooltip information
-              const locInfo = Object.assign({}, respData, {'index':curLocationFetchIdx});
-
-              if (locIdx === curLocationFetchIdx) {
-                setTooltipData(locInfo);
-              }
-                })
-          .catch(function(err) {
-            console.log('Location tooltip Error: ',err);
-        });
-      } catch (error) {
-        console.log('Location tooltip Unknown Error: ',err);
-      }
-    }
-  }, [curLocationFetchIdx, locationItems, serverURL, setTooltipData, uploadToken]);
-
-  /**
-   * Clears tooltip information when no longer needed. Ensures only the working tooltip is cleared
-   * @function
-   * @param {int} locIdx The index of the location to clear
-   */
-  function clearTooltipInfo(locIdx) {
-    // Only clear the information if we're the active tooltip
-    if (locIdx == curLocationFetchIdx) {
-      setCurLocationInfo(null);
-    }
   }
 
   /**
@@ -596,7 +537,7 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
    * Continues a previous upload of images
    * @function
    */
-  function prevUploadContinue() {
+  const prevUploadContinue = React.useCallback(() => {
     // Used to prevent multiple clicks
     if (disableUploadPrev === true) {
       return;
@@ -607,13 +548,13 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
     setUploadingFiles(true);
     uploadFolder(continueUploadInfo.files, continueUploadInfo.id);
     setContinueUploadInfo(null);
-  }
+  }, [continueUploadInfo, disableUploadPrev, setContinueUploadInfo, setUploadingFiles, setUploadingFileCounts, uploadFolder]);
 
   /**
    * Restarts a folder upload
    * @function
    */
-  function prevUploadRestart() {
+  const prevUploadRestart = React.useCallback(() => {
     // Used to prevent multiple clicks
     if (disableUploadPrev === true) {
       return;
@@ -621,13 +562,14 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
     disableUploadPrev = true;
 
     setPrevUploadCheck(prevUploadCheckState.checkReset);
-  }
+    disableUploadPrev = false;
+  }, [disableUploadPrev, prevUploadCheckState, setPrevUploadCheck]);
 
   /**
    * Restarts a folder upload
    * @function
    */
-  function prevUploadAbandon() {
+  const prevUploadAbandon = React.useCallback(() => {
     // Used to prevent multiple clicks
     if (disableUploadPrev === true) {
       return;
@@ -635,13 +577,14 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
     disableUploadPrev = true;
 
     setPrevUploadCheck(prevUploadCheckState.abandon);
-  }
+    disableUploadPrev = false;
+  }, [disableUploadPrev, prevUploadCheckState, setPrevUploadCheck]);
 
   /**
    * Handles restarting an upload from the beginning
    * @function
    */
-  function prevUploadResetContinue() {
+  const prevUploadResetContinue = React.useCallback(() => {
     // Used to prevent multiple clicks
     if (disableUploadCheck === true) {
       return;
@@ -661,6 +604,7 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
         method: 'POST',
         body: formData
       }).then(async (resp) => {
+            disableUploadCheck = false;
             if (resp.ok) {
               return resp.json();
             } else {
@@ -683,17 +627,19 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
       console.log('Reset Upload Unknown Error: ',err);
       addMessage(Level.Error, 'An unkown problem ocurred while preparing for reset sandbox upload');
     }
-  }
+  }, [addMessage, continueUploadInfo, disableUploadCheck, Level, prevUploadCheckState, serverURL, setContinueUploadInfo, setPrevUploadCheck,
+      setUploadingFileCounts, uploadFolder, uploadToken]);
 
   /**
    * Handles abandoning an upload
    * @function
    */
-  function prevUploadAbandonContinue() {
+  const prevUploadAbandonContinue = React.useCallback(() => {
     // Used to prevent multiple clicks
     if (disableUploadCheck === true) {
       return;
     }
+    disableUploadCheck = true;
 
     // Reset the upload on the server and then restart the upload
     const sandboxAbandonUrl = serverURL + '/sandboxAbandon?t=' + encodeURIComponent(uploadToken);
@@ -706,6 +652,7 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
         method: 'POST',
         body: formData
       }).then(async (resp) => {
+            disableUploadCheck = false;
             if (resp.ok) {
               return resp.json();
             } else {
@@ -732,13 +679,14 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
       console.log('Abandon Upload Unknown Error: ',err);
       addMessage(Level.Error, 'An unkown problem ocurred while preparing for abandoning sandbox upload');
     }
-  }
+  }, [addMessage, continueUploadInfo, disableUploadCheck, onCompleted, prevUploadCheckState, serverURL, setCollectionSelection,
+      setComment, setContinueUploadInfo, setLocationSelection, setNewUpload, setPrevUploadCheck, setUploadingFileCounts, uploadFiles, uploadToken]);
 
   /**
    * Creates a new upload for these files
    * @function
    */
-  function prevUploadCreateNew() {
+  const prevUploadCreateNew = React.useCallback(() => {
     // Used to prevent multiple clicks
     if (disableUploadPrev === true) {
       return;
@@ -746,27 +694,23 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
     disableUploadPrev = true;
 
     setPrevUploadCheck(prevUploadCheckState.checkNew);
-  }
+    disableUploadPrev = false;
+  }, [disableUploadPrev, prevUploadCheckState, setPrevUploadCheck]);
 
 /**
    * Cancel the upload for these files
    * @function
    */
-  function prevUploadCancel() {
-    // Used to prevent multiple clicks
-    if (disableUploadPrev === true) {
-      return;
-    }
-    disableUploadPrev = true;
-
+  const prevUploadCancel = React.useCallback(() => {
     setContinueUploadInfo(null)
-  }
+    disableUploadPrev = false;
+  }, [disableUploadPrev, setContinueUploadInfo]);
 
   /**
    * Handles creating a new upload separate from an existing one
    * @function
    */
-  function prevUploadCreateNewContinue() {
+  const prevUploadCreateNewContinue = React.useCallback(() => {
     // Used to prevent multiple clicks
     if (disableUploadCheck === true) {
       return;
@@ -783,24 +727,19 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
           setComment(null);
           setNewUpload(true);
           setNewUploadFiles(uploadFiles);
-
+          disableUploadCheck = true;
       }
     )
-  }
+  }, [continueUploadInfo, disableUploadCheck, serverUploadCompleted, setCollectionSelection, setComment,
+      setContinueUploadInfo, setLocationSelection, setNewUpload, setNewUploadFiles, setUploadingFileCounts]);
 
   /**
    * Handles cancelling both when asked to continue creating a new upload, or resetting an upload
    * @function
    */
-  function prevUploadResetCreateCancel() {
-    // Used to prevent multiple clicks
-    if (disableUploadCheck === true) {
-      return;
-    }
-    disableUploadCheck = true;
-
+  const prevUploadResetCreateCancel = React.useCallback(() => {
     setPrevUploadCheck(prevUploadCheckState.noCheck);
-  }
+  }, [disableUploadCheck, prevUploadCheckState, setPrevUploadCheck]);
 
   /**
    * Keeps track of a new user collection selection
@@ -838,45 +777,6 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
     if (event.target.value != null && event.target.value.length > MIN_COMMENT_LEN && collectionSelection != null && locationSelection != null) {
       setForceRedraw(forceRedraw + 1);
     }
-  }
-
-  /**
-   * Generates elapsed time string based upon the number of seconds specified
-   * @function
-   * @param {number} seconds The number of seconds to format
-   * @return {string} The formatted string
-   */
-  function generateSecondsElapsedText(seconds) {
-    let results = '';
-    let remain_seconds = seconds;
-
-    // Days
-    let cur_num = Math.floor(remain_seconds / (24 * 60 * 60));
-    if (cur_num > 0) {
-      results += `${cur_num} hours `;
-      remain_seconds -= cur_num * (24 * 60 * 60);
-    }
-
-    // Hours
-    cur_num = Math.floor(remain_seconds / (60 * 60));
-    if (results.length > 0 || cur_num > 0) {
-      results += `${cur_num} hours `;
-      remain_seconds -= cur_num * (60 * 60);
-    }
-
-    // Minutes
-    cur_num = Math.floor(remain_seconds / 60);
-    if (results.length > 0 || cur_num > 0) {
-      results += `${cur_num} minutes `;
-      remain_seconds -= cur_num * 60;
-    }
-
-    // Seconds
-    if (results.length > 0 || remain_seconds > 0) {
-      results += `${remain_seconds} seconds `;
-    }
-
-    return results;
   }
 
   /**
@@ -942,108 +842,11 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
     }
 
     return (
-      <Grid id='folder-upload-details-wrapper' container direction="column" alignItems="center" justifyContent="start" gap={2}>
-        <FormControl fullWidth>
-          <Autocomplete
-            options={collectionInfo}
-            id="folder-upload-collections"
-            autoHighlight
-            onChange={handleCollectionChange}
-            defaultValue={null}
-            getOptionLabel={(option) => option.name}
-            getOptionKey={(option) => option.name+option.id}
-            renderOption={(props, col) => {
-              const { key, ...optionProps } = props;
-              return (
-                  <MenuItem id={col.id+'-'+key} value={col.name} key={key} {...optionProps}>
-                    {col.name}
-                  </MenuItem> 
-              );
-            }}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Collection"
-                required={true}
-                slotProps={{
-                  htmlInput: {
-                    ...params.inputProps,
-                    autoComplete: 'new-password', // disable autocomplete and autofill
-                  },
-                }}
-              />
-            )}
-          >
-          </Autocomplete>
-        </FormControl>
-        <FormControl fullWidth>
-          <Autocomplete
-            options={locationItems}
-            id="folder-upload-location"
-            autoHighlight
-            onChange={handleLocationChange}
-            defaultValue={null}
-            getOptionLabel={(option) => option.idProperty}
-            getOptionKey={(option) => option.idProperty+option.latProperty+option.lngProperty}
-            renderOption={(props, loc) => {
-              const { key, ...optionProps } = props;
-              return (
-                  <MenuItem id={loc.idProperty+'-'+key} value={loc.idProperty} key={key} {...optionProps}>
-                    <LocationItem shortName={loc.idProperty} longName={loc.nameProperty}
-                                  lat={displayCoordSystem === 'LATLON' ? loc.latProperty : loc.utm_x} 
-                                  lng={displayCoordSystem === 'LATLON' ? loc.lngProperty: loc.utm_y} 
-                                  elevation={userSettings['measurementFormat'] === 'feet' ? meters2feet(loc.elevationProperty) + 'ft' : loc.elevationProperty}
-                                  coordType={displayCoordSystem === 'LATLON' ? undefined : loc.utm_code}
-                                  onTTOpen={getTooltipInfo} onTTClose={clearTooltipInfo}
-                                  dataTT={tooltipData} propsTT={props}
-                     />
-                  </MenuItem> 
-              );
-            }}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Location"
-                required={true}
-                slotProps={{
-                  htmlInput: {
-                    ...params.inputProps,
-                    autoComplete: 'new-password', // disable autocomplete and autofill
-                  },
-                }}
-              />
-            )}
-          >
-          </Autocomplete>
-        </FormControl>
-        <FormControl fullWidth>
-          <Grid container direction="column" alignContent="start" justifyContent="start" sx={{paddingTop:"10px"}} >
-            <Typography gutterBottom variant="body">
-              Mountain Range - Site Name - No. of images collected - Date Uploaded - Date collected
-            </Typography>
-            <Typography gutterBottom variant="body2">
-              (e.g.: Santa Rita Mountains - SAN06 - 39 images - uploaded 04-10-2020 - collected 03-28-2000)
-            </Typography>
-            <TextField required fullWidth id="folder-upload-comment" label="Comment" onChange={handleCommentChange} />
-          </Grid>
-        </FormControl>
-        <FormControl fullWidth={true}>
-          <Grid container direction="row" alignItems="center" justifyContent="space-between" sx={{paddingTop:"10px"}} >
-            <Typography gutterBottom variant="body">
-              Timezone of images
-            </Typography>
-            <Select id="landing-page-upload-timezone" value={selectedTimezone} onChange={(event) => setSelectedTimezone(parseTimezone(event.target.value))}>
-              {options.map((option) => 
-                <MenuItem key={option.value} value={option.value} selected={selectedTimezone === option.value} >
-                  <Typography gutterBottom variant="body2">
-                    {option.label}
-                  </Typography>
-                </MenuItem>
-              )}
-            </Select>
-          </Grid>
-        </FormControl>
-      </Grid>
+      <FolderUploadForm displayCoordSystem={displayCoordSystem} measurementFormat={userSettings['measurementFormat']}
+                        collectionInfo={collectionInfo} locationItems={locationItems}
+                        onCollectionChange={handleCollectionChange} onCommentChange={handleCommentChange} onLocationChange={handleLocationChange} 
+                        onTimezoneChange={setSelectedTimezone}
+      />
     );
   }
 
@@ -1132,117 +935,34 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
         </Grid>
       </Box>
     { continueUploadInfo !== null && 
-      <Box id='landing-page-upload-continue-wrapper' sx={{ ...theme.palette.screen_overlay }} >
-        <Grid
-          container
-          spacing={0}
-          direction="column"
-          alignItems="center"
-          justifyContent="center"
-          sx={{ minHeight: uiSizes.workspace.height + 'px' }}
-        >
-        <Card id='folder-upload-continue' variant="outlined" sx={{ ...theme.palette.folder_upload, minWidth:(uiSizes.workspace.width * 0.8) + 'px' }} >
-          <CardHeader sx={{ textAlign: 'center' }}
-             title={
-              <Typography gutterBottom variant="h6" component="h4">
-                Upload Already Started
-              </Typography>
-             }
-            />
-          <CardContent>
-            <Typography gutterBottom variant="body">
-              An incomplete upload from '{uploadPath}' has been detected. How would you like to proceed?
-            </Typography>
-            <Typography gutterBottom variant="body2">
-              {continueUploadInfo.allFiles.length-continueUploadInfo.files.length} out of {continueUploadInfo.allFiles.length} files have been uploaded
-            </Typography>
-            <Typography gutterBottom variant="body2">
-              Uploaded created {generateSecondsElapsedText(continueUploadInfo.elapsedSec)} ago
-            </Typography>
-            <Grid id="landing-page-upload-continue-options-wrapper" container direction="row" rowSpacing={1} alignItems="center" justifyContent="flex-start"
-                  sx={{paddingTop:'10px'}}>
-              <Grid id="landing-page-upload-continue-options-continue" container direction="row" alignItems="start" justifyContent="flex-start"
-                  sx={{border:'1px solid #c3c3d2', borderRadius:'5px', width:'100%', backgroundColor:'#eaeaf9', padding:'50x 0px'}}>
-                <Button id="sandbox-upload-continue-continue" size="small" onClick={prevUploadContinue}>Resume Upload</Button>
-                <Typography gutterBottom variant="body2" component='div' sx={{width:'70%', marginLeft:'auto'}}>
-                  The upload continues from where it left off and will upload the remaining files. This is helpful when the files to upload haven't changed
-                </Typography>
-              </Grid>
-              <Grid id="landing-page-upload-continue-options-restart" container direction="row" alignItems="start" justifyContent="flex-start"
-                  sx={{border:'1px solid #c3c3d2', borderRadius:'5px', width:'100%', backgroundColor:'#eaeaf9', padding:'50x 0px'}}>
-                <Button id="sandbox-upload-continue-restart" size="small" onClick={prevUploadRestart}>Restart Upload</Button>
-                <Typography gutterBottom variant="body2" component='div' sx={{width:'70%', marginLeft:'auto'}} >
-                  Restart the entire upload starting from the first image until the last. This is helpful if previously loaded images were changed, replaced, 
-                  or added to
-                </Typography>
-              </Grid>
-              <Grid id="landing-page-upload-continue-options-create" container direction="row" alignItems="start" justifyContent="flex-start"
-                  sx={{border:'1px solid #c3c3d2', borderRadius:'5px', width:'100%', backgroundColor:'#eaeaf9', padding:'50x 0px'}}>
-                <Button id="sandbox-upload-continue-create" size="small" onClick={prevUploadCreateNew}>Create New Upload</Button>
-                <Typography gutterBottom variant="body2" component='div' sx={{width:'70%', marginLeft:'auto'}} >
-                  Remove the previous upload attempt and create a new upload. This is helpful if the previous upload was incomplete or incorrect
-                  and you want to restart the whole process
-                </Typography>
-              </Grid>
-              <Grid id="landing-page-upload-continue-options-abandon" container direction="row" alignItems="start" justifyContent="flex-start"
-                  sx={{border:'1px solid #c3c3d2', borderRadius:'5px', width:'100%', backgroundColor:'#eaeaf9', padding:'50x 0px'}}>
-                <Button id="sandbox-upload-continue-abandon" size="small" onClick={prevUploadAbandon}>Abandon Upload</Button>
-                <Typography gutterBottom variant="body2" component='div' sx={{width:'70%', marginLeft:'auto'}} >
-                  Will abandon the previous upload attempt and not try to upload anything else. This is helpful if the upload is no longer needed or
-                  wanted
-                </Typography>
-              </Grid>
-            </Grid>
-          </CardContent>
-          <CardActions>
-            <Button id="sandbox-upload-continue-cancel" sx={{'flex':'1'}} size="small" onClick={prevUploadCancel}>Cancel</Button>
-          </CardActions>
-        </Card>
-        </Grid>
-      </Box>
+      <FolderUploadContinue uploadPath={uploadPath}
+                            totalFileCount={continueUploadInfo.allFiles.length} 
+                            remainingFileCount={continueUploadInfo.allFiles.length-continueUploadInfo.files.length}
+                            elapsedSeconds={continueUploadInfo.elapsedSec}
+                            onContinue={prevUploadContinue}
+                            onRestart={prevUploadRestart}
+                            onCreateNew={prevUploadCreateNew}
+                            onAbandon={prevUploadAbandon}
+                            onCancel={prevUploadCancel}
+      />
    }
    { (continueUploadInfo !== null && prevUploadCheck !== prevUploadCheckState.noCheck) &&
-      <Box id='landing-page-upload-reset-wrapper' sx={{ ...theme.palette.screen_overlay }} >
-        <Grid
-          container
-          spacing={0}
-          direction="column"
-          alignItems="center"
-          justifyContent="center"
-          sx={{ minHeight: uiSizes.workspace.height + 'px' }}
-        >
-          <Card id='folder-upload-reset' variant="outlined" sx={{ ...theme.palette.folder_upload, minWidth:(uiSizes.workspace.width * 0.8) + 'px' }} >
-            <CardHeader sx={{ textAlign: 'center' }}
-               title={
-                <Typography gutterBottom variant="h6" component="h4">
-                  {prevUploadCheck === prevUploadCheckState.checkReset && "Restart Upload"}
-                  {prevUploadCheck === prevUploadCheckState.checkNew && "Create New Upload"}
-                  {prevUploadCheck === prevUploadCheckState.abandon && "Abandon Upload"}
-                </Typography>
-               }
-              />
-            <CardContent>
-              <Typography gutterBottom variant="body">
-                {prevUploadCheck === prevUploadCheckState.checkReset && "Are you sure you want to delete the previous uploaded files and restart?"}
-                {prevUploadCheck === prevUploadCheckState.checkNew && "Are you sure you want to abandon the previous uploaded and create a new one?"}
-                {prevUploadCheck === prevUploadCheckState.abandon && "Are you sure you want to abandon the previous uploaded?"}
-              </Typography>
-            </CardContent>
-            <CardActions>
-              {prevUploadCheck === prevUploadCheckState.checkReset &&
-                <Button id="sandbox-upload-continue-reset" sx={{'flex':'1'}} size="small" onClick={prevUploadResetContinue}>Yes</Button>
-              }
-              {prevUploadCheck === prevUploadCheckState.checkNew &&
-                <Button id="sandbox-upload-continue-yes" sx={{'flex':'1'}} size="small" onClick={prevUploadCreateNewContinue}>Yes</Button>
-              }
-              {prevUploadCheck === prevUploadCheckState.abandon &&
-                <Button id="sandbox-upload-continue-yes" sx={{'flex':'1'}} size="small" onClick={prevUploadAbandonContinue}>Yes</Button>
-              }
-              <Button id="sandbox-upload-continue-no" sx={{'flex':'1'}} size="small" onClick={prevUploadResetCreateCancel}>No</Button>
-            </CardActions>
-            </Card>
-        </Grid>
-      </Box>
+      <FolderUploadConfirm title={prevUploadCheck === prevUploadCheckState.checkReset ? "Restart Upload" :
+                                    prevUploadCheck === prevUploadCheckState.checkNew ? "Create New Upload" :
+                                    prevUploadCheck === prevUploadCheckState.abandon ? "Abandon Upload" : ""
+                                }
+                            onConfirm={prevUploadCheck === prevUploadCheckState.checkReset ? prevUploadResetContinue :
+                                        prevUploadCheck === prevUploadCheckState.checkNew ? prevUploadCreateNewContinue :
+                                        prevUploadCheck === prevUploadCheckState.abandon ? prevUploadAbandonContinue : () => {}
+                                }
+                            onCancel={prevUploadResetCreateCancel}
+      >
+        <Typography gutterBottom variant="body">
+          {prevUploadCheck === prevUploadCheckState.checkReset && "Are you sure you want to delete the previous uploaded files and restart?"}
+          {prevUploadCheck === prevUploadCheckState.checkNew && "Are you sure you want to abandon the previous uploaded and create a new one?"}
+          {prevUploadCheck === prevUploadCheckState.abandon && "Are you sure you want to abandon the previous uploaded?"}
+        </Typography>
+      </FolderUploadConfirm>
    }
     { finishingUpload && 
       <Grid id="query-running-query-wrapper" container direction="row" alignItems="center" justifyContent="center" 

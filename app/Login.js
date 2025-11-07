@@ -12,6 +12,7 @@ import IconButton from '@mui/material/IconButton';
 import InputAdornment from '@mui/material/InputAdornment';
 import LoginIcon from '@mui/icons-material/Login';
 import TextField from '@mui/material/TextField';
+import { useTheme } from '@mui/material/styles';
 import Visibility from '@mui/icons-material/Visibility';
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 
@@ -30,12 +31,13 @@ import { SizeContext } from './serverInfo';
   * @returns {object} The rendered UI
   */
 export default function Login({prev_url, prev_user, prev_remember, onLogin, onRememberChange}) {
+  const theme = useTheme();
   const uiSizes = useContext(SizeContext);
   const valuesValid = useContext(LoginValidContext);
   const [rememberChecked, setRememberChecked] = useState(prev_remember);
   const [showPassword, setShowPassword] = useState(false);
   const [workspaceTop, setWorkspaceTop] = useState(0);
-  const [workspaceHeight, setWorkspaceHeight] = useState(null);
+  const [workspaceHeight, setWorkspaceHeight] = useState(480);
 
   useLayoutEffect(() => {
     const focusId = !prev_url ? 'url-entry' : (!prev_user ? 'username-entry' : 'password-entry')
@@ -112,12 +114,12 @@ export default function Login({prev_url, prev_user, prev_remember, onLogin, onRe
   let curWorkspaceTop = workspaceTop ? workspaceTop : 63;
   return (
     <div id="login-wrapper" className={styles.login_background}
-         style={{position:'absolute', top:curWorkspaceTop+'px', height:curWorkspaceHeight+'px'}} >
-    <div className={styles.login_wrapper}>
-      <div className={styles.login_dialog_wrapper}>
-        <div className={styles.login_dialog}>
+           style={{position:'absolute', top:curWorkspaceTop+'px', height:curWorkspaceHeight+'px'}} >
+    <div style={{...theme.palette.login_wrapper}}>
+      <div style={{...theme.palette.login_dialog_wrapper}}>
+        <div style={{...theme.palette.login_dialog}}>
           <Image height='60' alt="Wildcats Research" src={wildcatResearch} placeholder='blur' />
-          <div className={styles.login_dialog_items}>
+          <div style={{...theme.palette.login_dialog_items}}>
             <Box
               component='form'
               sx={{ '& > :not(style)': { m: 1, width: '37ch' } }}
@@ -192,7 +194,7 @@ export default function Login({prev_url, prev_user, prev_remember, onLogin, onRe
                         />
                     </FormGroup>
 
-            <div className={styles.login_dialog_login_button_wrap}>
+            <div style={{...theme.palette.login_dialog_login_button_wrap}}>
               <Button size='small' color='login_button'
                       sx={{bgcolor: 'background.default', '&:hover':{backgroundColor:'#AEAEAE'}}} endIcon={<LoginIcon />} 
                       onClick={callLoginFunc}

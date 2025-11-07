@@ -14,7 +14,7 @@ import { useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 
-import { CollectionsInfoContext, MobileDeviceContext, SandboxInfoContext } from './serverInfo';
+import { CollectionsInfoContext, MobileDeviceContext, SandboxInfoContext } from '../serverInfo';
 
 /**
  * Returns the UI for uploads on the Landing page
@@ -57,7 +57,7 @@ export default function LandingUpload({loadingSandbox, onChange}) {
     <React.Fragment>
       { unfinished || loadingSandbox  ? (
         <React.Fragment>
-          <Grid container direction="row" alignItems="sflex-tart" justifyContent="flex-start">
+          <Grid id="sandbox-status-wrapper" container direction="row" alignItems="sflex-tart" justifyContent="flex-start">
             <Grid size={{sm:4, md:4, lg:4}} sx={{left:'auto'}}>
               <Typography gutterBottom sx={{ ...theme.palette.landing_upload_prompt,
                           visibility: !loadingSandbox?"visible":"hidden" }} >

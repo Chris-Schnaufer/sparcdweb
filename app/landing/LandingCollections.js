@@ -11,7 +11,7 @@ import RadioGroup from '@mui/material/RadioGroup';
 import { useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 
-import { CollectionsInfoContext, MobileDeviceContext } from './serverInfo';
+import { CollectionsInfoContext, MobileDeviceContext } from '../serverInfo';
 
 /** Returns the UI of the collections for the Landing page
  * @function

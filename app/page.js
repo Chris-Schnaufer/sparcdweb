@@ -1062,7 +1062,7 @@ export default function Home() {
   const narrowWindow = isNarrow;
   const workspaceTop = sizeWorkspace.top + 'px';
   return (
-    <main className={styles.main} style={{position:'relative'}}>
+    <main style={{...theme.palette.main}}>
       <ThemeProvider theme={theme}>
         <MobileDeviceContext.Provider value={mobileDevice}>
         <NarrowWindowContext.Provider value={narrowWindow}>
@@ -1090,10 +1090,9 @@ export default function Home() {
               }
             <FooterBar />
             <Grid id="login-checking-wrapper" container direction="row" alignItems="center" justifyContent="center"
-                  sx={{position:'absolute', top:0, left:0, width:'100vw', height:'100vh', backgroundColor:'rgb(0,0,0,0.5)', zIndex:11111,
-                       visibility:checkedToken ? 'hidden':'visible', display:checkedToken ? 'none':'inherit'}}
+                  sx={{...theme.palette.login_checking_wrapper, visibility:checkedToken ? 'hidden':'visible', display:checkedToken ? 'none':'inherit'}}
             >
-              <div style={{backgroundColor:'rgb(0,0,0,0.8)', border:'1px solid grey', borderRadius:'15px', padding:'25px 10px'}}>
+              <div style={{...theme.palette.login_checking}}>
                 <Grid container direction="column" alignItems="center" justifyContent="center" >
                     <Typography gutterBottom variant="body2" color="lightgrey">
                       Restoring previous session, please wait...
@@ -1129,7 +1128,7 @@ export default function Home() {
             { // Make sure this is is last
               messages.length > 0 && 
                 <Grid id="messages-wrapper" container direction="row" alignItems="start" justifyContent="center"
-                      sx={{position:'absolute', top:workspaceTop, right:'0px', bottom:'0px', left:'0px'}}>
+                      sx={{...theme.palette.messages_wrapper, top: workspaceTop}}>
                   <Messages messages={messages} close_cb={handleCloseMessage}/>
                 </Grid>
             }
