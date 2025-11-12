@@ -15,20 +15,81 @@ let theme = createTheme({
       default: grey[500],
       paper: grey[500],
     },
+    main: {
+      position: 'relative',
+      display: 'flex',
+      flexDirection: 'column',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      minHeight: '100vh',
+      backgroundColor: '#EFEFEF',
+      background: 'linear-gradient(135deg, #3b5a7d 0%, #9bbdd9 50%, #7a9bc4 100%)',
+    },
+    login_wrapper: {
+      width: '100vw',
+      height: '100%',
+      display: 'grid',
+      gridTemplateColumns: '1fr auto 1fr',
+      gridTemplateRows: '29% 42% 29%',
+    },
+    login_dialog_wrapper: {
+      alignSelf: 'center',
+      maxHeight: '360px',
+      gridColumn: 2,
+      gridRow: 2,
+      width: '338px',
+      border: '2px solid white',
+      borderRadius: '20px',
+      backgroundColor: 'rgba(200, 200, 200, 0.50)',
+    },
+    login_dialog: {
+    },
+    login_dialog_items: {
+      display: 'grid',
+      gridTemplateColumns: '1fr 2fr',
+      fontSize: 'smaller',
+    },
+    login_checking_wrapper: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      width: '100vw',
+      height: '100vh',
+      backgroundColor: 'rgb(0,0,0,0.5)',
+      zIndex: 11111,
+    },
+    login_checking: {
+      backgroundColor: 'rgb(0,0,0,0.8)',
+      border: '1px solid grey',
+      borderRadius: '15px',
+      padding: '25px 10px',
+    },
     login_button: {
       main: '#EFEFEF',
       light: '#FFFFFF',
       dark: '#E0E0E0',
-      contrastText: '#000000'
+      contrastText: '#000000',
+    },
+    login_dialog_login_button_wrap: {
+      marginRight: '10px',
+      gridColumn: 2,
+      display: 'flex',
+      alignItems: 'flex-end',
+      justifyContent: 'flex-end',
+    },
+    messages_wrapper: {
+      position: 'absolute',
+      top:  '40px',
+      right: '0px',
+      bottom: '0px',
+      left: '0px',
     },
     landing_card: {
-      background: 'rgba(224, 227, 232, 0.7)',
+      backgroundColor: 'rgba(255, 255, 255, 0.78)',
+      borderRadius: '15px',
       minHeight: '20vh',
-      maxWidth: '40vw',
-      uploadImage: "https://arizona.box.com/shared/static/dcxcm0y8u6cnwcz6tftovo68ixkcd2c0.jpg",
-      collectionsImage: '../public/CollectionsImage.jpg',
-      searchImage: '../public/SearchImage.jpg',
-      mapsImage: '../public/MapsImage.jpg',
+      minWidth: '46vw',
+      maxWidth: '46vw',
     },
     landing_upload: {
       border: '1px solid black',
@@ -49,7 +110,7 @@ let theme = createTheme({
     },
     landing_collections: {
       border: '1px solid black',
-      maxHeight: '24vh',
+      maxHeight: '20vh',
       overflow: 'scroll',
       padding: '0em 1em 0em 1em'
     },
@@ -58,9 +119,23 @@ let theme = createTheme({
       fontSize: 'x-small', 
       textAlign: 'center'
     },
+    landing_collections_list: {
+      backgroundColor: '#ecf1f4',
+    },
+    landing_collections_list_alt: {
+      backgroundColor: '#d7dee4',
+    },
+    landing_page_map_image_wrapper: {
+      maxHeight:'180px',
+      border:'1px solid grey',
+      borderRadius:'10px',
+      overflow:"clip",
+    },
     folder_upload: {
       background: 'rgb(240, 240, 255)',
-      padding: '1em 2em 1em 2em'
+      padding: '1em 2em 1em 2em',
+      borderRadius: '15px',
+      backgroundColor: 'rgb(212, 230, 241, 0.95)',
     },
     left_sidebar: {
       height: '100%',
@@ -150,7 +225,7 @@ let theme = createTheme({
       'top': '0px',
       'width': '100vw',
       'height': '100vh',
-      'backgroundColor': 'rgba(128, 128, 128, 0.50)'
+      'backgroundColor': 'rgba(128, 128, 128, 0.65)'
     },
     screen_overlay: {
       'position': 'absolute',

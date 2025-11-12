@@ -9,10 +9,12 @@ import Grid from '@mui/material/Grid';
 import { useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
 
-import FolderUpload from './components/FolderUpload';
-import LandingCard from './components/LandingCard';
-import LandingCollections from './LandingCollections';
-import LandingUpload from './LandingUpload';
+import FolderUpload from './landing/FolderUpload';
+import LandingCard from './landing/LandingCard';
+import LandingCollections from './landing/LandingCollections';
+import LandingMaps from './landing/LandingMaps';
+import LandingQuery from './landing/LandingQuery';
+import LandingUpload from './landing/LandingUpload';
 import UserActions from './components/userActions';
 import { CollectionsInfoContext, MobileDeviceContext, SandboxInfoContext, SizeContext } from './serverInfo';
 
@@ -33,8 +35,17 @@ export default function Landing({loadingCollections, loadingSandbox, onUserActio
   const mobileDevice = React.useContext(MobileDeviceContext);
   const uiSizes = React.useContext(SizeContext);
   const [haveNewUpload, setHaveNewUpload] = React.useState(false);
+  const [mapImageSize, setMapImageSize] = React.useState({width:722,height:396})
   const [selUploadInfo, setSelUploadInfo] = React.useState(null);
   const [selCollectionInfo, setSelCollectionInfo] = React.useState(null);
+
+  // Handle the image size
+  React.useLayoutEffect(() => {
+    const el = document.getElementById('landing-page-map-image');
+    if (el) {
+      el.style.width='100%';
+    }
+  }, [uiSizes, mapImageSize]);
 
   /**
    * Set the flag indicating there's a new upload
@@ -80,39 +91,41 @@ export default function Landing({loadingCollections, loadingSandbox, onUserActio
     onEditUpload(curCollection.id, curUpload.key, "Home");
   }
 
+  const handleMapImageLoad = React.useCallback(() => {
+    let el = document.getElementById('landing-page-map-image');
+    if (el) {
+      setMapImageSize({width:el.width, height:el.height});
+    }
+  }, [setMapImageSize]);
+
   // Render the page depending upon user choices
   return (
     <React.Fragment>
       <Box id='landing-page' sx={{flexGrow:1, 'width':'100vw', overflow:'scroll'}} >
-        <Grid container rowSpacing={{xs:1, sm:2, md:4}} columnSpacing={{xs:1, sm:2, md:4}} sx={{ 'margin': '4vw' }} >
-          <Grid size={{ xs: 12, sm: 6, md:6 }}>
-            <LandingCard title="Upload Images" 
+        <Grid container rowSpacing={{sm:1}} columnSpacing={{sm:1}} sx={{ 'padding': '2vw 2vh', height:uiSizes.workspace.height + 'px' }}
+              alignItems="stretch" justifyContent="space-between" >
+            <LandingCard title="Upload Images" subtitle="Add new images to a collection"
                          action={[!mobileDevice ? {'title':'Upload Images', 'onClick':() => newUpload()} : null]}
             >
               <LandingUpload loadingSandbox={loadingSandbox} onChange={setUploadSelection} />
             </LandingCard>
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6, md:6 }}>
-            <LandingCard title="Collections"
+            <LandingCard title="Collections" subtitle="Organize and view collection uploads. View uploaded images and identify species"
                          action={{'title':'Manage', 
                                   'onClick':() => onUserAction(UserActions.Collection, selCollectionInfo, false, 'Home'),
                                   'disabled': curCollectionInfo || loadingCollections ? false : true}}
             >
               <LandingCollections loadingCollections={loadingCollections} onChange={setCollectionSelection} />
             </LandingCard>
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6, md:6 }}>
-            <LandingCard title="Search Images" 
+            <LandingCard title="Search Images" subtitle="Quickly find species and their images. Filter on timestamp, locations, and more."
                          action={{'title':'Query', 'onClick':() => {onUserAction(UserActions.Query, null, false, 'Home');} }}
             >
+              <LandingQuery />
             </LandingCard>
-          </Grid>
-          <Grid size={{ xs: 12, sm: 6, md:6 }}>
-            <LandingCard title="Maps"
+            <LandingCard title="Maps" subtitle="View locations images have been captured on a variety of maps"
                          action={{'title':'Maps', 'onClick':() => {onUserAction(UserActions.Maps, null, false, 'Home');} }}
             >
+              <LandingMaps onMapImageLoad={handleMapImageLoad} />
             </LandingCard>
-          </Grid>
         </Grid>
       </Box>
       { haveNewUpload && <FolderUpload loadingCollections={loadingCollections} onCompleted={() => {setHaveNewUpload(false);onSandboxRefresh();}} onCancel={() => setHaveNewUpload(false)}/>
