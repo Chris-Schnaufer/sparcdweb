@@ -18,6 +18,13 @@ import LandingUpload from './landing/LandingUpload';
 import UserActions from './components/userActions';
 import { CollectionsInfoContext, MobileDeviceContext, SandboxInfoContext, SizeContext } from './serverInfo';
 
+// Use to declare the type of upload wanted
+const uploadTypes = {
+  uploadNone:   null,
+  uploadImages: 'image',
+  uploadMovies: 'movie',
+};
+
 /**
  * Returns the UI for the Landing page
  * @function
@@ -34,7 +41,7 @@ export default function Landing({loadingCollections, loadingSandbox, onUserActio
   const curSandboxInfo = React.useContext(SandboxInfoContext);
   const mobileDevice = React.useContext(MobileDeviceContext);
   const uiSizes = React.useContext(SizeContext);
-  const [haveNewUpload, setHaveNewUpload] = React.useState(false);
+  const [haveNewUpload, setHaveNewUpload] = React.useState(uploadTypes.uploadNone);
   const [mapImageSize, setMapImageSize] = React.useState({width:722,height:396})
   const [selUploadInfo, setSelUploadInfo] = React.useState(null);
   const [selCollectionInfo, setSelCollectionInfo] = React.useState(null);
@@ -50,47 +57,44 @@ export default function Landing({loadingCollections, loadingSandbox, onUserActio
   /**
    * Set the flag indicating there's a new upload
    * @function
+   * @param {number} uploadType The type of upload
    */
-  function newUpload() {
-    setHaveNewUpload(true);
-  }
+  const newUpload = React.useCallback((uploadType) => {
+    if (Object.values(uploadTypes).includes(uploadType)) {
+      setHaveNewUpload(uploadType);
+    }
+  }, [setHaveNewUpload]);
 
   /**
    * Set the flag indicating the upload has been cancelled
    * @function
    */
-  function newUploadCancel() {
-    setHaveNewUpload(false);
-  }
+  const newUploadCancel = React.useCallback(() => {
+    setHaveNewUpload(uploadTypes.uploadNone);
+  }, [setHaveNewUpload]);
 
   /**
    * Sets the selected upload from the sandbox
    * @function
    * @param {object} uploadInfo The selected upload identifier
    */
-  function setUploadSelection(uploadInfo) {
+  const setUploadSelection = React.useCallback((uploadInfo) => {
     setSelUploadInfo(uploadInfo);
-  }
+  }, [setSelUploadInfo]);
 
   /**
    * Sets the selected collection
    * @function
    * @param {object} collectionInfo The selected collection identifier
    */
-  function setCollectionSelection(collectionInfo) {
+  const setCollectionSelection = React.useCallback((collectionInfo) => {
     setSelCollectionInfo(collectionInfo);
-  }
+  }, [setSelCollectionInfo]);
 
   /**
-   * Handles the user wanting to edit an upload
+   * Handles the user wanting to see maps
    * @function
    */
-  function handleSandboxEdit() {
-    const curCollection = curCollectionInfo.find((item) => item.bucket === selUploadInfo.bucket);
-    const curUpload = selUploadInfo.upload;
-    onEditUpload(curCollection.id, curUpload.key, "Home");
-  }
-
   const handleMapImageLoad = React.useCallback(() => {
     let el = document.getElementById('landing-page-map-image');
     if (el) {
@@ -101,11 +105,14 @@ export default function Landing({loadingCollections, loadingSandbox, onUserActio
   // Render the page depending upon user choices
   return (
     <React.Fragment>
-      <Box id='landing-page' sx={{flexGrow:1, 'width':'100vw', overflow:'scroll'}} >
+      <Box id='landing-page' sx={{flexGrow:1, width:'100vw', overflow:'scroll'}} >
         <Grid container rowSpacing={{sm:1}} columnSpacing={{sm:1}} sx={{ 'padding': '2vw 2vh', height:uiSizes.workspace.height + 'px' }}
               alignItems="stretch" justifyContent="space-between" >
             <LandingCard title="Upload Images" subtitle="Add new images to a collection"
-                         action={[!mobileDevice ? {'title':'Upload Images', 'onClick':() => newUpload()} : null]}
+                         action={[!mobileDevice ? {title:'Upload Images', onClick:() => newUpload(uploadTypes.uploadImages)}
+                                                : null,
+                                  {title:'Upload Movies', onClick:() => newUpload(uploadTypes.uploadMovies)},
+                                ]}
             >
               <LandingUpload loadingSandbox={loadingSandbox} onChange={setUploadSelection} />
             </LandingCard>
@@ -128,7 +135,10 @@ export default function Landing({loadingCollections, loadingSandbox, onUserActio
             </LandingCard>
         </Grid>
       </Box>
-      { haveNewUpload && <FolderUpload loadingCollections={loadingCollections} onCompleted={() => {setHaveNewUpload(false);onSandboxRefresh();}} onCancel={() => setHaveNewUpload(false)}/>
+      { haveNewUpload !== uploadTypes.uploadNone && 
+              <FolderUpload loadingCollections={loadingCollections} onCompleted={() => {newUploadCancel();onSandboxRefresh();}} onCancel={() => newUploadCancel()}
+                            type={haveNewUpload}
+              />
       }
     </React.Fragment>
   );
