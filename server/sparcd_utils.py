@@ -1,6 +1,7 @@
 """ Utility functions for SPARCd server """
 
 from datetime import datetime
+import concurrent.futures
 import hashlib
 import json
 import math
@@ -8,6 +9,7 @@ import os
 import shutil
 import tempfile
 import time
+import traceback
 from typing import Callable, Optional
 import uuid
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -28,6 +30,12 @@ TEMP_COLLECTION_FILE_NAME = SPARCD_PREFIX + 'coll.json'
 TEMP_LOCATIONS_FILE_NAME = SPARCD_PREFIX + 'locations.json'
 # Configuration file name for locations
 LOCATIONS_JSON_FILE_NAME = 'locations.json'
+
+# Uploads table timeout length
+TIMEOUT_UPLOADS_SEC = 3 * 60 * 60
+
+# Allowed movie extensions for upload
+UPLOAD_KNOWN_MOVIE_EXT = ['.mp4', '.mov']
 
 
 def make_boolean(value) -> bool:
@@ -646,6 +654,7 @@ def process_upload_changes(s3_url: str, username: str, fetch_password: Callable,
 
         # Loop through the files
         for idx, one_file in enumerate(update_files):
+            file_ext = os.path.splitext(one_file['s3_path'])[1].lower()
             temp_file_name = ("-"+str(idx)).join(os.path.splitext(\
                                                             os.path.basename(one_file['s3_path'])))
             save_path = os.path.join(edit_folder, temp_file_name)
@@ -661,7 +670,10 @@ def process_upload_changes(s3_url: str, username: str, fetch_password: Callable,
             # Get the image to work with
             S3Connection.download_image(s3_url, username, fetch_password(), one_file['bucket'],
                                                                     one_file['s3_path'], save_path)
-            cur_species, cur_location, _ = image_utils.get_embedded_image_info(save_path)
+            if not file_ext in UPLOAD_KNOWN_MOVIE_EXT:
+                cur_species, cur_location, _ = image_utils.get_embedded_image_info(save_path)
+            else:
+                cur_species, cur_location = ([], [])
 
             # Species: get the current species and add our changes to that before writing them out
             save_species = None
@@ -702,8 +714,9 @@ def process_upload_changes(s3_url: str, username: str, fetch_password: Callable,
 
             # Check if we have any changes
             if save_species or save_location:
-                # Update the image file
-                if image_utils.update_image_file_exif(save_path,
+                # Update the image file if it's not a movie file and uplooad
+                if file_ext in UPLOAD_KNOWN_MOVIE_EXT or \
+                    image_utils.update_image_file_exif(save_path,
                                 loc_id = save_location['loc_id'] if save_location else None,
                                 loc_name = save_location['loc_name'] if save_location else None,
                                 loc_ele = save_location['loc_ele'] if save_location else None,
@@ -790,3 +803,100 @@ def get_ts_offset(tz_offset: str) -> int:
         tz_offset = time.localtime().tm_gmtoff / (60.0*60.0)
 
     return tz_offset
+
+
+def list_uploads_thread(s3_url: str, user_name: str, user_secret: str, bucket: str) -> object:
+    """ Used to load upload information from an S3 instance
+    Arguments:
+        s3_url - the URL to connect to
+        user_name - the name of the user to connect with
+        user_secret - the secret used to connect
+        bucket - the bucket to look in
+    Return:
+        Returns an object with the loaded uploads
+    """
+    uploads_info = S3Connection.list_uploads(s3_url, \
+                                        user_name, \
+                                        user_secret, \
+                                        bucket)
+
+    return {'bucket': bucket, 'uploads_info': uploads_info}
+
+
+def species_stats(db: SPARCdDatabase, colls: tuple, s3_url: str, user_name: str, \
+                                                    fetch_password: Callable) -> Optional[dict]:
+    """ Filters the collections in an efficient manner
+    Arguments:
+        db - connections to the current database
+        colls - the list of collections
+        s3_url - the URL to the S3 instance
+        user_name - the user's name for S3
+        fetch_password - returns the user's password
+    Returns:
+        Returns the species stats
+    """
+    all_results = []
+    s3_uploads = []
+
+    # Load all the DB data first
+    for one_coll in colls:
+        cur_bucket = one_coll['json']['bucketProperty']
+        uploads_info = db.get_uploads(s3_url, cur_bucket, TIMEOUT_UPLOADS_SEC)
+        if uploads_info is not None and uploads_info:
+            uploads_info = [{'bucket':cur_bucket,       \
+                             'name':one_upload['name'],                     \
+                             'info':json.loads(one_upload['json'])}         \
+                                    for one_upload in uploads_info]
+        else:
+            s3_uploads.append(cur_bucket)
+            continue
+
+        # Filter on current DB uploads
+        if len(uploads_info) > 0:
+            all_results = all_results + uploads_info
+
+    # Load the S3 uploads in an aynchronous fashion
+    if len(s3_uploads) > 0:
+        user_secret = fetch_password()
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            cur_futures = {executor.submit(list_uploads_thread, s3_url, user_name, \
+                                                                        user_secret, cur_bucket):
+                            cur_bucket for cur_bucket in s3_uploads}
+
+            for future in concurrent.futures.as_completed(cur_futures):
+                try:
+                    uploads_results = future.result()
+                    if 'uploads_info' in uploads_results and \
+                                                        len(uploads_results['uploads_info']) > 0:
+                        uploads_info = [{'bucket':uploads_results['bucket'],
+                                         'name':one_upload['name'],
+                                         'info':one_upload,
+                                         'json':json.dumps(one_upload)
+                                        } for one_upload in uploads_results['uploads_info']]
+                        db.save_uploads(s3_url, uploads_results['bucket'], uploads_info)
+
+                        # Filter on current DB uploads
+                        if len(uploads_info) > 0:
+                            all_results = all_results + uploads_info
+
+                # pylint: disable=broad-exception-caught
+                except Exception as ex:
+                    print(f'Generated exception: {ex}', flush=True)
+                    traceback.print_exception(ex)
+
+    # Build up the species count
+    ret_stats = {}
+    for one_result in all_results:
+        if 'info' in one_result and 'images' in one_result['info']:
+            for one_image in one_result['info']['images']:
+                if 'species' in one_image:
+                    for one_species in one_image['species']:
+                        species_name = one_species['name']
+                        if species_name:
+                            species_name = species_name.strip()
+                            if species_name in ret_stats:
+                                ret_stats[species_name] += 1
+                            else:
+                                ret_stats[species_name] = 1
+
+    return ret_stats

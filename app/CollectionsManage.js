@@ -208,14 +208,14 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
   return (
     <Box id='image-edit-workspace-wrapper' sx={{ flexGrow: 1, 'width': '100vw', position:'relative' }} >
       <div style={{position:'absolute', top:'0px', height:curHeight, minHeight:curHeight, maxHeight:curHeight, right:'-0',
-                   backgroundColor:'white', borderLeft:'1px solid grey', overflow:'scroll'}}
+                   backgroundColor:'#d7e0e7', borderLeft:'1px solid grey', overflow:'scroll'}}
       >
       <Grid id='collection-workspace-details' ref={sidebarRef} container direction="column" alignItems="start" justifyContent="start" wrap="nowrap"
             sx={{minWidth:'440px', maxWidth:'440px'}}
       >
         { curCollection && curCollection.uploads.map((item, idx) =>
           <Card id={"collection-upload-"+item.name} key={'collection-'+idx} variant="outlined" 
-                sx={{minWidth:'100%', backgroundColor:'#D2E1DB', '&:hover':{backgroundColor:'rgba(0, 0, 0, 0.25)'} }}>
+                sx={{minWidth:'100%', backgroundColor:'#D3DEE6', borderRadius:'10px', '&:hover':{backgroundColor:'rgba(0, 0, 0, 0.25)'} }}>
             <CardHeader title={
                               <Grid id="collection-card-header-wrapper" container direction="row" alignItems="start" justifyContent="start" wrap="nowrap">
                                 <Grid>
@@ -237,7 +237,7 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
             <CardContent sx={{paddingTop:'0px'}}>
               <Accordion expanded={expandedUpload === 'upload-details-'+item.name}
                          onChange={handleExpandedChange('upload-details-'+item.name)}
-                         sx={{backgroundColor:'#BBCFC8'}}>
+                         sx={{backgroundColor:'#BFCBE1'}}>
                 <AccordionSummary
                   id={'summary-'+item.name}
                   expandIcon={<ExpandMoreIcon />}
@@ -247,7 +247,7 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
                     Advanced details
                   </Typography>
                 </AccordionSummary>
-                <AccordionDetails sx={{backgroundColor:'#BBCFC8'}}>
+                <AccordionDetails sx={{backgroundColor:'#C8D2E4'}}>
                   <Grid container id={'collection-upload-'+item.name} direction="column" alignItems="start" justifyContent="start">
                     <Grid sx={{padding:'5px 0'}}>
                       <Typography variant="body2">
@@ -294,16 +294,23 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
                      minWidth:workspaceWidth + 'px',
                      paddingTop: '10px',
                      overflow:'scroll',
-                     margin: '0px'}}
+                     margin: '0px',
+                     paddingLeft: '5px',
+                     background:'linear-gradient(135deg, #83a9c8 0%, #bad7ec 50%, #9eb7d8 100%)'}}
         >
         { collectionsItems && collectionsItems.map((item, idx) =>
           <Grid key={'collection-'+item.name+'-'+idx} >
                 <Grid display='flex' justifyContent='left' size='grow' >
-                  <Card id={"collection-"+item.name} onClick={(event) => onCollectionChange(event, item.bucket, item.id)} variant="outlined"
-                        sx={{minWidth:'400px', maxWidth:'400px', backgroundColor:'rgba(206,223,205,0.7)',
-                             '&:hover':{backgroundColor:'rgba(0, 0, 0, 0.25)'} }}>
+                  <Card id={"collection-"+item.name}
+                        onClick={(event) => onCollectionChange(event, item.bucket, item.id)}
+                        variant="outlined"
+                        data-active={selectionIndex === idx ? '' : undefined}
+                        sx={{border:'2px solid rgba(128, 128, 185, 0.5)', borderRadius:'15px', minWidth:'400px', maxWidth:'400px',
+                              backgroundColor:'rgba(218, 232,242,0.7)',
+                              '&[data-active]': {borderColor:'rgba(155, 175, 202, 0.85)'},
+                              '&:hover':{backgroundColor:'rgba(185, 185, 185, 0.25)'} }}>
                     <CardActionArea data-active={selectionIndex === idx ? '' : undefined}
-                      sx={{height: '100%',  '&[data-active]': {backgroundColor:'rgba(0, 0, 0, 0.23)'} }}
+                      sx={{height: '100%',  '&[data-active]': {backgroundColor:'rgba(64, 64, 64, 0.23)'} }}
                     >
                       <CardContent>
                         <Grid container direction="column" spacing={1}>

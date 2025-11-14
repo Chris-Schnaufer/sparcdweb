@@ -955,6 +955,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
                        'position':'absolute', 'visibility':imageVisibility, backgroundColor:'rgb(0,0,0,0.7)' }}>
           <Grid id='image-edit-edit-wrapper' sx={{borderLeft:'2px solid white', borderRight:'2px solid white'}} >
             <ImageEdit url={curImageEdit.url}
+                       type={curImageEdit.type}
                        name={curImageEdit.name}
                        parentId='image-edit-edit'
                        maxWidth={workspaceWidth-40}
@@ -966,7 +967,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
                        species={curImageEdit.species}
                        onSpeciesChange={(speciesName, speciesCount) => handleSpeciesChange(curImageEdit.name, speciesName, speciesCount)}
             />
-            {nextImageEdit && <img id="next-image-preload" src={nextImageEdit.url} style={{display:"none", visibility:"hidden"}} />}
+            {nextImageEdit && <img id="next-image-preload" src={nextImageEdit.url} style={{position:'absolute', top:'0px', letf:'0px', display:'none', visibility:'hidden'}} />}
           </Grid>
         </Grid>
         : null
@@ -998,9 +999,14 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
                        'width':(workspaceWidth-sidebarWidthLeft)+'px', 
                        'position':'absolute', backgroundColor:'rgb(0,0,0,0.7)' }}>
               <Grid size={{ xs: 12, sm: 12, md:12 }}>
-                <ImageEdit url={speciesItems.find((item)=>item.name===speciesZoomName).speciesIconURL} name={speciesZoomName}
-                           parentX={workplaceStartX} parentId='image-edit-species-image'
-                           maxWidth={workspaceWidth-40} maxHeight={curHeight-40} onClose={() => setSpeciesZoomName(null)}
+                <ImageEdit url={speciesItems.find((item)=>item.name===speciesZoomName).speciesIconURL}
+                           type='image'
+                           name={speciesZoomName}
+                           parentX={workplaceStartX}
+                           parentId='image-edit-species-image'
+                           maxWidth={workspaceWidth-40}
+                           maxHeight={curHeight-40}
+                           onClose={() => setSpeciesZoomName(null)}
                            adjustments={false}
                 />
             </Grid>

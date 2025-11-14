@@ -14,6 +14,7 @@ from typing import Optional
 import uuid
 import dateutil.parser
 import dateutil.tz
+from dateutil.relativedelta import relativedelta
 from PIL import Image
 
 import requests
@@ -45,10 +46,10 @@ import zip_utils as zu
 RESOURCE_START_PATH = os.path.abspath(os.path.dirname(__file__))
 
 # Allowed file extensions
-ALLOWED_FILE_EXTENSIONS=['.png','.jpg','.jepg','.ico','.gif','.html','.css','.js','.woff2']
+REQEST_ALLOWED_FILE_EXTENSIONS=['.png','.jpg','.jepg','.ico','.gif','.html','.css','.js','.woff2']
 
 # Allowed image extensions
-ALLOWED_IMAGE_EXTENSIONS=['.png','.jpg','.jpeg','.ico','.gif']
+REQEST_ALLOWED_IMAGE_EXTENSIONS=['.png','.jpg','.jpeg','.ico','.gif']
 
 # Environment variable name for database
 ENV_NAME_DB = 'SPARCD_DB'
@@ -85,12 +86,23 @@ DEFAULT_QUERY_INTERVAL = 60
 # Name of temporary species file
 TEMP_SPECIES_FILE_NAME = SPARCD_PREFIX + 'species.json'
 
+# Name of temporary upload stats file
+TEMP_UPLOAD_STATS_FILE_NAME_POSTFIX = '-' + SPARCD_PREFIX + 'upload-stats.json'
+TEMP_UPLOAD_STATS_FILE_TIMEOUT_SEC = 1 * 60 * 60
+
+# Name of temporary upload stats file
+TEMP_SPECIES_STATS_FILE_NAME_POSTFIX = '-' + SPARCD_PREFIX + 'species-stats.json'
+TEMP_SPECIES_STATS_FILE_TIMEOUT_SEC = 12 * 60 * 60
+
 # UI definitions for serving
 DEFAULT_TEMPLATE_PAGE = 'index.html'
 
 # List of known query form variable keys
 KNOWN_QUERY_KEYS = ['collections','dayofweek','elevations','endDate','hour','locations',
                     'month','species','startDate','years']
+
+# Species that aren't part of the statistics
+SPECIES_STATS_EXCLUDE = ('Ghost', 'None', 'Test')
 
 # Don't run if we don't have a database or passcode
 if not DEFAULT_DB_PATH or not os.path.exists(DEFAULT_DB_PATH):
@@ -171,7 +183,7 @@ def sendfile(filename: str):
     print("RETURN FILENAME:",filename,flush=True)
 
     # Check that the file is allowed
-    if not os.path.splitext(filename)[1].lower() in ALLOWED_FILE_EXTENSIONS:
+    if not os.path.splitext(filename)[1].lower() in REQEST_ALLOWED_FILE_EXTENSIONS:
         return 'Resource not found', 404
 
     fullpath = os.path.realpath(os.path.join(RESOURCE_START_PATH, filename.lstrip('/')))
@@ -192,7 +204,7 @@ def sendnextfile(path_fagment: str):
     print("RETURN _next FILENAME:",path_fagment,flush=True)
 
     # Check that the file is allowed
-    if not os.path.splitext(path_fagment)[1].lower() in ALLOWED_FILE_EXTENSIONS:
+    if not os.path.splitext(path_fagment)[1].lower() in REQEST_ALLOWED_FILE_EXTENSIONS:
         return 'Resource not found', 404
 
     fullpath = os.path.realpath(os.path.join(RESOURCE_START_PATH, '_next', 'static',\
@@ -241,7 +253,7 @@ def sendnextimage():
     image_type = os.path.splitext(image_path)[1][1:].lower()
 
     # Check that the file is allowed
-    if not '.'+image_type in ALLOWED_IMAGE_EXTENSIONS:
+    if not '.'+image_type in REQEST_ALLOWED_IMAGE_EXTENSIONS:
         return 'Resource not found', 404
 
     fullpath = os.path.realpath(os.path.join(RESOURCE_START_PATH, image_path.lstrip('/')))
@@ -688,6 +700,76 @@ def upload():
     return json.dumps(all_images)
 
 
+@app.route('/speciesStats', methods = ['GET'])
+@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+def species_stats():
+    """ Returns the statistics on species
+    Arguments:
+        token - the token to check for
+    Return:
+        Returns the found statistics on species
+    """
+    db = SPARCdDatabase(DEFAULT_DB_PATH)
+    token = request.args.get('t')
+    print('SPECIES STAT', request)
+
+    # Check the credentials
+    token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
+    if token_valid is None or user_info is None:
+        return "Not Found", 404
+    if not token_valid or not user_info:
+        return "Unauthorized", 401
+
+    client_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.environ.get('HTTP_ORIGIN', \
+                                    request.environ.get('HTTP_REFERER',request.remote_addr) \
+                                    ))
+    client_user_agent =  request.environ.get('HTTP_USER_AGENT', None)
+    if not client_ip or client_ip is None or not client_user_agent or client_user_agent is None:
+        return "Not Found", 404
+
+    user_agent_hash = hashlib.sha256(client_user_agent.encode('utf-8')).hexdigest()
+    token_valid, user_info = sdu.token_is_valid(token, client_ip, user_agent_hash, db,
+                                                                            SESSION_EXPIRE_SECONDS)
+    if not token_valid or not user_info:
+        return "Unauthorized", 401
+
+    s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
+
+    # Get collections from the database
+    coll_info = db.get_collections(TIMEOUT_COLLECTIONS_SEC)
+    if coll_info is None or not coll_info:
+        all_collections = S3Connection.list_collections(s3_url, user_info.name,
+                                                        get_password(token, db))
+        coll_info = [{'name':one_coll['bucket'], 'json':one_coll} \
+                                                            for one_coll in all_collections]
+        if not db.save_collections([{'name':one_coll['bucket'], 'json':json.dumps(one_coll)} \
+                                                            for one_coll in all_collections]):
+            print('Warning: Unable to save collections to the database')
+    else:
+        coll_info = [{'name':one_coll['name'],'json':json.loads(one_coll['json'])} \
+                                                            for one_coll in coll_info]
+
+    # Get uploads information
+    # TODO: resolve: this call needs both encrypted (for the DB) and plain text URL (for S3 access)
+    #                [maybe make the S3URL parameter a tuple?]
+    # Check if we already have the stats
+    stats_temp_filename = os.path.join(tempfile.gettempdir(), hash2str(s3_url) + \
+                                                            TEMP_SPECIES_STATS_FILE_NAME_POSTFIX)
+    stats = sdfu.load_timed_info(stats_temp_filename, TEMP_SPECIES_STATS_FILE_TIMEOUT_SEC)
+    if stats is None:
+        stats = sdu.species_stats(db, coll_info,
+                                            crypt.do_decrypt(WORKING_PASSCODE, user_info.url),
+                                            user_info.name,
+                                            lambda: get_password(token, db))
+    if stats is None:
+        return "Not Found", 404
+
+    sdfu.save_timed_info(stats_temp_filename, stats)
+
+    return json.dumps([[key, value] for key, value in stats.items() if key \
+                                                                    not in SPECIES_STATS_EXCLUDE])
+
+
 @app.route('/image', methods = ['GET'])
 @cross_origin(origins="http://localhost:3000", supports_credentials=True)
 def image():
@@ -1096,6 +1178,95 @@ def location_info():
                             'utm_code':DEFAULT_UTM_ZONE, 'utm_x':0.0, 'utm_y':0.0})
 
 
+@app.route('/sandboxStats', methods = ['GET'])
+@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+def sandbox_stats():
+    """ Returns the upload statistics for display
+    Arguments: (GET)
+        t - the session token
+    Return:
+        Returns whether the upload was already atempted and any missing file names
+    Notes:
+         If the token is invalid, or a problem occurs, a 404 error is returned
+   """
+    db = SPARCdDatabase(DEFAULT_DB_PATH)
+    token = request.args.get('t')
+    print('SANDBOX STATS', flush=True)
+
+    # Check the credentials
+    token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
+    if token_valid is None or user_info is None:
+        return "Not Found", 404
+    if not token_valid or not user_info:
+        return "Unauthorized", 401
+
+    client_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.environ.get('HTTP_ORIGIN', \
+                                    request.environ.get('HTTP_REFERER',request.remote_addr) \
+                                    ))
+    client_user_agent =  request.environ.get('HTTP_USER_AGENT', None)
+    if not client_ip or client_ip is None or not client_user_agent or client_user_agent is None:
+        return "Not Found", 404
+
+    user_agent_hash = hashlib.sha256(client_user_agent.encode('utf-8')).hexdigest()
+    token_valid, user_info = sdu.token_is_valid(token, client_ip, user_agent_hash, db,
+                                                                            SESSION_EXPIRE_SECONDS)
+    if not token_valid or not user_info:
+        return "Unauthorized", 401
+
+    s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
+
+    # Check if we already have the stats
+    stats_temp_filename = os.path.join(tempfile.gettempdir(), hash2str(s3_url) + \
+                                                                TEMP_UPLOAD_STATS_FILE_NAME_POSTFIX)
+    stats = sdfu.load_timed_info(stats_temp_filename, TEMP_UPLOAD_STATS_FILE_TIMEOUT_SEC)
+    if stats is not None:
+        return json.dumps(stats)
+
+    # Get all the collections so we can parse them for our stats
+    all_collections = sdu.load_timed_temp_colls(user_info.name, bool(user_info.admin),
+                                                hash2str(s3_url))
+    if all_collections is None:
+        # Get the collection information from the server
+        all_collections = S3Connection.get_collections(s3_url, user_info.name,
+                                                                            get_password(token, db))
+
+        return_colls = []
+        for one_coll in all_collections:
+            return_colls.append(sdu.normalize_collection(one_coll))
+
+        # Save the collections temporarily
+        sdu.save_timed_temp_colls(return_colls, hash2str(s3_url))
+
+        all_collections = return_colls
+
+    now_dt = datetime.datetime.today()
+    month_diff = now_dt - relativedelta(months=1) - now_dt
+    year_diff = now_dt  - relativedelta(years=1) - now_dt
+
+    num_month = 0
+    num_year = 0
+    num_total = 0
+    for one_coll in all_collections:
+        num_total += len(one_coll['uploads'])
+        for one_upload in one_coll['uploads']:
+            # First check if it's in the last year
+            up_dt = datetime.datetime(year=int(one_upload['date']['date']['year']),
+                                      month=int(one_upload['date']['date']['month']),
+                                      day=int(one_upload['date']['date']['day']))
+            if up_dt - now_dt >= year_diff:
+                num_year += 1
+                # It's in the last year, check if it's in the last month
+                if up_dt - now_dt >= month_diff:
+                    num_month += 1
+
+    # Save the stats and then return them
+    stats = [['Uploads last month', num_month], ['Uploads last year', num_year], \
+                                                                    ['Total uploads', num_total]]
+    sdfu.save_timed_info(stats_temp_filename, stats)
+
+    return json.dumps(stats)
+
+
 @app.route('/sandboxPrev', methods = ['POST'])
 @cross_origin(origins="http://localhost:3000", supports_credentials=True)
 def sandbox_prev():
@@ -1286,9 +1457,14 @@ def sandbox_file():
     temp_file = tempfile.mkstemp(prefix=SPARCD_PREFIX)
     os.close(temp_file[0])
     for one_file in request.files:
+        file_ext = os.path.splitext(one_file)[1].lower()
         request.files[one_file].save(temp_file[1])
 
-        cur_species, cur_location, cur_timestamp = image_utils.get_embedded_image_info(temp_file[1])
+        if not file_ext in sdu.UPLOAD_KNOWN_MOVIE_EXT:
+            cur_species, cur_location, cur_timestamp = \
+                                                image_utils.get_embedded_image_info(temp_file[1])
+        else:
+            cur_species, cur_location, cur_timestamp = (None, None, None)
 
         # Check if we need to apply the timezone to timestamp. Refer to link below
         # https://docs.python.org/3/library/datetime.html#determining-if-an-object-is-aware-or-naive
@@ -1302,7 +1478,8 @@ def sandbox_file():
                 (sb_location and cur_location and sb_location['idProperty'] != cur_location['id']):
 
             # Update the location
-            if not image_utils.update_image_file_exif(temp_file[1],
+            if not file_ext in sdu.UPLOAD_KNOWN_MOVIE_EXT and \
+                not image_utils.update_image_file_exif(temp_file[1],
                                             loc_id=sb_location['idProperty'],
                                             loc_name=sb_location['nameProperty'],
                                             loc_ele=sb_location['elevationProperty'],
