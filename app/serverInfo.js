@@ -46,3 +46,9 @@ export const AllowedImageMime = [
   'image/jpeg',
   'image/tiff'
 ];
+
+/** Allowed movie types **/
+export const AllowedMovieMime = [
+  'video/mp4',
+  'video/quicktime',
+];

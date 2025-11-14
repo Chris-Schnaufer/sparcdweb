@@ -34,6 +34,9 @@ LOCATIONS_JSON_FILE_NAME = 'locations.json'
 # Uploads table timeout length
 TIMEOUT_UPLOADS_SEC = 3 * 60 * 60
 
+# Allowed movie extensions for upload
+UPLOAD_KNOWN_MOVIE_EXT = ['.mp4', '.mov']
+
 
 def make_boolean(value) -> bool:
     """ Converts the parameter to a boolean value
@@ -651,6 +654,7 @@ def process_upload_changes(s3_url: str, username: str, fetch_password: Callable,
 
         # Loop through the files
         for idx, one_file in enumerate(update_files):
+            file_ext = os.path.splitext(one_file['s3_path'])[1].lower()
             temp_file_name = ("-"+str(idx)).join(os.path.splitext(\
                                                             os.path.basename(one_file['s3_path'])))
             save_path = os.path.join(edit_folder, temp_file_name)
@@ -666,7 +670,10 @@ def process_upload_changes(s3_url: str, username: str, fetch_password: Callable,
             # Get the image to work with
             S3Connection.download_image(s3_url, username, fetch_password(), one_file['bucket'],
                                                                     one_file['s3_path'], save_path)
-            cur_species, cur_location, _ = image_utils.get_embedded_image_info(save_path)
+            if not file_ext in UPLOAD_KNOWN_MOVIE_EXT:
+                cur_species, cur_location, _ = image_utils.get_embedded_image_info(save_path)
+            else:
+                cur_species, cur_location = ([], [])
 
             # Species: get the current species and add our changes to that before writing them out
             save_species = None
@@ -707,8 +714,9 @@ def process_upload_changes(s3_url: str, username: str, fetch_password: Callable,
 
             # Check if we have any changes
             if save_species or save_location:
-                # Update the image file
-                if image_utils.update_image_file_exif(save_path,
+                # Update the image file if it's not a movie file and uplooad
+                if file_ext in UPLOAD_KNOWN_MOVIE_EXT or \
+                    image_utils.update_image_file_exif(save_path,
                                 loc_id = save_location['loc_id'] if save_location else None,
                                 loc_name = save_location['loc_name'] if save_location else None,
                                 loc_ele = save_location['loc_ele'] if save_location else None,

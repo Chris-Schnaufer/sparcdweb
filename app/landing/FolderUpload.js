@@ -28,8 +28,8 @@ import { Level } from '../components/Messages';
 import LocationItem from '../components/LocationItem';
 import { meters2feet } from '../utils';
 import ProgressWithLabel from '../components/ProgressWithLabel';
-import { AddMessageContext, AllowedImageMime, BaseURLContext, CollectionsInfoContext, LocationsInfoContext,
-                SizeContext, TokenContext, UserSettingsContext } from '../serverInfo';
+import { AddMessageContext, AllowedImageMime, AllowedMovieMime, BaseURLContext, CollectionsInfoContext, 
+          LocationsInfoContext,SizeContext, TokenContext, UserSettingsContext } from '../serverInfo';
 
 
 const MAX_FILE_SIZE = 80 * 1000 * 1024; // Number of bytes before a file is too large
@@ -44,15 +44,17 @@ const prevUploadCheckState = {
   checkAbandon: 3,
 };
 
+// Be sure to add new known upload types to the parameter definition below
 /**
  * Renders the UI for uploading a folder of images
  * @function
  * @param {boolean} loadingCollections Flag indicating collections are being loaded and not available
+ * @param {string} type One of the known upload types ('images', 'movies')
  * @param {function} onCompleted The function to call when an upload is completed
  * @param {function} onCancel The function to call when the user cancels the upload
  * @returns {object} The rendered UI
  */
-export default function FolderUpload({loadingCollections, onCompleted, onCancel}) {
+export default function FolderUpload({loadingCollections, type, onCompleted, onCancel}) {
   const theme = useTheme();
   const addMessage = React.useContext(AddMessageContext); // Function adds messages for display
   const collectionInfo = React.useContext(CollectionsInfoContext);
@@ -64,6 +66,7 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
   const [collectionSelection, setCollectionSelection] = React.useState(null);
   const [comment, setComment] = React.useState(null);
   const [continueUploadInfo, setContinueUploadInfo] = React.useState(null); // Used when continuing a previous upload
+  const [disableDetails, setDisableDetails] = React.useState(false); // Used to disable buttons
   const [filesSelected, setFilesSelected] = React.useState(0);
   const [finishingUpload, setFinishingUpload] = React.useState(false); // Used when finishing up an upload
   const [forceRedraw, setForceRedraw] = React.useState(0);
@@ -340,7 +343,7 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
    * @function
    * @param {object} event The event
    */
-  function uploadFiles(event) {
+  const filesUpload = React.useCallback((event) => {
     // Disable buttons
     let el = document.getElementById('folder_upload');
     if (el) {
@@ -374,7 +377,13 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
         haveUnknown++;
       }
       if (one_file.type) {
-        if (AllowedImageMime.find((item) => item.toLowerCase === one_file.type.toLowerCase) !== undefined) {
+        if (type === 'image'  && AllowedImageMime.find((item) => item.toLowerCase() === one_file.type.toLowerCase()) !== undefined) {
+          if (!one_file.size || one_file.size <= MAX_FILE_SIZE) {
+            allowedFiles.push(one_file);
+          } else if (one_file.size && one_file.size > MAX_FILE_SIZE) {
+            tooLarge++;
+          }
+        } else if (type === 'movie'  && AllowedMovieMime.find((item) => item.toLowerCase() === one_file.type.toLowerCase()) !== undefined) {
           if (!one_file.size || one_file.size <= MAX_FILE_SIZE) {
             allowedFiles.push(one_file);
           } else if (one_file.size && one_file.size > MAX_FILE_SIZE) {
@@ -386,8 +395,17 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
 
     // Let the user know if we have no more files left, or if we have some allowed files that are too large
     if (allowedFiles.length <= 0) {
-      addMessage(Level.Information, 'No acceptable image files were found. Please choose another folder')
+      addMessage(Level.Information, `No acceptable ${type} files were found. Please choose another folder`)
       console.log('No files left to upload: start count:', allFiles.length, ' unknown:',haveUnknown, ' too large:', tooLarge);
+      // Enable buttons
+      let el = document.getElementById('folder_upload');
+      if (el) {
+        el.disabled = false;
+      }
+      el = document.getElementById('folder_cancel');
+      if (el) {
+        el.disabled = false;
+      }
       return;
     }
     if (tooLarge > 0) {
@@ -398,22 +416,31 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
     // Check for a previous upload
     let relativePath = allowedFiles[0].webkitRelativePath;
     if (!relativePath) {
-      addMessage(Level.Error, 'Unable to determine the source path. Please contact the developer of this site');
+      addMessage(Level.Error, 'Unable to determine the source path. Please contact the developer of this app');
       console.log('ERROR: Missing relative path');
       console.log(allowedFiles[0]);
+      // Enable buttons
+      let el = document.getElementById('folder_upload');
+      if (el) {
+        el.disabled = false;
+      }
+      el = document.getElementById('folder_cancel');
+      if (el) {
+        el.disabled = false;
+      }
       return;
     }
     relativePath = relativePath.substr(0, relativePath.length - allowedFiles[0].name.length - 1);
 
     checkPreviousUpload(relativePath, allowedFiles);
-  }
+  }, [addMessage, checkPreviousUpload]);
 
   /**
    * Handles the user changing the selected folder to upload
    * @function
    * @param {object} event The event
    */
-  function selectionChanged(event) {
+  const selectionChanged = React.useCallback((event) => {
     const el = event.target;
 
     if (el.files && el.files.length != null) {
@@ -421,13 +448,13 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
     } else {
       setFilesSelected(0);
     }
-  }
+  }, [setFilesSelected]);
 
   /**
    * Handles the user being done with an upload
    * @function
    */
-  function doneUpload() {
+  const doneUpload = React.useCallback(() => {
     const curUploadId = workingUploadId;
     setFinishingUpload(true);
     window.setTimeout(() => {
@@ -437,13 +464,13 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
                               onCompleted();
                             });
     }, 10);
-  }
+  }, [onCompleted, serverUploadCompleted, setFinishingUpload, workingUploadId]);
 
   /**
    * Resets the UI to allow another upload
    * @function
    */
-  function anotherUpload() {
+  const anotherUpload = React.useCallback(() => {
     const curUploadId = workingUploadId;
     serverUploadCompleted(curUploadId,
       () => { // Success
@@ -458,21 +485,32 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
         setUploadingFileCounts({total:0, uploaded:0});
         onCompleted();
       });
-  }
+  }, [onCompleted, serverUploadCompleted, setCollectionSelection, setComment, setContinueUploadInfo, setLocationSelection, setNewUpload, 
+      setNewUploadFiles, setUploadCompleted, setUploadingFileCounts, setUploadingFiles, workingUploadId]);
 
   /**
    * Calls the cancelation function when the user clicks cancel
    * @function
    */
-  function cancelUpload() {
+  const cancelUpload = React.useCallback(() => {
+    // Enable buttons
+    let el = document.getElementById('folder_upload');
+    if (el) {
+      el.disabled = false;
+    }
+    el = document.getElementById('folder_cancel');
+    if (el) {
+      el.disabled = false;
+    }
+
     onCancel();
-  }
+  }, [onCancel]);
 
   /**
    * Handles the user cancelling the current upload
    * @function
    */
-  function cancelDetails() {
+  const cancelDetails = React.useCallback(() => {
     // Set to disable multiple clicks
     if (disableUploadDetails === true) {
       return;
@@ -481,57 +519,64 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
 
     setNewUpload(false);
     setNewUploadFiles(null);
-  }
+    disableUploadDetails = false;
+  }, [disableUploadDetails, setNewUpload, setNewUploadFiles]);
 
   /**
    * Handles when the user wants to continue a new upload
    * @function
    */
-  function continueNewUpload() {
+  const continueNewUpload = React.useCallback(() => {
     // Set to disable multiple clicks
     if (disableUploadDetails === true) {
       return;
     }
     disableUploadDetails = true;
     setUploadingFileCounts({total:newUploadFiles.length, uploaded:0});
+    setDisableDetails(true);
 
-    // Add the upload to the server
-    const sandboxNewUrl = serverURL + '/sandboxNew?t=' + encodeURIComponent(uploadToken);
-    const formData = new FormData();
+    // Add the upload to the server letting the UI to update
+    window.setTimeout(() => {
+      const sandboxNewUrl = serverURL + '/sandboxNew?t=' + encodeURIComponent(uploadToken);
+      const formData = new FormData();
 
-    formData.append('collection', collectionSelection.id);
-    formData.append('location', locationSelection.idProperty);
-    formData.append('path', uploadPath);
-    formData.append('comment', comment);
-    formData.append('files', JSON.stringify(newUploadFiles.map((item) => item.webkitRelativePath)));
-    formData.append('ts', new Date().toISOString());
-    formData.append('tz', Intl.DateTimeFormat().resolvedOptions().timeZone);
+      formData.append('collection', collectionSelection.id);
+      formData.append('location', locationSelection.idProperty);
+      formData.append('path', uploadPath);
+      formData.append('comment', comment);
+      formData.append('files', JSON.stringify(newUploadFiles.map((item) => item.webkitRelativePath)));
+      formData.append('ts', new Date().toISOString());
+      formData.append('tz', Intl.DateTimeFormat().resolvedOptions().timeZone);
 
-    try {
-      const resp = fetch(sandboxNewUrl, {
-        method: 'POST',
-        body: formData
-      }).then(async (resp) => {
-            if (resp.ok) {
-              return resp.json();
-            } else {
-              throw new Error(`Failed to add new sandbox upload: ${resp.status}`, {cause:resp});
-            }
+      try {
+        const resp = fetch(sandboxNewUrl, {
+          method: 'POST',
+          body: formData
+        }).then(async (resp) => {
+              setDisableDetails(false);
+              if (resp.ok) {
+                return resp.json();
+              } else {
+                throw new Error(`Failed to add new sandbox upload: ${resp.status}`, {cause:resp});
+              }
+            })
+          .then((respData) => {
+              // Process the results
+              setNewUpload(false);
+              window.setTimeout(() => uploadFolder(newUploadFiles, respData.id), 10);
           })
-        .then((respData) => {
-            // Process the results
-            setNewUpload(false);
-            window.setTimeout(() => uploadFolder(newUploadFiles, respData.id), 10);
-        })
-        .catch(function(err) {
-          console.log('New Sandbox Error: ',err);
-          addMessage(Level.Error, 'A problem ocurred while preparing for new sandbox upload');
-      });
-    } catch (error) {
-      console.log('New Upload Unknown Error: ',err);
-      addMessage(Level.Error, 'An unkown problem ocurred while preparing for new sandbox upload');
-    }
-  }
+          .catch(function(err) {
+            console.log('New Sandbox Error: ',err);
+            addMessage(Level.Error, 'A problem ocurred while preparing for new sandbox upload');
+        });
+      } catch (error) {
+        setDisableDetails(false);
+        console.log('New Upload Unknown Error: ',err);
+        addMessage(Level.Error, 'An unkown problem ocurred while preparing for new sandbox upload');
+      }
+    }, 100);
+  }, [addMessage, collectionSelection, comment, disableUploadDetails, locationSelection, newUploadFiles, serverURL, setDisableDetails, 
+      setNewUpload, setUploadingFileCounts, uploadPath, uploadToken]);
 
   /**
    * Continues a previous upload of images
@@ -661,7 +706,7 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
           })
         .then((respData) => {
             // Process the results
-            setUploadingFileCounts({total:uploadFiles.length, uploaded:0});
+            setUploadingFileCounts({total:newUploadFiles.length, uploaded:0});
             setPrevUploadCheck(prevUploadCheckState.noCheck);
             setContinueUploadInfo(null);
             setCollectionSelection(null);
@@ -679,8 +724,8 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
       console.log('Abandon Upload Unknown Error: ',err);
       addMessage(Level.Error, 'An unkown problem ocurred while preparing for abandoning sandbox upload');
     }
-  }, [addMessage, continueUploadInfo, disableUploadCheck, onCompleted, prevUploadCheckState, serverURL, setCollectionSelection,
-      setComment, setContinueUploadInfo, setLocationSelection, setNewUpload, setPrevUploadCheck, setUploadingFileCounts, uploadFiles, uploadToken]);
+  }, [addMessage, continueUploadInfo, disableUploadCheck, newUploadFiles, onCompleted, prevUploadCheckState, serverURL, setCollectionSelection,
+      setComment, setContinueUploadInfo, setLocationSelection, setNewUpload, setPrevUploadCheck, setUploadingFileCounts, uploadToken]);
 
   /**
    * Creates a new upload for these files
@@ -747,12 +792,12 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
    * @param {object} event The event object
    * @param {object} value The selected collection
    */
-  function handleCollectionChange(event, value) {
+  const handleCollectionChange = React.useCallback((event, value) => {
     setCollectionSelection(value);
     if (locationSelection !== null && comment != null && comment.length > MIN_COMMENT_LEN) {
       setForceRedraw(forceRedraw + 1);
     }
-  }
+  }, [comment, forceRedraw, locationSelection, setCollectionSelection, setForceRedraw, MIN_COMMENT_LEN]);
 
   /**
    * Keeps track of a new user location selection
@@ -760,24 +805,24 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
    * @param {object} event The event object
    * @param {object} value The selected location
    */
-  function handleLocationChange(event, value) {
+  const handleLocationChange = React.useCallback((event, value) => {
     setLocationSelection(value);
     if (collectionSelection !== null && comment != null && comment.length > MIN_COMMENT_LEN) {
       setForceRedraw(forceRedraw + 1);
     }
-  }
+  }, [collectionSelection, comment, forceRedraw, setForceRedraw, setLocationSelection, MIN_COMMENT_LEN]);
 
   /**
    * Handles the user changing the comment
    * @function
    * @param {object} event The triggering event
    */
-  function handleCommentChange(event) {
+  const handleCommentChange = React.useCallback((event) => {
     setComment(event.target.value);
     if (event.target.value != null && event.target.value.length > MIN_COMMENT_LEN && collectionSelection != null && locationSelection != null) {
       setForceRedraw(forceRedraw + 1);
     }
-  }
+  }, [forceRedraw, collectionSelection, locationSelection, setComment, setForceRedraw, MIN_COMMENT_LEN]);
 
   /**
    * Renders the UI based upon how many images have been uploaded
@@ -826,16 +871,18 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
    * @return {object} The UI to render
    */
   function renderUploadDetails() {
+    const waitingMessage = loadingCollections === true ? "Loading collections, please wait..." : "Preparing upload...";
+    const patienceMessage = loadingCollections === true ? "This may take a while" : "One moment please";
     // Let the user know collections are still being loaded
-    if (loadingCollections === true) {
+    if (loadingCollections === true || disableDetails === true) {
       return (
         <Grid id='folder-upload-details-wrapper' container direction="column" alignItems="center" justifyContent="start" gap={2}>
           <Typography gutterBottom variant="body2">
-            Loading collections, please wait...
+            {waitingMessage}
           </Typography>
           <CircularProgress variant="indeterminate" />
           <Typography gutterBottom variant="body2">
-            This may take a while
+            {patienceMessage}
           </Typography>
         </Grid>
       );
@@ -851,7 +898,8 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
   }
 
   // Render the UI
-  const details_continue_enabled = locationSelection != null && collectionSelection != null && comment != null && comment.length > MIN_COMMENT_LEN;
+  const details_continue_enabled = locationSelection != null && collectionSelection != null && comment != null &&
+                                      comment.length > MIN_COMMENT_LEN && disableDetails === false;
   return (
     <React.Fragment>
       <Box id='landing-page-upload-wrapper' sx={{ ...theme.palette.screen_disable }} >
@@ -868,7 +916,7 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
             <CardHeader sx={{ textAlign: 'center' }}
                title={
                 <Typography gutterBottom variant="h6" component="h4">
-                  Upload Folder
+                  Upload {String(type).charAt(0).toUpperCase() + String(type).slice(1)} Folder
                 </Typography>
                }
                subheader={
@@ -889,7 +937,7 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
             <CardActions>
             { !uploadingFiles && continueUploadInfo === null && 
               <React.Fragment>
-                <Button id="folder_upload" sx={{'flex':'1'}} size="small" onClick={uploadFiles}
+                <Button id="folder_upload" sx={{'flex':'1'}} size="small" onClick={filesUpload}
                         disabled={filesSelected > 0 ? false : true}>Upload</Button>
                 <Button id="folder_cancel" sx={{'flex':'1'}} size="small" onClick={cancelUpload}>Cancel</Button>
               </React.Fragment>
@@ -928,7 +976,8 @@ export default function FolderUpload({loadingCollections, onCompleted, onCancel}
             <CardActions>
               <Button id="sandbox-upload-details-continue" sx={{'flex':'1'}} size="small" onClick={continueNewUpload}
                       disabled={details_continue_enabled ? false : true}>Continue</Button>
-              <Button id="sandbox-upload-details-cancel" sx={{'flex':'1'}} size="small" onClick={cancelDetails}>Cancel</Button>
+              <Button id="sandbox-upload-details-cancel" sx={{'flex':'1'}} size="small" onClick={cancelDetails}
+                      disabled={disableDetails ? true : false}>Cancel</Button>
             </CardActions>
           </Card>
         }

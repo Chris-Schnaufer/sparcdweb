@@ -46,10 +46,10 @@ import zip_utils as zu
 RESOURCE_START_PATH = os.path.abspath(os.path.dirname(__file__))
 
 # Allowed file extensions
-ALLOWED_FILE_EXTENSIONS=['.png','.jpg','.jepg','.ico','.gif','.html','.css','.js','.woff2']
+REQEST_ALLOWED_FILE_EXTENSIONS=['.png','.jpg','.jepg','.ico','.gif','.html','.css','.js','.woff2']
 
 # Allowed image extensions
-ALLOWED_IMAGE_EXTENSIONS=['.png','.jpg','.jpeg','.ico','.gif']
+REQEST_ALLOWED_IMAGE_EXTENSIONS=['.png','.jpg','.jpeg','.ico','.gif']
 
 # Environment variable name for database
 ENV_NAME_DB = 'SPARCD_DB'
@@ -183,7 +183,7 @@ def sendfile(filename: str):
     print("RETURN FILENAME:",filename,flush=True)
 
     # Check that the file is allowed
-    if not os.path.splitext(filename)[1].lower() in ALLOWED_FILE_EXTENSIONS:
+    if not os.path.splitext(filename)[1].lower() in REQEST_ALLOWED_FILE_EXTENSIONS:
         return 'Resource not found', 404
 
     fullpath = os.path.realpath(os.path.join(RESOURCE_START_PATH, filename.lstrip('/')))
@@ -204,7 +204,7 @@ def sendnextfile(path_fagment: str):
     print("RETURN _next FILENAME:",path_fagment,flush=True)
 
     # Check that the file is allowed
-    if not os.path.splitext(path_fagment)[1].lower() in ALLOWED_FILE_EXTENSIONS:
+    if not os.path.splitext(path_fagment)[1].lower() in REQEST_ALLOWED_FILE_EXTENSIONS:
         return 'Resource not found', 404
 
     fullpath = os.path.realpath(os.path.join(RESOURCE_START_PATH, '_next', 'static',\
@@ -253,7 +253,7 @@ def sendnextimage():
     image_type = os.path.splitext(image_path)[1][1:].lower()
 
     # Check that the file is allowed
-    if not '.'+image_type in ALLOWED_IMAGE_EXTENSIONS:
+    if not '.'+image_type in REQEST_ALLOWED_IMAGE_EXTENSIONS:
         return 'Resource not found', 404
 
     fullpath = os.path.realpath(os.path.join(RESOURCE_START_PATH, image_path.lstrip('/')))
@@ -1457,9 +1457,14 @@ def sandbox_file():
     temp_file = tempfile.mkstemp(prefix=SPARCD_PREFIX)
     os.close(temp_file[0])
     for one_file in request.files:
+        file_ext = os.path.splitext(one_file)[1].lower()
         request.files[one_file].save(temp_file[1])
 
-        cur_species, cur_location, cur_timestamp = image_utils.get_embedded_image_info(temp_file[1])
+        if not file_ext in sdu.UPLOAD_KNOWN_MOVIE_EXT:
+            cur_species, cur_location, cur_timestamp = \
+                                                image_utils.get_embedded_image_info(temp_file[1])
+        else:
+            cur_species, cur_location, cur_timestamp = (None, None, None)
 
         # Check if we need to apply the timezone to timestamp. Refer to link below
         # https://docs.python.org/3/library/datetime.html#determining-if-an-object-is-aware-or-naive
@@ -1473,7 +1478,8 @@ def sandbox_file():
                 (sb_location and cur_location and sb_location['idProperty'] != cur_location['id']):
 
             # Update the location
-            if not image_utils.update_image_file_exif(temp_file[1],
+            if not file_ext in sdu.UPLOAD_KNOWN_MOVIE_EXT and \
+                not image_utils.update_image_file_exif(temp_file[1],
                                             loc_id=sb_location['idProperty'],
                                             loc_name=sb_location['nameProperty'],
                                             loc_ele=sb_location['elevationProperty'],
