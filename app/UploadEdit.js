@@ -870,7 +870,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
           let imageSpecies = item.species && item.species.length > 0;
           return (
             <Grid size={{ xs: 12, sm: 4, md:3 }} key={item.name}>
-              <ImageTile name={item.name} species={item.species} onClick={() => clickHandler(item.name)} />
+              <ImageTile name={item.name} type={item.type} species={item.species} onClick={() => clickHandler(item.name)} />
             </Grid>
           )}
         )
