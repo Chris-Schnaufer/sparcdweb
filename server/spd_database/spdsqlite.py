@@ -976,8 +976,9 @@ class SPDSQLite:
         # Add the entry to the database
         cursor = self._conn.cursor()
         cursor.execute('INSERT INTO collection_edits(s3_url, bucket, s3_base_path, username, ' \
-                                                    'edit_timestamp, loc_id, loc_name, loc_ele) '\
-                                    'VALUES(?,?,?,?,?,?,?,?)', 
+                                                    'edit_timestamp, loc_id, loc_name, loc_ele, ' \
+                                                    'timestamp) '\
+                                    'VALUES(?,?,?,?,?,?,?,?,strftime("%s", "now"))', 
                             (s3_url, bucket, upload_path, username, timestamp, loc_id, \
                                                                                 loc_name, loc_ele))
 
@@ -1005,8 +1006,9 @@ class SPDSQLite:
         # Add the entry to the database
         cursor = self._conn.cursor()
         cursor.execute('INSERT INTO image_edits(s3_url, bucket, s3_file_path, username, ' \
-                                        'edit_timestamp, obs_common, obs_scientific, obs_count) '\
-                                    'VALUES(?,?,?,?,?,?,?,?)', 
+                                        'edit_timestamp, obs_common, obs_scientific, obs_count,' \
+                                        ' timestamp) '\
+                                    'VALUES(?,?,?,?,?,?,?,?,strftime("%s", "now"))', 
                                 (s3_url, bucket, file_path, username, timestamp, common, \
                                                                                     species, count))
 
@@ -1116,7 +1118,7 @@ class SPDSQLite:
             params = (new_email, old_name)
         else:
             query = 'UPDATE users SET email=?, administrator=? WHERE name=?'
-            params = (new_email, isinstance(admin, bool) and admin == True, old_name)
+            params = (new_email, isinstance(admin, bool) and admin is True, old_name)
 
         cursor = self._conn.cursor()
         cursor.execute(query, params)
@@ -1372,7 +1374,8 @@ class SPDSQLite:
 
         cursor = self._conn.cursor()
         cursor.execute('UPDATE collection_edits SET updated=1 WHERE s3_url=? AND username=? AND ' \
-                        'bucket=? AND s3_base_path=?', (s3_url, username, bucket, base_path))
+                            'bucket=? AND s3_base_path=? AND timeout=strftime("%s", "now")',
+                        (s3_url, username, bucket, base_path))
 
         self._conn.commit()
         cursor.close()
@@ -1453,7 +1456,7 @@ class SPDSQLite:
         count = 0
         cursor = self._conn.cursor()
         query = 'UPDATE image_edits SET updated=? WHERE s3_url=? AND username=? AND bucket=? AND ' \
-                's3_file_path=? AND updated=?'
+                's3_file_path=? AND updated=? AND timestamp=strftime("%s", "now")'
         while True:
             cur_file = files[cur_idx]
             cursor.execute(query, (new_updated, cur_file['s3_url'], username, cur_file['bucket'],
