@@ -73,7 +73,6 @@ def build_database(path: str, admin_info: tuple=None) -> None:
         admin_info: contains the admin name and email address to add to the DB
     """
     # Loop through and create all the database objects
-    # TODO: add timestamp information to any and all edits?
     stmts = ('CREATE TABLE users(id INTEGER PRIMARY KEY ASC, name TEXT UNIQUE NOT NULL, ' \
                             'email TEXT DEFAULT NULL, settings TEXT DEFAULT "{}", ' \
                             'species TEXT default "{}", administrator INT DEFAULT 0, ' \
@@ -110,11 +109,12 @@ def build_database(path: str, admin_info: tuple=None) -> None:
                             'bucket TEXT NOT NULL, ' \
                             's3_file_path TEXT NOT NULL,' \
                             'username TEXT NOT NULL, ' \
-                            'edit_timestamp TEXT NOT NULL,' \ # Browser reported timestamp
+                            'edit_timestamp TEXT NOT NULL,' # Browser reported timestamp \
                             'obs_common TEXT NOT NULL, ' \
                             'obs_scientific TEXT NOT NULL,' \
                             'obs_count INTEGER DEFAULT 0, '\
-                            'updated INTEGER DEFAULT 0,' \ # Various stages of update (including S3)
+                            'updated INTEGER DEFAULT 0,' # Various stages of update (including S3) \
+                            'request_id TEXT, ' # Used to keep track of requests \
                             'timestamp INTEGER)',
              'CREATE TABLE collection_edits(id INTEGER PRIMARY KEY ASC, s3_url TEXT NOT NULL, ' \
                             'bucket TEXT NOT NULL, ' \
@@ -133,9 +133,8 @@ def build_database(path: str, admin_info: tuple=None) -> None:
                             'name TEXT NOT NULL,'\
                             'keybind NOT NULL,'\
                             'iconURL TEXT NOT NULL, ' \
-                            's3_updated INTEGER DEFAULT 0'\
+                            's3_updated INTEGER DEFAULT 0,' \
                             'timestamp INTEGER)',
-             # TODO: Add edit timestamp
              'CREATE TABLE admin_location_edits(id INTEGER PRIMARY KEY ASC, s3_url TEXT NOT NULL, '\
                             'user_id INTEGER NOT NULL,'\
                             'loc_name TEXT NOT NULL,'\
@@ -146,7 +145,7 @@ def build_database(path: str, admin_info: tuple=None) -> None:
                             'loc_old_lng REAL, ' \
                             'loc_new_lat REAL NOT NULL,'\
                             'loc_new_lng REAL NOT NULL, ' \
-                            'location_updated INTEGER DEFAULT 0, '
+                            'location_updated INTEGER DEFAULT 0, ' \
                             'timestamp INTEGER)',
         )
     add_user_stmt = 'INSERT INTO users(name, email, administrator, auto_added) values(?, ?, 1, 0)'
