@@ -73,39 +73,74 @@ def build_database(path: str, admin_info: tuple=None) -> None:
         admin_info: contains the admin name and email address to add to the DB
     """
     # Loop through and create all the database objects
-    stmts = ('CREATE TABLE users(id INTEGER PRIMARY KEY ASC, name TEXT UNIQUE NOT NULL, ' \
-                            'email TEXT DEFAULT NULL, settings TEXT DEFAULT "{}", ' \
-                            'species TEXT default "{}", administrator INT DEFAULT 0, ' \
+    stmts = ('CREATE TABLE users(id INTEGER PRIMARY KEY ASC, ' \
+                            'name TEXT UNIQUE NOT NULL, ' \
+                            'email TEXT DEFAULT NULL, ' \
+                            'settings TEXT DEFAULT "{}", ' \
+                            'species TEXT default "{}", ' \
+                            'administrator INT DEFAULT 0, ' \
                             'auto_added INT DEFAULT 1)',
-             'CREATE TABLE tokens(id INTEGER PRIMARY KEY ASC, name TEXT NOT NULL, ' \
-                            'password TEXT NOT NULL, s3_url TEXT NOT NULL, token TEXT UNIQUE, ' \
-                            'timestamp INTEGER, client_ip TEXT, user_agent TEXT)',
-             'CREATE TABLE table_timeout(id INTEGER PRIMARY KEY ASC, name TEXT NOT NULL, ' \
+             'CREATE TABLE tokens(id INTEGER PRIMARY KEY ASC, ' \
+                            'name TEXT NOT NULL, ' \
+                            'password TEXT NOT NULL, ' \
+                            's3_url TEXT NOT NULL, ' \
+                            'token TEXT UNIQUE, ' \
+                            'timestamp INTEGER, ' \
+                            'client_ip TEXT, ' \
+                            'user_agent TEXT)',
+             'CREATE TABLE table_timeout(id INTEGER PRIMARY KEY ASC, ' \
+                            'name TEXT NOT NULL, ' \
                             'timestamp INTEGER)',
-             'CREATE TABLE collections(id INTEGER PRIMARY KEY ASC, name TEXT NOT NULL, ' \
-                            'json TEXT NOT NULL)',
-             'CREATE TABLE uploads(id INTEGER PRIMARY KEY ASC, s3_url TEXT NOT NULL, '\
-                            'bucket TEXT NOT NULL, ' \
-                            'name TEXT NOT NULL, json TEXT NOT NULL)',
-             'CREATE TABLE queries(id INTEGER PRIMARY KEY ASC, timestamp INTEGER, ' \
+             'CREATE TABLE collections(id INTEGER PRIMARY KEY ASC, ', \
+                            's3_id TEXT NOT NULL, ' \
+                            'hash_id TEXT UNIQUE, -- Hash of s3, collection id' \
+                            'id TEXT NOT NULL, ' \
+                            'json TEXT NOT NULL, ' \
+                            'timestamp INTEGER NOT NULL, )'
+             'CREATE TABLE uploads(id INTEGER PRIMARY KEY ASC, ' \
+                            'hash_id TEXT UNIQUE, -- Hash of s3, collection id, upload' \
+                            'name TEXT NOT NULL, ' \
+                            'timestamp INTEGER)',
+             'CREATE TABLE upload_images(id INTEGER PRIMARY KEY ASC, ' \
+                            'hash_id TEXT UNIQUE, -- Hash of s3, collection id, upload, img path'\
+                            'name TEXT NOT NULL, ' \
+                            'species_json TEXT NOT NULL)',
+             'CREATE TABLE queries(id INTEGER PRIMARY KEY ASC, ' \
+                            'timestamp INTEGER, ' \
                             'token TEXT, path TEXT NOT NULL)',
-             'CREATE TABLE sandbox(id INTEGER PRIMARY KEY ASC, name TEXT NOT NULL, ' \
-                            'path TEXT NOT NULL, s3_url TEXT NOT NULL, bucket TEXT NOT NULL, ' \
-                            's3_base_path TEXT NOT NULL, location_id TEXT NOT NULL, ' \
-                            'location_name TEXT NOT NULL, location_lat REAL NOT NULL, ' \
-                            'location_lon READ NOT NULL, location_ele REAL NOT NULL, '
-                            'timestamp INTEGER, upload_id TEXT DEFAULT NULL)',
-             'CREATE TABLE sandbox_files(id INTEGER PRIMARY KEY ASC, sandbox_id INTEGER NOT NULL, '\
-                            'filename TEXT NOT NULL, source_path TEXT, ' \
-                            'uploaded BOOLEAN DEFAULT FALSE, mimetype TEXT DEFAULT NULL, ' \
+             'CREATE TABLE sandbox(id INTEGER PRIMARY KEY ASC, ' \
+                            'name TEXT NOT NULL, ' \
+                            'path TEXT NOT NULL, ' \
+                            's3_url TEXT NOT NULL, ' \
+                            'bucket TEXT NOT NULL, ' \
+                            's3_base_path TEXT NOT NULL, ' \
+                            'location_id TEXT NOT NULL, ' \
+                            'location_name TEXT NOT NULL, ' \
+                            'location_lat REAL NOT NULL, ' \
+                            'location_lon READ NOT NULL, ' \
+                            'location_ele REAL NOT NULL, '
+                            'timestamp INTEGER, ' \
+                            'upload_id TEXT DEFAULT NULL)',
+             'CREATE TABLE sandbox_files(id INTEGER PRIMARY KEY ASC, ' \
+                            'sandbox_id INTEGER NOT NULL, '\
+                            'filename TEXT NOT NULL, ' \
+                            'source_path TEXT, ' \
+                            'uploaded BOOLEAN DEFAULT FALSE, ' \
+                            'mimetype TEXT DEFAULT NULL, ' \
                             'timestamp INTEGER)',
              'CREATE TABLE sandbox_species(id INTEGER PRIMARY KEY ASC, ' \
-                            'sandbox_file_id INTEGER NOT NULL, obs_date TEXT, obs_common TEXT, ' \
-                            'obs_scientific TEXT, obs_count INTEGER)',
+                            'sandbox_file_id INTEGER NOT NULL, ' \
+                            'obs_date TEXT, ' \
+                            'obs_common TEXT, ' \
+                            'obs_scientific TEXT, ' \
+                            'obs_count INTEGER)',
              'CREATE TABLE sandbox_locations(id INTEGER PRIMARY KEY ASC, '\
-                            'sandbox_file_id INTEGER NOT NULL, loc_name TEXT, loc_id TEXT, ' \
+                            'sandbox_file_id INTEGER NOT NULL, ' \
+                            'loc_name TEXT, ' \
+                            'loc_id TEXT, ' \
                             'loc_elevation REAL)',
-             'CREATE TABLE image_edits(id INTEGER PRIMARY KEY ASC, s3_url TEXT NOT NULL, ' \
+             'CREATE TABLE image_edits(id INTEGER PRIMARY KEY ASC, ' \
+                            's3_url TEXT NOT NULL, ' \
                             'bucket TEXT NOT NULL, ' \
                             's3_file_path TEXT NOT NULL,' \
                             'username TEXT NOT NULL, ' \
@@ -116,7 +151,8 @@ def build_database(path: str, admin_info: tuple=None) -> None:
                             'updated INTEGER DEFAULT 0,' # Various stages of update (including S3) \
                             'request_id TEXT, ' # Used to keep track of requests \
                             'timestamp INTEGER)',
-             'CREATE TABLE collection_edits(id INTEGER PRIMARY KEY ASC, s3_url TEXT NOT NULL, ' \
+             'CREATE TABLE collection_edits(id INTEGER PRIMARY KEY ASC, ' \
+                            's3_url TEXT NOT NULL, ' \
                             'bucket TEXT NOT NULL, ' \
                             's3_base_path TEXT NOT NULL,'\
                             'username TEXT NOT NULL, ' \
@@ -126,7 +162,8 @@ def build_database(path: str, admin_info: tuple=None) -> None:
                             'loc_ele REAL NOT NULL, ' \
                             'updated INTEGER DEFAULT 0, ' \
                             'timestamp INTEGER)',
-             'CREATE TABLE admin_species_edits(id INTEGER PRIMARY KEY ASC, s3_url TEXT NOT NULL, ' \
+             'CREATE TABLE admin_species_edits(id INTEGER PRIMARY KEY ASC, ' \
+                            's3_url TEXT NOT NULL, ' \
                             'user_id INTEGER NOT NULL,'\
                             'old_scientific_name TEXT,'\
                             'new_scientific_name TEXT NOT NULL, ' \
@@ -135,7 +172,8 @@ def build_database(path: str, admin_info: tuple=None) -> None:
                             'iconURL TEXT NOT NULL, ' \
                             's3_updated INTEGER DEFAULT 0,' \
                             'timestamp INTEGER)',
-             'CREATE TABLE admin_location_edits(id INTEGER PRIMARY KEY ASC, s3_url TEXT NOT NULL, '\
+             'CREATE TABLE admin_location_edits(id INTEGER PRIMARY KEY ASC, ' \
+                            's3_url TEXT NOT NULL, '\
                             'user_id INTEGER NOT NULL,'\
                             'loc_name TEXT NOT NULL,'\
                             'loc_id TEXT NOT NULL, '\

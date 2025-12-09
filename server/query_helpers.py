@@ -164,7 +164,7 @@ def filter_collections(db: SPARCdDatabase, cur_coll: tuple, s3_url: str, user_na
 
     # Load all the DB data first
     for one_coll in cur_coll:
-        cur_bucket = one_coll['json']['bucketProperty']
+        cur_bucket = one_coll['bucketProperty']
         uploads_info = db.get_uploads(s3_url, cur_bucket, TIMEOUT_UPLOADS_SEC)
         if uploads_info is not None and uploads_info:
             uploads_info = [{'bucket':cur_bucket,       \

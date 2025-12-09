@@ -61,6 +61,7 @@ export default function ImageEdit({url, type, name, parentId, maxWidth, maxHeigh
   const [brightness, setBrightness] = React.useState(50);    // Image brightness
   const [contrast, setContrast] = React.useState(50);        // Image contrast
   const [hue, setHue] = React.useState(50);    // From 360 to -360
+  const [imageModified, setImageModified] = React.useState(false); // Used to keep track of when an image is modified
   const [imageSize, setImageSize] = React.useState({width:DEF_IMG_WIDTH,height:DEF_IMG_HEIGHT,top:0,left:0,right:DEF_IMG_WIDTH}); // Adjusted when loaded
   const [movieSize, setMovieSize] = React.useState({width:'auto', height:'auto', heightRatio:430/640});
   const [showAdjustments, setShowAdjustments] = React.useState(false);  // Show image brightness, etc
@@ -157,12 +158,14 @@ export default function ImageEdit({url, type, name, parentId, maxWidth, maxHeigh
       window.setTimeout(() => {
         setSpeciesRedraw(name+curSpecies[haveSpeciesIdx].name+curSpecies[haveSpeciesIdx].count);
       }, 100);
+      setImageModified(true);
       onSpeciesChange(speciesAdd.name, curSpecies[haveSpeciesIdx].count);
     } else {
       curSpecies.push({name:speciesAdd.name,scientificName:speciesAdd.scientificName,count:1});
       window.setTimeout(() => {
         setSpeciesRedraw(name+speciesAdd.name+'1');
       }, 100);
+      setImageModified(true);
       onSpeciesChange(speciesAdd.name, 1);
     }
   }
@@ -188,6 +191,7 @@ export default function ImageEdit({url, type, name, parentId, maxWidth, maxHeigh
     }
 
     // Make the change
+    setImageModified(true);
     onSpeciesChange(speciesName, newValue);
     workingSpecies[speciesIdx].count = newValue;
     curSpecies = workingSpecies;
@@ -213,6 +217,7 @@ export default function ImageEdit({url, type, name, parentId, maxWidth, maxHeigh
     } else if (newValue > 100) {
       newValue = 100;
     }
+    setImageModified(true);
     onSpeciesChange(speciesName, newValue);
     workingSpecies[speciesIdx].count = newValue;
     curSpecies = workingSpecies;
@@ -232,6 +237,7 @@ export default function ImageEdit({url, type, name, parentId, maxWidth, maxHeigh
       return;
     }
     const removedSpecies = workingSpecies[speciesIdx];
+    setImageModified(true);
     onSpeciesChange(speciesName, 0);
     workingSpecies.splice(speciesIdx, 1);
     curSpecies = workingSpecies;
@@ -296,7 +302,7 @@ export default function ImageEdit({url, type, name, parentId, maxWidth, maxHeigh
       setSaturation(50);
 
       // Perform the navigation
-      if (navigation.onNext()) {
+      if (navigation.onNext(imageModified)) {
         // Show the mask after a timeout if we have navigation
         navigationMaskTimeoutId.current = window.setTimeout(() => {
               // Clear our timer ID and show the mask
@@ -304,6 +310,8 @@ export default function ImageEdit({url, type, name, parentId, maxWidth, maxHeigh
               showNavigationMask();
           }, NAVIGATION_MASK_TIMEOUT);
       }
+
+      setImageModified(false);
     }, 100);
 
     navigationLocked = false;
@@ -342,7 +350,7 @@ export default function ImageEdit({url, type, name, parentId, maxWidth, maxHeigh
       setSaturation(50);
 
       // Perform the navigation
-      if (navigation.onPrev()) {
+      if (navigation.onPrev(imageModified)) {
         // Show the mask after a timeout if we have navigation
         navigationMaskTimeoutId.current = window.setTimeout(() => {
               // Clear our timer ID and show the mask
@@ -350,6 +358,8 @@ export default function ImageEdit({url, type, name, parentId, maxWidth, maxHeigh
               showNavigationMask();
           }, NAVIGATION_MASK_TIMEOUT);
       }
+
+      setImageModified(false);
     }, 100);
 
     navigationLocked = false;

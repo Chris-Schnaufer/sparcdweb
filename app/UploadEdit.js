@@ -248,10 +248,12 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
   /**
    * Shows the previous image for editing
    * @function
+   * @param {bool} imageModified Flag indicating that the current image was modified
+   * @param {string} [requestId] The optional request ID associated with th current image
    * @return {bool} Returns true when there's a next image to navigate to, and false otherwise
    */
-  const handlePrevImage = React.useCallback(() => {
-    finishImageEdits(curImageModified, lastSpeciesRequestId);
+  const handlePrevImage = React.useCallback((imageModified, requestId) => {
+    finishImageEdits(imageModified, requestId ? requestId : lastSpeciesRequestId);
 
     const curImageIdx =  curUpload.images.findIndex((item) => item.name === curImageEdit.name);
     if (curImageIdx === -1) {
@@ -289,15 +291,17 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
     }
 
     return false;
-  }, [curImageEdit, curImageModified, curUpload, finishImageEdits, lastSpeciesRequestId, setCurImageEdit, setCurImageModified, setNavigationRedraw]);
+  }, [curImageEdit, curUpload, finishImageEdits, lastSpeciesRequestId, setCurImageEdit, setCurImageModified, setNavigationRedraw]);
 
   /**
    * Shows the next image for editing
    * @function
+   * @param {bool} imageModified Flag indicating that the current image was modified
+   * @param {string} [requestId] The optional request ID associated with th current image
    * @return {bool} Returns true when there's a next image to navigate to, and false otherwise
    */
-  const handleNextImage = React.useCallback((requestId) => {
-    finishImageEdits(curImageModified, requestId ? requestId : lastSpeciesRequestId);
+  const handleNextImage = React.useCallback((imageModified, requestId) => {
+    finishImageEdits(imageModified, requestId ? requestId : lastSpeciesRequestId);
 
     const curImageIdx =  curUpload.images.findIndex((item) => item.name === curImageEdit.name);
     if (curImageIdx === -1) {
@@ -335,7 +339,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
     }
 
     return false;
-  }, [curImageEdit, curImageModified, curUpload, finishImageEdits, lastSpeciesRequestId, setCurImageEdit, setCurImageModified, setNavigationRedraw]);
+  }, [curImageEdit, curUpload, finishImageEdits, lastSpeciesRequestId, setCurImageEdit, setCurImageModified, setNavigationRedraw]);
 
   // Render time width and height measurements
   React.useLayoutEffect(() => {
@@ -385,9 +389,9 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
     if (curEditState === editingStates.editImage) {
       if (event.key !== 'Meta') {
         if (event.key === 'ArrowLeft') {
-          handlePrevImage()
+          handlePrevImage(curImageModified);
         } else if (event.key === 'ArrowRight') {
-          handleNextImage()
+          handleNextImage(curImageModified);
         } else {
           const speciesKeyItem = speciesItems.find((item) => item.keyBinding == event.key.toUpperCase());
           if (speciesKeyItem) {
@@ -397,7 +401,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
             event.preventDefault();
 
             if (userSettings.autonext) {
-              handleNextImage(requestId);
+              handleNextImage(true, requestId);
             }
           }
         }
@@ -640,14 +644,17 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
   }
 
   /**
-   * Makes the call when the user has fully completed editing images
+   * Makes the call when the user has fully completed editing images. We retry if that's an option (and the request hasn't worked out)
+   * for a number of times before we have the server save what it has by setting the tryHarder flag
    * @function
    * @param {string} collectionId The ID of the collection the image belongs to
    * @param {string} uploadName The name of the upload begin edited
    * @param {string} timestamp The ISO string of the edit timestamp
    * @param {integer} {numTries} The number of attempted tries
+   * @param {bool} {tryHarder} When true sets the try harder flag on the server request. This can't be set too early
+   *                            in case there's an edit that has been delayed in being received and processed by the server
    */
-  const submitAllImageEdited = React.useCallback((collectionId, uploadName, timestamp, numTries) => {
+  const submitAllImageEdited = React.useCallback((collectionId, uploadName, timestamp, numTries, tryHarder) => {
 
     numTries = numTries ? numTries + 1 : 1;
 
@@ -657,6 +664,9 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
     formData.append('collection', collectionId);
     formData.append('upload', uploadName);
     formData.append('timestamp', timestamp);
+    if (tryHarder === true) {
+      formData.append('force', true);
+    }
 
     try {
       const resp = fetch(allEditedUrl, {
@@ -679,20 +689,25 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
                 setCurImageModified(false);
               } else {
                 // Things worked out, but there may be a timing issue with the edits, try again if we're not trying too much
+                const tryHarder = numTries === 3;
                 if (numTries < 4) {
-                  window.setTimeout(() => submitAllImageEdited(collectionId, uploadName, timestamp, numTries), 1000 * numTries);
+                  window.setTimeout(() => submitAllImageEdited(collectionId, uploadName, timestamp, numTries, tryHarder), 1000 * numTries);
                 } else {
                   setPendingMessage(null);
-                  addMessage(Level.Error, "Unable to finish all image editing changes ");
+                  if (respData.foundEdits > 0) {
+                    addMessage(Level.Error, "Unable to finish all image editing changes ");
+                  }
                 }
               }
             }
         })
         .catch(function(err) {
+          setPendingMessage(null);
           console.log('Finish Images Edit Error: ',err);
           addMessage(Level.Error, 'A problem ocurred while finishing the edited images changes');
       });
     } catch (err) {
+      setPendingMessage(null);
       console.log('Finish Images Edit Commit Unknown Error: ',err);
       addMessage(Level.Error, 'An unkown problem ocurred while finishing the edited image changes');
     }
@@ -706,15 +721,11 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
     setCurEditState(editingStates.listImages);
     searchSetup('Image Name', handleImageSearch);
 
-    if (changesMade) {
-      setPendingMessage("Finishing up changes made to images");
-    }
+    setPendingMessage("Finishing any changes made to images");
 
     finishImageEdits(curImageModified, lastSpeciesRequestId,
         () => {
-                if (changesMade) {
-                    submitAllImageEdited(curUpload.collectionId, curUpload.upload, new Date().toISOString());
-                  }
+                submitAllImageEdited(curUpload.collectionId, curUpload.upload, new Date().toISOString());
               }
     );
   }, [curImageModified, curUpload, editingStates, finishImageEdits, handleImageSearch, lastSpeciesRequestId, searchSetup,

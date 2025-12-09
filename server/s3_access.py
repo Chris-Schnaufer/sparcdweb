@@ -1086,8 +1086,8 @@ class S3Connection:
 
 
     @staticmethod
-    def update_upload_metadata_comment(url: str, user: str, password: str, bucket: str, \
-                                                    upload_path: str, new_comment: str) -> bool:
+    def update_upload_metadata(url: str, user: str, password: str, bucket: str, upload_path: str, \
+                                    new_comment: str=None, images_species_count: int=None) -> bool:
         """ Update the upload's metadata on the S3 instance with a new count
         Arguments:
             url: the URL to the s3 instance
@@ -1096,6 +1096,7 @@ class S3Connection:
             bucket: the bucket to upload to
             upload_path: path under the bucket to the metadata
             new_comment: the comment to add to the metadata
+            images_species_count: The count of images that have species
         Return:
             Returns True if no problem was found and False otherwise
         """
@@ -1120,7 +1121,10 @@ class S3Connection:
             return False
 
         # Update and save the upload information
-        coll_info['editComments'].append(new_comment)
+        if new_comment is not None:
+            coll_info['editComments'].append(new_comment)
+        if images_species_count is not None:
+            coll_info['imagesWithSpecies'] = images_species_count
         data = json.dumps(coll_info, indent=2)
         minio.put_object(bucket, upload_info_path, BytesIO(data.encode()), len(data),
                                                                     content_type='application/json')

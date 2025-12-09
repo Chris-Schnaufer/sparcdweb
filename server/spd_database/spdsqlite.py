@@ -1,6 +1,7 @@
 """This script contains the SQLite database interface for the SPARCd Web app
 """
 
+import hashlib
 import logging
 import sqlite3
 from time import sleep
@@ -28,6 +29,16 @@ class SPDSQLite:
         """
         if self._conn is not None:
             self._conn = None
+
+
+    def hash2str(self, text: str) -> str:
+        """ Returns the hash of the passed in string
+        Arguments:
+            text: the string to hash
+        Return:
+            The hash value as a string
+        """
+        return hashlib.md5(text.encode('utf-8')).hexdigest()
 
     def database_info(self) -> tuple:
         """ Returns information on the database as a tuple of strings
@@ -238,50 +249,52 @@ class SPDSQLite:
         self._conn.commit()
         cursor.close()
 
-    def get_collections(self, timeout_sec: int) -> tuple:
-        """ Returns the collection information stored in the database
+    def get_collections(self, s3_id: str) -> tuple:
+        """ Gets all the collections associated with the collection
         Arguments:
-            timeout_sec: the amount of time before the table entries can be
-                         considered expired
-        Returns:
-            Returns a tuple of the retrieved collections where each row tuple contains
-            the collection name and its json
+            s3_id: The ID of the S3 endpoint
+        Return:
+            Returns the collection information as tuples. Each tuple is another tupple consisting
+            of the collection name, JSON, and elapsed_sec from when the entry was created
         """
         if self._conn is None:
-            raise RuntimeError('Attempting to access database before connecting')
+            raise RuntimeError('Attempting to get all collections from the database '\
+                                                                                'before connecting')
 
         cursor = self._conn.cursor()
-        cursor.execute('SELECT (strftime("%s", "now")-timestamp) AS elapsed_sec ' \
-                       'from table_timeout where name="collections" ORDER BY ' \
-                       'elapsed_sec DESC LIMIT 1')
-
-        res = cursor.fetchone()
-        if not res or len(res) < 1 or int(res[0]) >= timeout_sec:
-            return None
-
-        cursor.execute('SELECT name, json FROM collections')
-
+        cursor.execute('SELECT id, json, (strftime("%s", "now")-timestamp) AS elapsed_sec ' \
+                          'FROM collections WHERE s3_id=? ORDER BY NAME ASC', (s3_id,))
         res = cursor.fetchall()
         cursor.close()
 
         return res
 
-    def save_collections(self, collections: tuple) -> bool:
-        """ Saves the collections to the database
+    def save_collections(self, s3_id: str, collections: tuple) -> None:
+        """ Saves the collections into the database
         Arguments:
-            collections: a tuple of dicts containing the collection name and data json
+            s3_id: the endpoint ID to save collections under
+            collections: a tuple of dict containing the collection name and json
         Return:
             Returns True if data is saved, and False if something went wrong
         """
         if self._conn is None:
-            raise RuntimeError('Attempting to access database before connecting')
+            raise RuntimeError('Attempting to save all collections into the database '\
+                                                                                'before connecting')
 
+        # Get the data into a tuple for quicker insert
+        insert_sql = 'INSERT INTO collections(s3_id, hash_id, id, json, timestamp) ' \
+                                                        'VALUES(?, ?, ?, ?, strftime("%s", "now"))'
+        insert_data = [(s3_id, self.hash2str(s3_id+one_coll['id']), one_coll['id'], \
+                                                    one_coll['json']) for one_coll in collections]
+
+        # Get the cursor to work with
         cursor = self._conn.cursor()
 
+        # First try to remove all the current entries
         tries = 0
         while tries < 10:
             try:
-                cursor.execute('DELETE FROM collections')
+                cursor.execute('DELETE FROM collections WHERE s3_id=?', (s3_id,))
                 break
             except sqlite3.Error as ex:
                 if ex.sqlite_errorcode == sqlite3.SQLITE_BUSY:
@@ -297,41 +310,72 @@ class SPDSQLite:
             cursor.close()
             return False
 
-        tries = 0
-        for one_coll in collections:
-            try:
-                cursor.execute('INSERT INTO collections(name,json) values(?, ?)', \
-                                                (one_coll['name'], one_coll['json']))
-                tries += 1
-            except sqlite3.Error as ex:
-                print(f'Unable to update collections: {ex.sqlite_errorcode} {one_coll}')
-                break
+        # Next insert all the new records
+        success = False
+        try:
+            cursor.executemany(insert_sql, insert_data)
+            success = True
+        except sqlite3.Error as ex:
+            print(f'Unable to update all collections: {ex.sqlite_errorcode}')
 
-        if tries < len(collections):
+        # Handle the results of the insert
+        if success is False:
             self._conn.rollback()
             cursor.close()
             return False
-
-        # Update the timeout table for collections and do some cleanup if needed
-        cursor.execute('SELECT COUNT(1) FROM table_timeout WHERE name="collections"')
-        res = cursor.fetchone()
-
-        count = int(res[0]) if res and len(res) > 0 else 0
-        if count > 1:
-            # Remove multiple old entries
-            cursor.execute('DELETE FROM table_timeout WHERE name="collections"')
-            count = 0
-        if count <= 0:
-            cursor.execute('INSERT INTO table_timeout(name,timestamp) ' \
-                                'VALUES ("collections",strftime("%s", "now"))')
-        else:
-            cursor.execute('UPDATE table_timeout SET timestamp=strftime("%s", "now") ' \
-                                'WHERE name="collections"')
 
         self._conn.commit()
         cursor.close()
 
         return True
+
+    def collection_elapsed_sec(self, s3_id: str, coll_id: str) -> Optional[int]:
+        """ Returns the elapsed seconds since the S3 endpoint collection was updated
+        Arguments:
+            s3_id: the endpoint ID to check
+            coll_id: the ID of the collection to check
+        Return:
+            Returns the number of elapsed seconds. None is returned if there are no entries for
+            the endpoint
+        """
+        if self._conn is None:
+            raise RuntimeError('Attempting to get collection timeout from the database before ' \
+                                                                                    'connecting')
+
+        cursor = self._conn.cursor()
+        cursor.execute('SELECT (strftime("%s", "now")-timestamp) AS elapsed_sec FROM collections ' \
+                                    'WHERE hash_id=?', (self.hash2str(s3_id+coll_id),))
+
+        res = cursor.fetchone()
+        cursor.close()
+
+        if not res or len(res) < 1 or res[0] is None:
+            return None
+
+        try:
+            return int(res[0])
+        except ValueError:
+            print('Error: Invalid database value found when checking collection elapsed seconds: ' \
+                        f's3_id: {s3_id}')
+            return None
+
+    def collection_update(self, s3_id: str, coll_id: str, coll_json: str) -> None:
+        """ Updates the database with the new collection information
+        Arguments:
+            s3_id: the endpoint ID to check
+            coll_id: the ID of the collection to save
+            coll_json: the collection JSON to save
+        """
+        if self._conn is None:
+            raise RuntimeError('Attempting to update collection information in the database '\
+                                                                            'before connecting')
+
+        cursor = self._conn.cursor()
+        cursor.execute('UPDATE collections SET json=? WHERE s3_id=? AND id=?',
+                                                                        (coll_json, s3_id, coll_id))
+
+        self._conn.commit()
+        cursor.close()
 
     def get_sandbox(self, s3_url: str) -> Optional[tuple]:
         """ Returns the sandbox items
@@ -566,27 +610,6 @@ class SPDSQLite:
                                                                         (s3_url, username, path))
 
         res = cursor.fetchone()
-        cursor.close()
-
-        return res
-
-    def sandbox_uploaded_files(self, sandbox_id: str) -> Optional[tuple]:
-        """ Queries the database for the number of files already uploaded for this ID
-        Arguments:
-            upload_id: the ID of the upload
-        Return:
-            The result of the query
-        """
-        if self._conn is None:
-            raise RuntimeError('Attempting to get sandbox upload path from the database before ' \
-                                                                                    'connecting')
-
-        # Get the number of uploaded files
-        cursor = self._conn.cursor()
-        cursor.execute('SELECT count(1) FROM sandbox_files WHERE sandbox_id=? AND ' \
-                                                                    'uploaded=TRUE', (sandbox_id,))
-        res = cursor.fetchone()
-
         cursor.close()
 
         return res
@@ -1383,7 +1406,8 @@ class SPDSQLite:
         cursor.close()
 
     def get_next_files_info(self, s3_url: str, username: str, updated_value: int, s3_path:str=None,\
-                                                            upload_id: str=None) -> Optional[tuple]:
+                                            upload_id: str=None, \
+                                            check_smaller_values: bool=False) -> Optional[tuple]:
         """ Returns the file editing information for a user, possibly for only one location
         Arguments:
             s3_url: the URL to the S3 instance
@@ -1391,6 +1415,8 @@ class SPDSQLite:
             updated_level: the numeric updated value to check for in the query
             s3_path: optional S3 upload path to get changes for
             upload_id: optional upload ID to look for
+            check_smaller_values: When set to True, the updated value parameter is considered an
+                                upper bound - any entries with a smaller or equal value is returned
         Return:
             Returns a tuple of row tuples containing the bucket, S3 file path, observation common
             name, observation scientific name, observation count, and associated request ID
@@ -1403,10 +1429,13 @@ class SPDSQLite:
             raise RuntimeError('Attempting to get common file edits fron the database '\
                                                                                 'before connecting')
 
+        updated_query_fragment = 'AND updated <= ?' if check_smaller_values is True else \
+                                                                                    'AND updated=? '
+
         cursor = self._conn.cursor()
-        query = 'SELECT bucket, s3_file_path, obs_common, obs_scientific, obs_count, request_id ' \
-                                    'FROM image_edits WHERE s3_url=? AND username=? ' \
-                                    'AND updated=? ' + \
+        query = 'SELECT bucket, s3_file_path, obs_common, obs_scientific, obs_count, request_id ' +\
+                                    'FROM image_edits WHERE s3_url=? AND username=? ' + \
+                                    updated_query_fragment + \
                                     ('AND s3_file_path=? ' if s3_path is not None else '') + \
                                     ('AND s3_file_path LIKE ? ' if upload_id is not None else '') +\
                                     'ORDER BY obs_scientific ASC, edit_timestamp ASC'
@@ -1463,8 +1492,8 @@ class SPDSQLite:
                 's3_file_path=? AND updated=?'
         while True:
             cur_file = files[cur_idx]
-            print('HACH:   SQL: ',query,new_updated, cur_file['s3_url'], username, cur_file['bucket'],
-                                                                cur_file['s3_path'], old_updated)
+            print('HACH:   SQL: ',query,new_updated, cur_file['s3_url'], username,
+                                            cur_file['bucket'], cur_file['s3_path'], old_updated)
             cursor.execute(query, (new_updated, cur_file['s3_url'], username, cur_file['bucket'],
                                                                 cur_file['s3_path'], old_updated))
 

@@ -188,7 +188,6 @@ export default function Login({prev_url, prev_user, prev_remember, onLogin, onRe
                     />
                     <FormGroup>
                       <FormControlLabel 
-                        required 
                         size="small"
                         control={<Checkbox id='remember-login-fields' checked={rememberChecked} onChange={rememberChanged} />}
                         label={<span style={{ fontSize:12, color:'rgba(0, 0, 0, 0.6)' }}>Remember URL and username</span>}

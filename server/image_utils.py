@@ -117,7 +117,6 @@ def get_embedded_image_info(image_path: str) -> Optional[tuple]:
 
     if len(species_string) <= 0 and len(location_string) <= 0:
         del res
-        #print(f"WARNING: no species or locations found in image: {image_path}", flush=True)
         return None, None, None
 
     return_species = []

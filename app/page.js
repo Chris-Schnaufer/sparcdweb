@@ -628,20 +628,24 @@ export default function Home() {
   }
 
   /**
-   * Common function that loads the upload information for editing purposes
+   * Common function that loads the upload image information for editing purposes
    * @function
    * @param {string} collectionId The ID of the collection containing the upload 
    * @param {string} uploadId The ID of the upload to edit
    * @param {string} breadcrumbName The name of the navigation breadcrumb to use
    */
   function editCollectionUpload(collectionId, uploadId, breadcrumbName) {
-    const uploadUrl = serverURL + '/upload?t=' + encodeURIComponent(lastToken) + 
-                                          '&id=' + encodeURIComponent(collectionId) + 
-                                          '&up=' + encodeURIComponent(uploadId);
+    const uploadUrl = serverURL + '/uploadImages?t=' + encodeURIComponent(lastToken);
+    const formData = new FormData();
+
+    formData.append('id', collectionId);
+    formData.append('up', uploadId);
+
     // Get the information on the upload
     try {
       const resp = fetch(uploadUrl, {
-        method: 'GET',
+        method: 'POST',
+        body: formData
       }).then(async (resp) => {
             if (resp.ok) {
               return resp.json();
@@ -654,6 +658,7 @@ export default function Home() {
           if (curCollection) {
             const curUpload = curCollection.uploads.find((item) => item.key === uploadId);
             if (curUpload) {
+              console.log('HACK: UPLOAD FETCH:',respData);
               // Add our token in
               const curImages = respData.map((img) => {img['url'] = img['url'] + '&t=' + lastToken; return img;})
               setCurrentAction(UserActions.UploadEdit, 
@@ -982,7 +987,7 @@ export default function Home() {
                 <CollectionsInfoContext.Provider value={collectionInfo}>
                   <SandboxInfoContext.Provider value={sandboxInfo}>
                     <Landing loadingCollections={loadingCollections} loadingSandbox={loadingSandbox} onUserAction={setCurrentAction} 
-                             onEditUpload={editCollectionUpload} onSandboxRefresh={() => {loadSandbox(lastToken);loadCollections(lastToken);}}
+                             onSandboxRefresh={() => {loadSandbox(lastToken);loadCollections(lastToken);}}
                     />
                   </SandboxInfoContext.Provider>
                 </CollectionsInfoContext.Provider>
