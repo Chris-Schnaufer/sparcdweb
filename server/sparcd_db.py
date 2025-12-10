@@ -9,7 +9,11 @@ from typing import Optional
 from spd_types.userinfo import UserInfo
 from spd_database.spdsqlite import SPDSQLite
 
+# Maximum number of expired tokens to keep around on a per-user basis
 MAX_ALLOWED_EXPIRED_TOKENS_PER_USER = 1
+
+# Maximum lock elapsed time in seconds before a lock is considered abandoned
+MAX_LOCK_WAIT_TIME_SEC = 2 * 60
 
 class SPARCdDatabase:
     """Class handling access connections to the database
@@ -184,34 +188,34 @@ class SPARCdDatabase:
                  'location_id': row[3]
                } for row in res]
 
-    def get_uploads(self, s3_url: str, bucket: str, timeout_sec: int) -> Optional[tuple]:
+    def get_uploads(self, s3_id: str, bucket: str, timeout_sec: int) -> Optional[tuple]:
         """ Returns the uploads for this collection from the database
         Arguments:
-            s3_url: the URL associated with this request
+            s3_id: the ID of the S3 instance
             bucket: The bucket to get uploads for
             timeout_sec: the amount of time before the table entries can be
                          considered expired
         Return:
             Returns the loaded tuple of upload names and data
         """
-        res = self._db.get_uploads(s3_url, bucket, timeout_sec)
+        res = self._db.get_uploads(s3_id, bucket, timeout_sec)
 
         if not res or len(res) < 1:
             return None
 
         return [{'name':row[0], 'json':row[1]} for row in res]
 
-    def save_uploads(self, s3_url: str, bucket: str, uploads: tuple) -> bool:
+    def save_uploads(self, s3_id: str, bucket: str, uploads: tuple) -> bool:
         """ Save the upload information into the table
         Arguments:
-            s3_url: the URL associated with this request
+            s3_id: the ID of the S3 instance
             bucket: the bucket name to save the uploads under
             uploads: the uploads to save containing the collection name,
                 upload name, and associated JSON
         Return:
             Returns True if the data was saved and False if something went wrong
         """
-        return self._db.save_uploads(s3_url, bucket, uploads)
+        return self._db.save_uploads(s3_id, bucket, uploads)
 
     def save_query_path(self, token: str, file_path: str) -> bool:
         """ Stores the specified query file path in the database
@@ -867,3 +871,28 @@ class SPARCdDatabase:
 
         self._db.collection_update(s3_id, collection['id'], json.dumps(collection))
         return True
+
+    def get_lock(self, name: str, max_lock_sec: int=MAX_LOCK_WAIT_TIME_SEC) -> Optional[int]:
+        """ Attempts to get a named lock in a non-blocking fashion
+        Arguments:
+            name: the name of the lock get get
+            max_lock_sec: maximum number of seconds to a lock is allowed to be locked before it's
+                    considered to be abandoned
+        Return:
+            Returns the lock ID if the lock is available and None if it isn't
+        """
+        if not name or max_lock_sec < 0 or max_lock_sec is None:
+            raise RuntimeError(f'Invalid parameters for named lock "{name}": {max_lock_sec}')
+
+        return self._db.lock_get(name, max_lock_sec)
+
+    def release_lock(self, name: str, lock_id: int) -> None:
+        """ Releases a named lock
+        Arguments:
+            name: the name of the lock get release
+            lock_id: the ID of the lock returned by get_lock()
+        """
+        if not name or not lock_id:
+            return
+
+        self._db.lock_release(name, lock_id)

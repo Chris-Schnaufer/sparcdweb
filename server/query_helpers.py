@@ -102,7 +102,7 @@ def filter_uploads(uploads_info: tuple, filters: tuple) -> tuple:
                             excluded = True
                     case 'years':
                         if years_filter is None:
-                            years_filter = json.loads(one_filter[1])
+                            years_filter = one_filter[1]
                         if image_dt is None or not years_filter['yearStart'] <= image_dt.year <= \
                                                                             years_filter['yearEnd']:
                             excluded = True

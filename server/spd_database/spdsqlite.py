@@ -1,6 +1,7 @@
 """This script contains the SQLite database interface for the SPARCd Web app
 """
 
+import datetime
 import hashlib
 import logging
 import sqlite3
@@ -262,7 +263,7 @@ class SPDSQLite:
                                                                                 'before connecting')
 
         cursor = self._conn.cursor()
-        cursor.execute('SELECT id, json, (strftime("%s", "now")-timestamp) AS elapsed_sec ' \
+        cursor.execute('SELECT coll_id, json, (strftime("%s", "now")-timestamp) AS elapsed_sec ' \
                           'FROM collections WHERE s3_id=? ORDER BY NAME ASC', (s3_id,))
         res = cursor.fetchall()
         cursor.close()
@@ -282,7 +283,7 @@ class SPDSQLite:
                                                                                 'before connecting')
 
         # Get the data into a tuple for quicker insert
-        insert_sql = 'INSERT INTO collections(s3_id, hash_id, id, json, timestamp) ' \
+        insert_sql = 'INSERT INTO collections(s3_id, hash_id, coll_id, json, timestamp) ' \
                                                         'VALUES(?, ?, ?, ?, strftime("%s", "now"))'
         insert_data = [(s3_id, self.hash2str(s3_id+one_coll['id']), one_coll['id'], \
                                                     one_coll['json']) for one_coll in collections]
@@ -371,7 +372,7 @@ class SPDSQLite:
                                                                             'before connecting')
 
         cursor = self._conn.cursor()
-        cursor.execute('UPDATE collections SET json=? WHERE s3_id=? AND id=?',
+        cursor.execute('UPDATE collections SET json=? WHERE s3_id=? AND coll_id=?',
                                                                         (coll_json, s3_id, coll_id))
 
         self._conn.commit()
@@ -398,10 +399,10 @@ class SPDSQLite:
 
         return res
 
-    def get_uploads(self, s3_url: str, bucket: str, timeout_sec: int) -> Optional[tuple]:
+    def get_uploads(self, s3_id: str, bucket: str, timeout_sec: int) -> Optional[tuple]:
         """ Returns the uploads for this collection from the database
         Arguments:
-            s3_url: the URL associated with this request
+            s3_id: the ID of the S3 instance endpoint
             bucket: The bucket to get uploads for
             timeout_sec: the amount of time before the table entries can be
                          considered expired
@@ -422,14 +423,14 @@ class SPDSQLite:
         if not res or len(res) < 1 or int(res[0]) >= timeout_sec:
             return None
 
-        cursor.execute('SELECT name,json FROM uploads WHERE s3_url=? AND bucket=?',
-                                                                                (s3_url, bucket))
+        cursor.execute('SELECT name,json FROM uploads WHERE s3_id=? AND bucket=?',
+                                                                                (s3_id, bucket))
         res = cursor.fetchall()
         cursor.close()
 
         return res
 
-    def save_uploads(self, s3_url: str, bucket: str, uploads: tuple) -> bool:
+    def save_uploads(self, s3_id: str, bucket: str, uploads: tuple) -> bool:
         """ Save the upload information into the table
         Arguments:
             s3_url: the URL associated with this request
@@ -447,8 +448,8 @@ class SPDSQLite:
         tries = 0
         while tries < 10:
             try:
-                cursor.execute('DELETE FROM uploads where s3_url=? AND bucket=?',
-                                                                                (s3_url, bucket))
+                cursor.execute('DELETE FROM uploads where s3_id=? AND bucket=?',
+                                                                                (s3_id, bucket))
                 break
             except sqlite3.Error as ex:
                 if ex.sqlite_errorcode == sqlite3.SQLITE_BUSY:
@@ -470,8 +471,8 @@ class SPDSQLite:
         tries = 0
         for one_upload in uploads:
             try:
-                cursor.execute('INSERT INTO uploads(s3_url, bucket,name, json) values(?,?,?,?)', \
-                                        (s3_url, bucket, one_upload['name'], one_upload['json']))
+                cursor.execute('INSERT INTO uploads(s3_id, bucket, name, json) values(?,?,?,?)', \
+                                        (s3_id, bucket, one_upload['name'], one_upload['json']))
                 tries += 1
             except sqlite3.Error as ex:
                 print(f'Unable to update uploads: {ex.sqlite_errorcode} {one_upload}')
@@ -1510,6 +1511,90 @@ class SPDSQLite:
                 cursor.close()
                 cursor = self._conn.cursor()
                 count = 0
+
+        self._conn.commit()
+        cursor.close()
+
+    def lock_get(self, name: str, max_lock_sec: int) -> Optional[int]:
+        """ Attempts to get the named lock
+        Arguments:
+            name: the name of the lock
+            max_lock_sec: the maximum number of seconds a lock is allowed to be locked before
+                    its assumed abandoned
+        Return:
+            Returns the value (aka ID) of the lock or None if the lock can't be obtained
+        """
+        if self._conn is None:
+            raise RuntimeError('Attempting to lock a named lock in the database before connecting')
+
+        # Get our lock value
+        lock_value = int(datetime.datetime.now(datetime.UTC).timestamp() * 1000)
+
+        # Check for the lock existing
+        lock_exists = False
+        cursor = self._conn.cursor()
+        cursor.execute('SELECT count(1) FROM db_locks WHERE name=?', (name,))
+
+        res = cursor.fetchone()
+        if res and len(res) > 0:
+            lock_exists = True
+
+        cursor.close()
+
+        # Attempt to update or insert the lock information
+        cursor = self._conn.cursor()
+        if lock_exists:
+            cursor.execute('UPDATE db_locks SET value=?, timestamp=strftime("%s", "now") ' \
+                                'WHERE name=? AND ' \
+                                            '(value=NULL OR strftime("%s", "now")-timestamp > ?)',
+                            (lock_value, name, max_lock_sec))
+        else:
+            cursor.execute('INSERT INTO db_locks(name, value, timestamp) ' \
+                                    'VALUES(?,?,strftime("%s", "now"))', (name, lock_value))
+
+        if cursor.rowcount > 0:
+            # Commit changes so it's seen everywhere and return the ID
+            try:
+                self._conn.commit()
+                cursor.close()
+                cursor = self._conn.cursor()
+
+                # We fetch the value to make sure we're the one that got the lock
+                cursor.execute('SELECT value FROM db_locks WHERE name=?', (name,))
+                res = cursor.fetchone()
+
+                cursor.close()
+
+                if not res or len(res) < 1:
+                    return None
+
+                # Return the value as the lock ID if it matches what we have
+                return int(res[0]) if int(res[0]) == lock_value else None
+
+            except sqlite3.Error as ex:
+                print('Error: named lock error caught', flush=True)
+                print(ex, flush=True)
+                cursor.close()
+                return None
+        else:
+            cursor.close()
+            return None
+
+    def lock_release(self, name: str, value: int) -> None:
+        """ Releases a named lock
+        Arguments:
+            name: the name of the lock get release
+            value: the value of the lock returned by lock_get()
+        Notes:
+            This will fail silently if the lock_id is invalid or unknown
+        """
+        if self._conn is None:
+            raise RuntimeError('Attempting to release a named lock in the database before ' \
+                                                                                    'connecting')
+
+        cursor = self._conn.cursor()
+        cursor.execute('UPDATE db_locks SET value=NULL,timestamp=NULL WHERE name=? AND value=?',
+                                                                                    (name, value))
 
         self._conn.commit()
         cursor.close()

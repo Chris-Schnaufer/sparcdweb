@@ -777,12 +777,13 @@ def list_uploads_thread(s3_url: str, user_name: str, user_secret: str, bucket: s
     return {'bucket': bucket, 'uploads_info': uploads_info}
 
 
-def species_stats(db: SPARCdDatabase, colls: tuple, s3_url: str, user_name: str, \
+def species_stats(db: SPARCdDatabase, colls: tuple, s3_id: str, s3_url: str, user_name: str, \
                                                     fetch_password: Callable) -> Optional[dict]:
     """ Filters the collections in an efficient manner
     Arguments:
         db - connections to the current database
         colls - the list of collections
+        s3_id - the ID of the S3 instance
         s3_url - the URL to the S3 instance
         user_name - the user's name for S3
         fetch_password - returns the user's password
@@ -794,8 +795,8 @@ def species_stats(db: SPARCdDatabase, colls: tuple, s3_url: str, user_name: str,
 
     # Load all the DB data first
     for one_coll in colls:
-        cur_bucket = one_coll['json']['bucketProperty']
-        uploads_info = db.get_uploads(s3_url, cur_bucket, TIMEOUT_UPLOADS_SEC)
+        cur_bucket = one_coll['bucketProperty']
+        uploads_info = db.get_uploads(s3_id, cur_bucket, TIMEOUT_UPLOADS_SEC)
         if uploads_info is not None and uploads_info:
             uploads_info = [{'bucket':cur_bucket,       \
                              'name':one_upload['name'],                     \
@@ -805,7 +806,7 @@ def species_stats(db: SPARCdDatabase, colls: tuple, s3_url: str, user_name: str,
             s3_uploads.append(cur_bucket)
             continue
 
-        # Filter on current DB uploads
+        # Accumulate the uploads we have
         if len(uploads_info) > 0:
             all_results = all_results + uploads_info
 
@@ -827,9 +828,9 @@ def species_stats(db: SPARCdDatabase, colls: tuple, s3_url: str, user_name: str,
                                          'info':one_upload,
                                          'json':json.dumps(one_upload)
                                         } for one_upload in uploads_results['uploads_info']]
-                        db.save_uploads(s3_url, uploads_results['bucket'], uploads_info)
+                        db.save_uploads(s3_id, uploads_results['bucket'], uploads_info)
 
-                        # Filter on current DB uploads
+                        # Accumulate the uploads we have
                         if len(uploads_info) > 0:
                             all_results = all_results + uploads_info
 

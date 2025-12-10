@@ -91,18 +91,19 @@ def build_database(path: str, admin_info: tuple=None) -> None:
              'CREATE TABLE table_timeout(id INTEGER PRIMARY KEY ASC, ' \
                             'name TEXT NOT NULL, ' \
                             'timestamp INTEGER)',
-             'CREATE TABLE collections(id INTEGER PRIMARY KEY ASC, ', \
+             'CREATE TABLE collections(id INTEGER PRIMARY KEY ASC, ' \
                             's3_id TEXT NOT NULL, ' \
-                            'hash_id TEXT UNIQUE, -- Hash of s3, collection id' \
-                            'id TEXT NOT NULL, ' \
+                            'hash_id TEXT UNIQUE,' # Hash of s3, collection id \
+                            'coll_id TEXT NOT NULL, ' \
                             'json TEXT NOT NULL, ' \
-                            'timestamp INTEGER NOT NULL, )'
+                            'timestamp INTEGER NOT NULL)',
              'CREATE TABLE uploads(id INTEGER PRIMARY KEY ASC, ' \
-                            'hash_id TEXT UNIQUE, -- Hash of s3, collection id, upload' \
+                            's3_id TEXT NOT NULL, ' \
+                            'hash_id TEXT UNIQUE, ' # Hash of s3, collection id, upload \
                             'name TEXT NOT NULL, ' \
                             'timestamp INTEGER)',
              'CREATE TABLE upload_images(id INTEGER PRIMARY KEY ASC, ' \
-                            'hash_id TEXT UNIQUE, -- Hash of s3, collection id, upload, img path'\
+                            'hash_id TEXT UNIQUE, ' # Hash of s3, collection id, upload, img path \
                             'name TEXT NOT NULL, ' \
                             'species_json TEXT NOT NULL)',
              'CREATE TABLE queries(id INTEGER PRIMARY KEY ASC, ' \
@@ -184,6 +185,10 @@ def build_database(path: str, admin_info: tuple=None) -> None:
                             'loc_new_lat REAL NOT NULL,'\
                             'loc_new_lng REAL NOT NULL, ' \
                             'location_updated INTEGER DEFAULT 0, ' \
+                            'timestamp INTEGER)',
+             'CREATE TABLE db_locks(id INTEGER PRIMARY KEY ASC, ' \
+                            'name TEXT NOT NULL, ' \
+                            'value INTEGER DEFAULT NULL, ' \
                             'timestamp INTEGER)',
         )
     add_user_stmt = 'INSERT INTO users(name, email, administrator, auto_added) values(?, ?, 1, 0)'

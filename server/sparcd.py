@@ -734,11 +734,8 @@ def species_stats():
             coll_info = [one_coll['json'] for one_coll in coll_info]
 
             # Generate the stats
-            # TODO: Fix the called function so that it will work
-            stats = sdu.species_stats(db, coll_info,
-                                                crypt.do_decrypt(WORKING_PASSCODE, user_info.url),
-                                                user_info.name,
-                                                lambda: get_password(token, db))
+            stats = sdu.species_stats(db, coll_info, hash2str(s3_url),  s3_url,
+                                                    user_info.name, lambda: get_password(token, db))
 
             if stats is not None:
                 sdfu.save_timed_info(stats_temp_filename, stats)
