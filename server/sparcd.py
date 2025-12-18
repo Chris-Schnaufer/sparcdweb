@@ -10,6 +10,7 @@ import os
 import sys
 import tempfile
 import threading
+import types
 from typing import Optional
 import uuid
 import dateutil.parser
@@ -153,15 +154,6 @@ def hash2str(text: str) -> str:
         The hash value as a string
     """
     return hashlib.md5(text.encode('utf-8')).hexdigest()
-
-
-def collection_upload_save_path(collection_id: str, collection_upload: str) -> str:
-    """ Save file path to hold collection upload information
-    NOTE:
-        the underscore is used later to seperate bucket from upload name). See /image
-    """
-    return os.path.join(tempfile.gettempdir(), SPARCD_PREFIX + collection_id + '_' + \
-                                                                collection_upload + '.json')
 
 
 @app.route('/', methods = ['GET'])
@@ -408,7 +400,7 @@ def collections():
     """
     db = SPARCdDatabase(DEFAULT_DB_PATH)
     token = request.args.get('t')
-    print('COLLECTIONS', flush=True)
+    print('COLLECTIONS', request, flush=True)
 
     # Check the credentials
     token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
@@ -420,6 +412,9 @@ def collections():
     s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
     return_colls = sdc.load_collections(db, hash2str(s3_url), bool(user_info.admin), s3_url,
                                                     user_info.name,lambda: get_password(token, db))
+
+    if return_colls is None:
+        return 423, 'Unable to load collections'
 
     # Return the collections
     if not user_info.admin:
@@ -567,6 +562,64 @@ def species():
     return json.dumps(user_species)
 
 
+@app.route('/speciesStats', methods = ['GET'])
+@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+def species_stats():
+    """ Returns the statistics on species
+    Arguments:
+        token - the token to check for
+    Return:
+        Returns the found statistics on species
+    """
+    db = SPARCdDatabase(DEFAULT_DB_PATH)
+    token = request.args.get('t')
+    print('SPECIES STAT', request, flush=True)
+
+    # Check the credentials
+    token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
+    if token_valid is None or user_info is None:
+        return "Not Found", 404
+    if not token_valid or not user_info:
+        return "Unauthorized", 401
+
+    client_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.environ.get('HTTP_ORIGIN', \
+                                    request.environ.get('HTTP_REFERER',request.remote_addr) \
+                                    ))
+    client_user_agent =  request.environ.get('HTTP_USER_AGENT', None)
+    if not client_ip or client_ip is None or not client_user_agent or client_user_agent is None:
+        return "Not Found", 404
+
+    user_agent_hash = hashlib.sha256(client_user_agent.encode('utf-8')).hexdigest()
+    token_valid, user_info = sdu.token_is_valid(token, client_ip, user_agent_hash, db,
+                                                                            SESSION_EXPIRE_SECONDS)
+    if not token_valid or not user_info:
+        return "Unauthorized", 401
+
+    s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
+
+    # Check if we already have the stats
+    stats_temp_filename = os.path.join(tempfile.gettempdir(), hash2str(s3_url) + \
+                                                            TEMP_SPECIES_STATS_FILE_NAME_POSTFIX)
+    stats = sdfu.load_timed_info(stats_temp_filename, TEMP_SPECIES_STATS_FILE_TIMEOUT_SEC)
+    if stats is None:
+        # Get collections from the database
+        coll_info = sdc.load_collections(db, hash2str(s3_url), bool(user_info.admin), s3_url,
+                                                    user_info.name, lambda: get_password(token, db))
+        if coll_info:
+            # Generate the stats
+            stats = sdu.species_stats(db, coll_info, hash2str(s3_url),  s3_url,
+                                                    user_info.name, lambda: get_password(token, db))
+
+            if stats is not None:
+                sdfu.save_timed_info(stats_temp_filename, stats)
+
+    if stats is None:
+        return "Not Found", 404
+
+    return json.dumps([[key, value] for key, value in stats.items() if key \
+                                                                    not in SPECIES_STATS_EXCLUDE])
+
+
 @app.route('/uploadImages', methods = ['POST'])
 @cross_origin(origins="http://localhost:3000", supports_credentials=True)
 def upload_images():
@@ -598,29 +651,15 @@ def upload_images():
     if not collection_id or not collection_upload:
         return "Not Found", 406
 
-    # Save path for this upload to the collection
-    save_path = collection_upload_save_path(collection_id, collection_upload)
-
     # The URL to the S3 instance
     s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
 
-    # Reload the saved information
-    all_images = None
-    if os.path.exists(save_path):
-        # Get the images and flatten the structure as needed
-        all_images = sdfu.load_timed_info(save_path, TIMEOUT_UPLOADS_FILE_SEC)
-        if all_images is not None:
-            all_images = [all_images[one_key] for one_key in all_images.keys()]
+    all_images = sdc.get_upload_images(db, hash2str(s3_url), collection_id, collection_upload,
+                                                                s3_url, user_info.name,
+                                                                lambda: get_password(token, db))
 
-    if all_images is None:
-        # Get the collection information from the server
-        all_images = S3Connection.get_images(s3_url, user_info.name,
-                                                get_password(token, db),
-                                                collection_id, collection_upload)
-
-        # Save the images so we can reload them later
-        sdfu.save_timed_info(save_path, {one_image['key']: one_image for one_image in all_images})
-
+    if isinstance(all_images, types.GeneratorType):
+        all_images = tuple(all_images)
     # Get species data from the database and update the images
     edits = {}
     for one_image in all_images:
@@ -670,13 +709,12 @@ def upload_images():
                                                                         one_species['count'] > 0]
 
     # Prepare the return data
-    print('HACK:',json.dumps(all_images[0], indent=2),flush=True)
     for one_img in all_images:
         one_img['url'] = url_for('image', _external=True,
                                     i=crypt.do_encrypt(WORKING_PASSCODE,
-                                                      json.dumps({ 'k':one_img["key"],
-                                                                   'p':save_path
-                                                                 })))
+                                              json.dumps({ 'k':one_img['key'],
+                                                           'p':collection_id+':'+collection_upload
+                                                         })))
         one_img['s3_path'] = crypt.do_encrypt(WORKING_PASSCODE, one_img['s3_path'])
         one_img['upload'] = collection_upload
 
@@ -685,66 +723,6 @@ def upload_images():
         del one_img['key']
 
     return json.dumps(all_images)
-
-
-@app.route('/speciesStats', methods = ['GET'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
-def species_stats():
-    """ Returns the statistics on species
-    Arguments:
-        token - the token to check for
-    Return:
-        Returns the found statistics on species
-    """
-    db = SPARCdDatabase(DEFAULT_DB_PATH)
-    token = request.args.get('t')
-    print('SPECIES STAT', request)
-
-    # Check the credentials
-    token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
-    if token_valid is None or user_info is None:
-        return "Not Found", 404
-    if not token_valid or not user_info:
-        return "Unauthorized", 401
-
-    client_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.environ.get('HTTP_ORIGIN', \
-                                    request.environ.get('HTTP_REFERER',request.remote_addr) \
-                                    ))
-    client_user_agent =  request.environ.get('HTTP_USER_AGENT', None)
-    if not client_ip or client_ip is None or not client_user_agent or client_user_agent is None:
-        return "Not Found", 404
-
-    user_agent_hash = hashlib.sha256(client_user_agent.encode('utf-8')).hexdigest()
-    token_valid, user_info = sdu.token_is_valid(token, client_ip, user_agent_hash, db,
-                                                                            SESSION_EXPIRE_SECONDS)
-    if not token_valid or not user_info:
-        return "Unauthorized", 401
-
-    s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
-
-    # Check if we already have the stats
-    stats_temp_filename = os.path.join(tempfile.gettempdir(), hash2str(s3_url) + \
-                                                            TEMP_SPECIES_STATS_FILE_NAME_POSTFIX)
-    stats = sdfu.load_timed_info(stats_temp_filename, TEMP_SPECIES_STATS_FILE_TIMEOUT_SEC)
-    if stats is None:
-        # Get collections from the database
-        coll_info = sdc.load_collections(db, hash2str(s3_url), bool(user_info.admin), s3_url,
-                                                    user_info.name, lambda: get_password(token, db))
-        if coll_info:
-            coll_info = [one_coll['json'] for one_coll in coll_info]
-
-            # Generate the stats
-            stats = sdu.species_stats(db, coll_info, hash2str(s3_url),  s3_url,
-                                                    user_info.name, lambda: get_password(token, db))
-
-            if stats is not None:
-                sdfu.save_timed_info(stats_temp_filename, stats)
-
-    if stats is None:
-        return "Not Found", 404
-
-    return json.dumps([[key, value] for key, value in stats.items() if key \
-                                                                    not in SPECIES_STATS_EXCLUDE])
 
 
 @app.route('/image', methods = ['GET'])
@@ -761,6 +739,7 @@ def image():
    """
     db = SPARCdDatabase(DEFAULT_DB_PATH)
     token = request.args.get('t')
+    print('IMAGE', request, flush=True)
 
     # Check the credentials
     # We aren't concerned with the requestors origin IP
@@ -789,31 +768,20 @@ def image():
         return "Not Found", 406
 
     image_key = image_req['k']
-    image_store_path = image_req['p']
+    image_path = image_req['p']
+
+    collection_id, collection_upload = os.path.basename(image_path).split(':')
+    if collection_id.startswith(SPARCD_PREFIX):
+        collection_id = collection_id[len(SPARCD_PREFIX):]
 
     # Load the image data
-    image_data = sdfu.load_timed_info(image_store_path)
+    image_data = sdc.load_image_data(db, hash2str(s3_url), collection_id, collection_upload,
+                                                                                        image_key)
     if image_data is None or not isinstance(image_data, dict):
-        collection_id, collection_upload = os.path.basename(image_store_path).split('_')
-        collection_id = collection_id[len(SPARCD_PREFIX):]
-        # Get the collection information from the server
-        all_images = S3Connection.get_images(s3_url, user_info.name,
-                                                get_password(token, db),
-                                                collection_id, collection_upload)
-
-        # Save the images so we can reload them later
-        if all_images:
-            image_data = {one_image['key']: one_image for one_image in all_images}
-            sdfu.save_timed_info(image_store_path, image_data)
-        else:
-            return "Not Found", 422
-
-    # Get the url from the key
-    if not image_key in image_data:
         return "Not Found", 422
 
-    # Not to be confused with Flask's request
-    res = requests.get(image_data[image_key]['s3_url'],
+    # Get the image data (not to be confused with Flask's request)
+    res = requests.get(image_data['s3_url'],
                        timeout=DEFAULT_IMAGE_FETCH_TIMEOUT_SEC,
                        allow_redirects=False)
 
@@ -902,8 +870,8 @@ def query():
         filter_colls = coll_info
 
     # Get uploads information to further filter images
-    all_results = query_helpers.filter_collections(db, filter_colls,
-                                            crypt.do_decrypt(WORKING_PASSCODE, user_info.url),
+    all_results = query_helpers.filter_collections(db, filter_colls, hash2str(s3_url),
+                                            s3_url,
                                             user_info.name,
                                             lambda: get_password(token, db),
                                             filters)
@@ -1169,7 +1137,7 @@ def sandbox_stats():
    """
     db = SPARCdDatabase(DEFAULT_DB_PATH)
     token = request.args.get('t')
-    print('SANDBOX STATS', flush=True)
+    print('SANDBOX STATS', request, flush=True)
 
     # Check the credentials
     token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
@@ -1792,8 +1760,6 @@ def image_location():
                                 bucket, make_s3_path((upload_path, OBSERVATIONS_CSV_FILE_NAME)),
                                 obs_info )
 
-    # Get and update the Observation information
-
     # Update the collection to reflect the new upload location
     updated_collection = S3Connection.get_collection_info(s3_url, user_info.name, \
                                                     get_password(token, db),
@@ -2025,13 +1991,10 @@ def images_all_edited():
     db.finish_image_edits(user_info.name, edited_files_info)
 
     # Save path for this upload to the collection
-    save_path = collection_upload_save_path(coll_id, upload_id)
-
-    # Update our information on disk
-    all_images = S3Connection.get_images(s3_url, user_info.name,
-                                            get_password(token, db),
-                                            coll_id, upload_id)
-    sdfu.save_timed_info(save_path, {one_image['key']: one_image for one_image in all_images})
+    all_images = sdc.get_upload_images(db, hash2str(s3_url), s3_url, user_info.name,
+                                                                lambda: get_password(token, db),
+                                                                coll_id, upload_id,
+                                                                force_refresh=True)
 
     # Count all the images with species
     image_with_species = 0

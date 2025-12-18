@@ -8,8 +8,7 @@ from typing import Callable, Optional
 import dateutil.tz
 
 from sparcd_db import SPARCdDatabase
-from s3_access import S3Connection
-
+from s3_access import S3Connection, SPARCD_PREFIX
 from format_dr_sanderson import get_dr_sanderson_output, get_dr_sanderson_pictures
 from format_csv import get_csv_raw, get_csv_location, get_csv_species
 from format_image_downloads import get_image_downloads
@@ -103,8 +102,9 @@ def filter_uploads(uploads_info: tuple, filters: tuple) -> tuple:
                     case 'years':
                         if years_filter is None:
                             years_filter = one_filter[1]
-                        if image_dt is None or not years_filter['yearStart'] <= image_dt.year <= \
-                                                                            years_filter['yearEnd']:
+                        if image_dt is None or \
+                            not int(years_filter['yearStart']) <= image_dt.year <= \
+                                                                    int(years_filter['yearEnd']):
                             excluded = True
                     case 'endDate': # Need to compare against GMT of filter
                         if image_dt is None or image_dt > end_date_ts:
@@ -146,12 +146,13 @@ def list_uploads_thread(s3_url: str, user_name: str, user_secret: str, bucket: s
     return {'bucket': bucket, 'uploads_info': uploads_info}
 
 
-def filter_collections(db: SPARCdDatabase, cur_coll: tuple, s3_url: str, user_name: str, \
-                       fetch_password: Callable, filters: tuple) -> tuple:
+def filter_collections(db: SPARCdDatabase, cur_coll: tuple, s3_id: str, s3_url: str, \
+                       user_name: str, fetch_password: Callable, filters: tuple) -> tuple:
     """ Filters the collections in an efficient manner
     Arguments:
         db - connections to the current database
         cur_coll - the list of applicable collections
+        s3_id: the ID of the S3 endpoint
         s3_url - the URL to the S3 instance
         user_name - the user's name for S3
         fetch_password - returns the user's password
@@ -164,8 +165,8 @@ def filter_collections(db: SPARCdDatabase, cur_coll: tuple, s3_url: str, user_na
 
     # Load all the DB data first
     for one_coll in cur_coll:
-        cur_bucket = one_coll['bucketProperty']
-        uploads_info = db.get_uploads(s3_url, cur_bucket, TIMEOUT_UPLOADS_SEC)
+        cur_bucket = one_coll['bucket']
+        uploads_info = db.get_uploads(s3_id, cur_bucket, TIMEOUT_UPLOADS_SEC)
         if uploads_info is not None and uploads_info:
             uploads_info = [{'bucket':cur_bucket,       \
                              'name':one_upload['name'],                     \
@@ -200,7 +201,8 @@ def filter_collections(db: SPARCdDatabase, cur_coll: tuple, s3_url: str, user_na
                                          'info':one_upload,
                                          'json':json.dumps(one_upload)
                                         } for one_upload in uploads_results['uploads_info']]
-                        db.save_uploads(s3_url, uploads_results['bucket'], uploads_info)
+                        db.save_uploads(s3_id, uploads_results['bucket'][len(SPARCD_PREFIX):],
+                                                                                    uploads_info)
 
                         # Filter on current DB uploads
                         if len(uploads_info) > 0:

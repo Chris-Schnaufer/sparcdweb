@@ -283,10 +283,10 @@ class SPDSQLite:
                                                                                 'before connecting')
 
         # Get the data into a tuple for quicker insert
-        insert_sql = 'INSERT INTO collections(s3_id, hash_id, coll_id, json, timestamp) ' \
-                                                        'VALUES(?, ?, ?, ?, strftime("%s", "now"))'
-        insert_data = [(s3_id, self.hash2str(s3_id+one_coll['id']), one_coll['id'], \
-                                                    one_coll['json']) for one_coll in collections]
+        insert_sql = 'INSERT INTO collections(s3_id, hash_id, name, coll_id, json, timestamp) ' \
+                                                    'VALUES(?, ?, ?, ?, ?, strftime("%s", "now"))'
+        insert_data = [(s3_id, self.hash2str(s3_id+one_coll['id']), one_coll['name'], \
+                                    one_coll['id'], one_coll['json']) for one_coll in collections]
 
         # Get the cursor to work with
         cursor = self._conn.cursor()
@@ -307,8 +307,12 @@ class SPDSQLite:
                     print('   ',ex)
                     tries = 10
         if tries >= 10:
-            self._conn.rollback()
-            cursor.close()
+            try:
+                self._conn.rollback()
+            except sqlite3.Error:
+                pass
+            finally:
+                cursor.close()
             return False
 
         # Next insert all the new records
@@ -321,8 +325,12 @@ class SPDSQLite:
 
         # Handle the results of the insert
         if success is False:
-            self._conn.rollback()
-            cursor.close()
+            try:
+                self._conn.rollback()
+            except sqlite3.Error:
+                pass
+            finally:
+                cursor.close()
             return False
 
         self._conn.commit()
@@ -378,6 +386,252 @@ class SPDSQLite:
         self._conn.commit()
         cursor.close()
 
+    def upload_save(self, s3_id: str, collection_id: str, upload_name: str, \
+                                                                upload_json: str) -> Optional[int]:
+        """ Saves/replaces the image information associated with a particular collection's upload
+        Arguments:
+            s3_id: the ID of the S3 endpoint
+            collection_id: the ID of the collection the upload belongs to
+            upload_name: the name of the upload
+            upload_json: the data associated with the upload
+        Return:
+            Returns True if the data was saved and False otherwise
+        """
+        if self._conn is None:
+            raise RuntimeError('Attempting to save an upload information into the database '\
+                                                                                'before connecting')
+        # The ID that identifies this particular upload
+        hash_id = self.hash2str(s3_id+collection_id+upload_name)
+
+        # Get the upload ID(s) associated with this upload
+        cursor = self._conn.cursor()
+        cursor.execute('SELECT id FROM uploads WHERE hash_id=?', (hash_id,))
+        res = cursor.fetchall()
+        cursor.close()
+
+        upload_ids = [one_row[0] for one_row in res]
+
+        # First try to remove all the current upload entries
+        cursor = self._conn.cursor()
+        tries = 0
+        while tries < 10:
+            try:
+                cursor.execute('DELETE FROM uploads WHERE hash_id=?', (hash_id,))
+                break
+            except sqlite3.Error as ex:
+                if ex.sqlite_errorcode == sqlite3.SQLITE_BUSY:
+                    tries = tries + 1
+                    sleep(1)
+                else:
+                    print('Save upload clearing sqlite error detected: ' \
+                                                                        f'{ex.sqlite_errorcode}')
+                    print('    Not processing request further: delete')
+                    print('   ',ex)
+                    tries = 10
+        if tries >= 10:
+            try:
+                self._conn.rollback()
+            except sqlite3.Error:
+                pass
+            finally:
+                cursor.close()
+            return False
+
+        # Second, remove all images associated with this upload
+        if upload_ids and len(upload_ids) > 0:
+            tries = 0
+            while tries < 10:
+                try:
+                    cursor.executemany('DELETE FROM upload_images WHERE uploads_id=?',
+                                                                                    (upload_ids,))
+                    break
+                except sqlite3.Error as ex:
+                    if ex.sqlite_errorcode == sqlite3.SQLITE_BUSY:
+                        tries = tries + 1
+                        sleep(1)
+                    else:
+                        print('Save upload clearing dependent images sqlite error detected: ' \
+                                                                        f'{ex.sqlite_errorcode}')
+                        print('    Not processing request further: delete')
+                        print('   ',ex)
+                        tries = 10
+        if tries >= 10:
+            try:
+                self._conn.rollback()
+            except sqlite3.Error:
+                pass
+            finally:
+                cursor.close()
+            return False
+
+        # Add the new entry
+        success = None
+        try:
+            cursor.execute('INSERT INTO uploads(s3_id, coll_id, hash_id, name, json, timestamp) ' \
+                                            'VALUES(?, ?, ?, ?, ?, strftime("%s", "now"))',
+                                        (s3_id, collection_id, hash_id, upload_name, upload_json))
+            success = True
+        except sqlite3.Error as ex:
+            print(f'upload_save: Unable to update upload: {ex.sqlite_errorcode}')
+            print(ex)
+
+        # Handle the results of the insert
+        if success is False:
+            try:
+                self._conn.rollback()
+            except sqlite3.Error:
+                pass
+            finally:
+                cursor.close()
+            return False
+
+        self._conn.commit()
+        cursor.close()
+
+        return cursor.lastrowid
+
+    def upload_get(self, s3_id: str, collection_id: str, upload_name: str) -> tuple:
+        """ Returns the json and elapsed time associated with the upload
+        Arguments:
+            s3_id: the ID of the S3 endpoint
+            collection_id: the ID of the collection the upload belongs to
+            upload_name: the name of the upload
+        Return:
+            Returns a tuple containing the json and the elapsed seconds since the entry was added
+        """
+        if self._conn is None:
+            raise RuntimeError('Attempting to get an upload information from the database '\
+                                                                                'before connecting')
+
+        # Get the cursor to work with
+        cursor = self._conn.cursor()
+        hash_id = self.hash2str(s3_id+collection_id+upload_name)
+
+        cursor.execute('SELECT id, json, (strftime("%s", "now")-timestamp) AS elapsed_sec FROM '\
+                                        'uploads WHERE hash_id=?', (hash_id,))
+
+        res = cursor.fetchone()
+        cursor.close()
+
+        return res
+
+    def upload_images_get(self, upload_id: int) -> tuple:
+        """ Returns the images associated with the upload ID
+        Arguments:
+            upload_id: the ID associated with the image uploads
+        Return:
+            Returns the images associated with the upload ID
+        """
+        if self._conn is None:
+            raise RuntimeError('Attempting to get an upload\'s images from the database '\
+                                                                                'before connecting')
+
+        # Get the cursor to work with
+        cursor = self._conn.cursor()
+        cursor.execute('SELECT json FROM upload_images WHERE uploads_id=?', (upload_id,))
+
+        res = cursor.fetchall()
+        cursor.close()
+
+        return res
+
+    def upload_images_save(self, upload_id: int, images: tuple) -> bool:
+        """ Saves the images associated with the upload ID
+        Arguments:
+            upload_id: the ID associated with the image uploads
+            images: the tuple of image data containing a name, s3_path, key, json, and other
+                        data
+        Return:
+            Returns True if the images could be saved and False otherwise
+        """
+        if self._conn is None:
+            raise RuntimeError('Attempting to get an upload\'s images from the database '\
+                                                                                'before connecting')
+        # Get the cursor
+        cursor = self._conn.cursor()
+
+        # First try to remove all the current upload entries
+        tries = 0
+        while tries < 10:
+            try:
+                cursor.execute('DELETE FROM upload_images WHERE uploads_id=?', (upload_id,))
+                break
+            except sqlite3.Error as ex:
+                if ex.sqlite_errorcode == sqlite3.SQLITE_BUSY:
+                    tries = tries + 1
+                    sleep(1)
+                else:
+                    print('Save upload images clearing sqlite error detected: ' \
+                                                                        f'{ex.sqlite_errorcode}')
+                    print('    Not processing request further: delete')
+                    print('   ',ex)
+                    tries = 10
+        if tries >= 10:
+            try:
+                self._conn.rollback()
+            except sqlite3.Error:
+                pass
+            finally:
+                cursor.close()
+            return False
+
+        # Prepare for the insert
+        insert_query = 'INSERT INTO upload_images(uploads_id, hash_id, name, key, json, ' \
+                            'timestamp) VALUES(?, ?, ?, ?, ?, strftime("%s", "now"))'
+        insert_values = ([upload_id, self.hash2str(str(upload_id)+one_image['s3_path']), \
+                            one_image['name'], one_image['key'], one_image['json']] \
+                                                                        for one_image in images)
+
+        # Run the query
+        success = None
+        try:
+            cursor.executemany(insert_query, insert_values)
+            success = True
+        except sqlite3.Error as ex:
+            print(f'Unable to update upload images: {ex.sqlite_errorcode}')
+            print(ex)
+
+        # Handle the results of the insert
+        if success is False:
+            try:
+                self._conn.rollback()
+            except sqlite3.Error:
+                pass
+            finally:
+                cursor.close()
+            return False
+
+        self._conn.commit()
+        cursor.close()
+
+        return True
+
+    def get_image_data(self, s3_id: str, collection_id: str, upload_name: str, \
+                                                                image_key: str) -> tuple:
+        """ Returns the image data associated with the image key
+        Arguments:
+            s3_id: the unique ID of the S3 instance
+            collection_id: the ID of the collection of the upload
+            upload_name: the name of the upload to get images for
+            image_key: the key of the image to get
+        Return:
+            Returns the data for the found image or None if not found
+        """
+        if self._conn is None:
+            raise RuntimeError('Attempting to get image information from the database before ' \
+                                                                                    'connecting')
+
+        upload_hash_id = self.hash2str(s3_id+collection_id+upload_name)
+        cursor = self._conn.cursor()
+        cursor.execute('WITH upl AS (SELECT id FROM uploads WHERE hash_id=? LIMIT 1) ' \
+                        'SELECT json FROM upload_images, upl WHERE uploads_id=upl.id AND ' \
+                            'key=?', (upload_hash_id, image_key))
+
+        res = cursor.fetchone()
+        cursor.close()
+
+        return res
+
     def get_sandbox(self, s3_url: str) -> Optional[tuple]:
         """ Returns the sandbox items
         Arguments:
@@ -421,6 +675,7 @@ class SPDSQLite:
 
         res = cursor.fetchone()
         if not res or len(res) < 1 or int(res[0]) >= timeout_sec:
+            cursor.close()
             return None
 
         cursor.execute('SELECT name,json FROM uploads WHERE s3_id=? AND bucket=?',
@@ -430,11 +685,11 @@ class SPDSQLite:
 
         return res
 
-    def save_uploads(self, s3_id: str, bucket: str, uploads: tuple) -> bool:
+    def save_uploads(self, s3_id: str, coll_id: str, uploads: tuple) -> bool:
         """ Save the upload information into the table
         Arguments:
             s3_url: the URL associated with this request
-            bucket: the bucket name to save the uploads under
+            coll_id: the collection ID to save the uploads under
             uploads: the uploads to save containing the collection name,
                 upload name, and associated JSON
         Return:
@@ -448,8 +703,8 @@ class SPDSQLite:
         tries = 0
         while tries < 10:
             try:
-                cursor.execute('DELETE FROM uploads where s3_id=? AND bucket=?',
-                                                                                (s3_id, bucket))
+                cursor.execute('DELETE FROM uploads where s3_id=? AND coll_id=?',
+                                                                                (s3_id, coll_id))
                 break
             except sqlite3.Error as ex:
                 if ex.sqlite_errorcode == sqlite3.SQLITE_BUSY:
@@ -458,46 +713,52 @@ class SPDSQLite:
                 else:
                     print(f'Save uploads delete sqlite error detected: {ex.sqlite_errorcode}')
                     print('    Not processing request further: delete')
-                    print('   ',ex)
+                    print(ex)
                     tries = 10
         if tries >= 10:
             try:
-                cursor.execute('ROLLBACK TRANSACTION')
+                self._conn.rollback()
             except sqlite3.Error:
                 pass
-            cursor.close()
+            finally:
+                cursor.close()
             return False
 
         tries = 0
         for one_upload in uploads:
             try:
-                cursor.execute('INSERT INTO uploads(s3_id, bucket, name, json) values(?,?,?,?)', \
-                                        (s3_id, bucket, one_upload['name'], one_upload['json']))
+                cursor.execute('INSERT INTO uploads(s3_id, coll_id, name, json) values(?,?,?,?)', \
+                                        (s3_id, coll_id, one_upload['name'], one_upload['json']))
                 tries += 1
             except sqlite3.Error as ex:
                 print(f'Unable to update uploads: {ex.sqlite_errorcode} {one_upload}')
+                print(ex)
                 break
 
         if tries < len(uploads):
-            cursor.execute('ROLLBACK TRANSACTION')
-            cursor.close()
+            try:
+                self._conn.rollback()
+            except sqlite3.Error:
+                pass
+            finally:
+                cursor.close()
             return False
 
         # Update the timeout table for uploads and do some cleanup if needed
-        cursor.execute('SELECT COUNT(1) FROM table_timeout WHERE name=(?)', (bucket,))
+        cursor.execute('SELECT COUNT(1) FROM table_timeout WHERE name=(?)', (s3_id+coll_id,))
         res = cursor.fetchone()
 
         count = int(res[0]) if res and len(res) > 0 else 0
         if count > 1:
             # Remove multiple old entries
-            cursor.execute('DELETE FROM table_timeout WHERE name=(?)', (bucket,))
+            cursor.execute('DELETE FROM table_timeout WHERE name=(?)', (s3_id+coll_id,))
             count = 0
         if count <= 0:
             cursor.execute('INSERT INTO table_timeout(name,timestamp) ' \
-                                'VALUES (?,strftime("%s", "now"))', (bucket,))
+                                'VALUES (?,strftime("%s", "now"))', (s3_id+coll_id,))
         else:
             cursor.execute('UPDATE table_timeout SET timestamp=strftime("%s", "now") ' \
-                                'WHERE name=(?)', (bucket,))
+                                'WHERE name=(?)', (s3_id+coll_id,))
 
         self._conn.commit()
         cursor.close()
@@ -562,10 +823,10 @@ class SPDSQLite:
                     print('   ',ex)
                     tries = 10
         if tries >= 10:
-            cursor.execute('ROLLBACK TRANSACTION')
+            self._conn.rollback()
             # We give up for now
-
-        self._conn.commit()
+        else:
+            self._conn.commit()
         cursor.close()
 
         return return_paths
@@ -1493,8 +1754,6 @@ class SPDSQLite:
                 's3_file_path=? AND updated=?'
         while True:
             cur_file = files[cur_idx]
-            print('HACH:   SQL: ',query,new_updated, cur_file['s3_url'], username,
-                                            cur_file['bucket'], cur_file['s3_path'], old_updated)
             cursor.execute(query, (new_updated, cur_file['s3_url'], username, cur_file['bucket'],
                                                                 cur_file['s3_path'], old_updated))
 
@@ -1536,26 +1795,40 @@ class SPDSQLite:
         cursor.execute('SELECT count(1) FROM db_locks WHERE name=?', (name,))
 
         res = cursor.fetchone()
-        if res and len(res) > 0:
+        if res and len(res) > 0 and int(res[0]) > 0:
             lock_exists = True
 
         cursor.close()
 
         # Attempt to update or insert the lock information
         cursor = self._conn.cursor()
-        if lock_exists:
-            cursor.execute('UPDATE db_locks SET value=?, timestamp=strftime("%s", "now") ' \
-                                'WHERE name=? AND ' \
-                                            '(value=NULL OR strftime("%s", "now")-timestamp > ?)',
-                            (lock_value, name, max_lock_sec))
-        else:
-            cursor.execute('INSERT INTO db_locks(name, value, timestamp) ' \
-                                    'VALUES(?,?,strftime("%s", "now"))', (name, lock_value))
+        tries = 0
+        while True:
+            try:
+                if lock_exists:
+                    cursor.execute('UPDATE db_locks SET value=?, timestamp=strftime("%s", "now") ' \
+                                        'WHERE name=? AND ' \
+                                            '(value IS NULL OR strftime("%s", "now")-timestamp >?)',
+                                    (lock_value, name, max_lock_sec))
+                else:
+                    cursor.execute('INSERT INTO db_locks(name, value, timestamp) ' \
+                                            'VALUES(?,?,strftime("%s", "now"))', (name, lock_value))
+                break
+            except sqlite3.OperationalError as ex:
+                tries += 1
+                if tries <= 10:
+                    sleep(1)
+                else:
+                    print(f'Error: Unable to obtain database lock {name}')
+                    print(ex)
+                    cursor.close()
+                    return None
+
+        self._conn.commit()
 
         if cursor.rowcount > 0:
             # Commit changes so it's seen everywhere and return the ID
             try:
-                self._conn.commit()
                 cursor.close()
                 cursor = self._conn.cursor()
 
@@ -1576,9 +1849,9 @@ class SPDSQLite:
                 print(ex, flush=True)
                 cursor.close()
                 return None
-        else:
-            cursor.close()
-            return None
+
+        cursor.close()
+        return None
 
     def lock_release(self, name: str, value: int) -> None:
         """ Releases a named lock

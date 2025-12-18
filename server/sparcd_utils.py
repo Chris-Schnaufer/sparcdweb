@@ -795,7 +795,7 @@ def species_stats(db: SPARCdDatabase, colls: tuple, s3_id: str, s3_url: str, use
 
     # Load all the DB data first
     for one_coll in colls:
-        cur_bucket = one_coll['bucketProperty']
+        cur_bucket = one_coll['bucket']
         uploads_info = db.get_uploads(s3_id, cur_bucket, TIMEOUT_UPLOADS_SEC)
         if uploads_info is not None and uploads_info:
             uploads_info = [{'bucket':cur_bucket,       \
@@ -828,7 +828,8 @@ def species_stats(db: SPARCdDatabase, colls: tuple, s3_id: str, s3_url: str, use
                                          'info':one_upload,
                                          'json':json.dumps(one_upload)
                                         } for one_upload in uploads_results['uploads_info']]
-                        db.save_uploads(s3_id, uploads_results['bucket'], uploads_info)
+                        db.save_uploads(s3_id, uploads_results['bucket'][len(SPARCD_PREFIX):],
+                                                                                    uploads_info)
 
                         # Accumulate the uploads we have
                         if len(uploads_info) > 0:

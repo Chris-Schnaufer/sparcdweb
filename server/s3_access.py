@@ -564,6 +564,7 @@ class S3Connection:
 
         images_dict = {obj['s3_path']: obj for obj in images}
 
+        # Temp file for getting observations
         temp_file = tempfile.mkstemp(prefix=SPARCD_PREFIX)
         os.close(temp_file[0])
 
