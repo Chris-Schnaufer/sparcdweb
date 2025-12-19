@@ -10,6 +10,7 @@ import CircularProgress from '@mui/material/CircularProgress';
 import Container from '@mui/material/Container';
 import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
+import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 
@@ -32,9 +33,10 @@ import styles from './page.module.css'
  * @param {object} selectedUpload The active upload to edit
  * @param {function} onCancel Call when finished with the the upload edit
  * @param {function} searchSetup Call when settting up or clearing search elements
+ * @param {function} uploadReload Call when the current upload information needs to be reloaded
  * @returns {object} The UI to render
  */
-export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
+export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploadReload}) {
   const theme = useTheme();
   const sidebarSpeciesRef = React.useRef(null); // Used for sizeing
   const sidebarTopRef = React.useRef(null);     // Used for sizeing
@@ -49,12 +51,14 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
   const uiSizes = React.useContext(SizeContext);
   const userSettings = React.useContext(UserSettingsContext);  // User display settings
   const [changesMade, setChangesMade] = React.useState(false); // Used to see if there have been changes made
+  const [checkedServerChanges, setCheckedServerChanges] = React.useState(false); // Used for checking the server for changes
   const [curEditState, setCurEditState] = React.useState(editingStates.none); // Working page state
   const [curImageEdit, setCurImageEdit] = React.useState(null);         // The image to edit
   const [curImageModified, setCurImageModified] = React.useState(false);// The image being edited was changed
   const [curLocationInfo, setCurLocationInfo] = React.useState(null);   // Working location when fetching tooltip
   const [editingLocation, setEditingLocation] = React.useState(true);   // Changing collection locations flag
-  const [lastSpeciesRequestId, setLastSpeciesRequestId] = React.useState(0);  // Use to keep track of what was sent to the server
+  const [havePreviousChanges, setHavePreviousChanges] = React.useState(false);// Used to signal that previous changes we found
+  const [lastSpeciesRequestId, setLastSpeciesRequestId] = React.useState(null);  // Use to keep track of what was sent to the server
   const [maxTilesDisplay, setMaxTilesDisplay] = React.useState(40);     // Set the maximum number of tiles to display
   const [navigationRedraw, setNavigationRedraw] = React.useState(null); // Forcing redraw on navigation
   const [nextImageEdit, setNextImageEdit] = React.useState(null);       // The next image in array for editing
@@ -247,10 +251,12 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
   /**
    * Shows the previous image for editing
    * @function
+   * @param {bool} imageModified Flag indicating that the current image was modified
+   * @param {string} [requestId] The optional request ID associated with th current image
    * @return {bool} Returns true when there's a next image to navigate to, and false otherwise
    */
-  const handlePrevImage = React.useCallback(() => {
-    finishImageEdits(curImageModified, lastSpeciesRequestId);
+  const handlePrevImage = React.useCallback((imageModified, requestId) => {
+    finishImageEdits(imageModified, requestId ? requestId : lastSpeciesRequestId);
 
     const curImageIdx =  curUpload.images.findIndex((item) => item.name === curImageEdit.name);
     if (curImageIdx === -1) {
@@ -288,15 +294,17 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
     }
 
     return false;
-  }, [curImageEdit, curImageModified, curUpload, finishImageEdits, lastSpeciesRequestId, setCurImageEdit, setCurImageModified, setNavigationRedraw]);
+  }, [curImageEdit, curUpload, finishImageEdits, lastSpeciesRequestId, setCurImageEdit, setCurImageModified, setNavigationRedraw]);
 
   /**
    * Shows the next image for editing
    * @function
+   * @param {bool} imageModified Flag indicating that the current image was modified
+   * @param {string} [requestId] The optional request ID associated with th current image
    * @return {bool} Returns true when there's a next image to navigate to, and false otherwise
    */
-  const handleNextImage = React.useCallback((requestId) => {
-    finishImageEdits(curImageModified, requestId ? requestId : lastSpeciesRequestId);
+  const handleNextImage = React.useCallback((imageModified, requestId) => {
+    finishImageEdits(imageModified, requestId ? requestId : lastSpeciesRequestId);
 
     const curImageIdx =  curUpload.images.findIndex((item) => item.name === curImageEdit.name);
     if (curImageIdx === -1) {
@@ -334,7 +342,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
     }
 
     return false;
-  }, [curImageEdit, curImageModified, curUpload, finishImageEdits, lastSpeciesRequestId, setCurImageEdit, setCurImageModified, setNavigationRedraw]);
+  }, [curImageEdit, curUpload, finishImageEdits, lastSpeciesRequestId, setCurImageEdit, setCurImageModified, setNavigationRedraw]);
 
   // Render time width and height measurements
   React.useLayoutEffect(() => {
@@ -384,10 +392,10 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
     if (curEditState === editingStates.editImage) {
       if (event.key !== 'Meta') {
         if (event.key === 'ArrowLeft') {
-          handlePrevImage()
+          handlePrevImage(curImageModified);
         } else if (event.key === 'ArrowRight') {
-          handleNextImage()
-        } else {
+          handleNextImage(curImageModified);
+        } else if (!event.altKey && !event.ctrlKey) {
           const speciesKeyItem = speciesItems.find((item) => item.keyBinding == event.key.toUpperCase());
           if (speciesKeyItem) {
             let requestId = Date.now();
@@ -396,7 +404,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
             event.preventDefault();
 
             if (userSettings.autonext) {
-              handleNextImage(requestId);
+              handleNextImage(true, requestId);
             }
           }
         }
@@ -412,6 +420,43 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
       document.removeEventListener("keydown", onKeypress);
     }
   }, [onKeypress]);
+
+
+  // Determine if we already have changes on the server
+  React.useEffect(() => {
+    if (!changesMade && !checkedServerChanges) {
+      const checkChangesUrl = serverURL + '/checkChanges?t=' + encodeURIComponent(editToken);
+      const formData = new FormData();
+
+      formData.append('id', curUpload.collectionId);
+      formData.append('up', curUpload.upload);
+
+      try {
+        const resp = fetch(checkChangesUrl, {
+          method: 'POST',
+          body: formData
+        }).then(async (resp) => {
+              if (resp.ok) {
+                return resp.json();
+              } else {
+                throw new Error(`Failed to check for update server changes: ${resp.status}`, {cause:resp});
+              }
+            })
+          .then((respData) => {
+            setChangesMade(respData.changesMade);
+            setHavePreviousChanges(respData.changesMade);
+            setCheckedServerChanges(true);
+          })
+          .catch(function(err) {
+            console.log('Check Changes Error: ', err);
+            addMessage(Level.Error, 'A problem ocurred while checking for server upload changes');
+        });
+      } catch (error) {
+        console.log('Check Changes Unknown Error: ', err);
+        addMessage(Level.Error, 'An unkown problem ocurred checking for server upload changes');
+      }
+    }
+  }, [addMessage, changesMade, checkedServerChanges, curUpload, editToken, serverURL, setChangesMade, setCheckedServerChanges]);
 
   /**
    * Searches for images that meet the search criteria and scrolls it into view
@@ -486,7 +531,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
               if (resp.ok) {
                 return resp.json();
               } else {
-                throw new Error(`Failed to set settings: ${resp.status}`, {cause:resp});
+                throw new Error(`Failed to upload location: ${resp.status}`, {cause:resp});
               }
             })
           .then((respData) => {
@@ -595,7 +640,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
             if (resp.ok) {
               return resp.json();
             } else {
-              throw new Error(`Failed to set settings: ${resp.status}`, {cause:resp});
+              throw new Error(`Failed to update species keybind: ${resp.status}`, {cause:resp});
             }
           })
         .then((respData) => {
@@ -639,14 +684,18 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
   }
 
   /**
-   * Makes the call when the user has fully completed editing images
+   * Makes the call when the user has fully completed editing images. We retry if that's an option (and the request hasn't worked out)
+   * for a number of times before we have the server save what it has by setting the tryHarder flag
    * @function
    * @param {string} collectionId The ID of the collection the image belongs to
    * @param {string} uploadName The name of the upload begin edited
+   * @param {string} lastRequestId The last request ID we sent to the server
    * @param {string} timestamp The ISO string of the edit timestamp
    * @param {integer} {numTries} The number of attempted tries
+   * @param {bool} {tryHarder} When true sets the try harder flag on the server request. This can't be set too early
+   *                            in case there's an edit that has been delayed in being received and processed by the server
    */
-  const submitAllImageEdited = React.useCallback((collectionId, uploadName, timestamp, numTries) => {
+  const submitAllImageEdited = React.useCallback((collectionId, uploadName, lastRequestId, timestamp, numTries, tryHarder) => {
 
     numTries = numTries ? numTries + 1 : 1;
 
@@ -655,7 +704,13 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
 
     formData.append('collection', collectionId);
     formData.append('upload', uploadName);
+    if (lastRequestId !== null) {
+      formData.append('requestId', lastRequestId);
+    }
     formData.append('timestamp', timestamp);
+    if (tryHarder === true) {
+      formData.append('force', true);
+    }
 
     try {
       const resp = fetch(allEditedUrl, {
@@ -674,22 +729,33 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
               // Check if most things worked out but a retry is in order
               if (respData.retry === undefined || respData.retry !== true) {
                 setPendingMessage(null);
+                setChangesMade(false);
+                setCurImageModified(false);
+                if (respData.imagesReloaded !== undefined && respData.imagesReloaded) {
+                  // Cause the images to be reloaded
+                  uploadReload();
+                }
               } else {
                 // Things worked out, but there may be a timing issue with the edits, try again if we're not trying too much
+                const tryHarder = numTries === 3;
                 if (numTries < 4) {
-                  window.setTimeout(() => submitAllImageEdited(collectionId, uploadName, timestamp, numTries), 1000 * numTries);
+                  window.setTimeout(() => submitAllImageEdited(collectionId, uploadName, lastRequestId, timestamp, numTries, tryHarder), 1000 * numTries);
                 } else {
                   setPendingMessage(null);
-                  addMessage(Level.Error, "Unable to finish all image editing changes ");
+                  if (respData.foundEdits > 0) {
+                    addMessage(Level.Error, "Unable to finish all image editing changes ");
+                  }
                 }
               }
             }
         })
         .catch(function(err) {
+          setPendingMessage(null);
           console.log('Finish Images Edit Error: ',err);
           addMessage(Level.Error, 'A problem ocurred while finishing the edited images changes');
       });
     } catch (err) {
+      setPendingMessage(null);
       console.log('Finish Images Edit Commit Unknown Error: ',err);
       addMessage(Level.Error, 'An unkown problem ocurred while finishing the edited image changes');
     }
@@ -703,15 +769,14 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
     setCurEditState(editingStates.listImages);
     searchSetup('Image Name', handleImageSearch);
 
-    if (changesMade) {
-      setPendingMessage("Finishing up changes made to images");
-    }
+    setPendingMessage("Finishing any changes made to images");
 
     finishImageEdits(curImageModified, lastSpeciesRequestId,
-        () => {
-                if (changesMade) {
-                    submitAllImageEdited(curUpload.collectionId, curUpload.upload, new Date().toISOString());
-                  }
+        () => { if (changesMade) {
+                  submitAllImageEdited(curUpload.collectionId, curUpload.upload, lastSpeciesRequestId, new Date().toISOString());
+                } else {
+                  setPendingMessage(null);
+                }
               }
     );
   }, [curImageModified, curUpload, editingStates, finishImageEdits, handleImageSearch, lastSpeciesRequestId, searchSetup,
@@ -731,6 +796,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
   const submitImageEditComplete = React.useCallback((collectionId, uploadName, imagePath, lastRequestId, cbSuccess, cbFailure, numTries) => {
 
     numTries = numTries ? numTries + 1 : 1;
+    failureFunc = typeof(cbFailure) === 'function' ? cbFailure : (msg) => addMessage(Level.Error, msg);
 
     const completedUrl = serverURL + '/imageEditComplete?t=' + encodeURIComponent(editToken);
     const formData = new FormData();
@@ -769,26 +835,21 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
                       cbSuccess();
                     }
                   } else {
-                    const msg = "Unable to complete the editing changes to image " + respData.filename;
-                    if (typeof(cbFailure) === 'function') {
-                      cbFailure(msg);
-                    } else {
-                      addMessage(Level.Error, msg);
-                    }
+                    failureFunc("Unable to complete the editing changes to image " + respData.filename);
                   }
                 }
               }
             } else {
-              addMessage(Level.Error, respData.message);
+              failureFunc(respData.message);
             }
         })
         .catch(function(err) {
           console.log('Update Image Edit Complete Error: ',err);
-          addMessage(Level.Error, 'A problem ocurred while updating the stored image with these changes');
+          failureFunc('A problem ocurred while updating the stored image with these changes');
       });
     } catch (err) {
       console.log('Update Image Edit Commit Complete Error: ',err);
-      addMessage(Level.Error, 'An unkown problem ocurred while updating the stored image with these changes');
+      failureFunc('An unkown problem ocurred while updating the stored image with these changes');
     }
   }, [addMessage, editToken, lastSpeciesRequestId, serverURL]);
 
@@ -929,7 +990,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
   const imageVisibility = (curEditState === editingStates.editImage || curEditState === editingStates.listImages) && !editingLocation ? 'visible' : 'hidden';
   // Return the rendered page
   return (
-    <Box id="upload-edit"sx={{ flexGrow: 1, top:curStart+'px', height: uiSizes.workspace.height+'px', width: uiSizes.workspace.width+'px' }} >
+    <Stack id="upload-edit" direction={{xs:'column', md:"row"}} sx={{ flexGrow: 1, top:curStart+'px', height: uiSizes.workspace.height+'px', width: uiSizes.workspace.width+'px' }} >
       <SpeciesSidebar species={speciesItems}
                       position={narrowWindow?'top':'left'}
                       speciesSidebarRef={sidebarSpeciesRef}
@@ -938,50 +999,55 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
                       onKeybind={(event, speciesItem) => {onKeybindClick(event, speciesItem.name, speciesItem.keyBinding);event.preventDefault();}}
                       onZoom={(event, speciesItem) => {setSpeciesZoomName(speciesItem.name);setSpeciesKeybindName(null);event.preventDefault();}}
       />
-      <Grid id='top-sidebar' ref={sidebarTopRef} container direction='row' alignItems='center' justifyContent='center' rows='1'
-          style={{ ...theme.palette.top_sidebar, top:curStart+'px', minWidth:(workspaceWidth-workplaceStartX)+'px', maxWidth:(workspaceWidth-workplaceStartX)+'px',
-                   position:'sticky', marginLeft:workplaceStartX, verticalAlignment:'middle', visibility:topbarVisiblity }} >
-        <Grid>
-          <Typography variant="body" sx={{ paddingLeft: '10px'}}>
-            {curUpload.name}
-          </Typography>
+      <Stack id="upload-edit-details" direction={{xs:"column"}} >
+        <Grid id='top-sidebar' ref={sidebarTopRef} container direction='row' alignItems='center' justifyContent='center' rows='1'
+            style={{ ...theme.palette.top_sidebar, minWidth:(workspaceWidth-workplaceStartX)+'px', maxWidth:(workspaceWidth-workplaceStartX)+'px',
+                     position:'sticky', verticalAlignment:'middle', visibility:topbarVisiblity }} >
+          <Grid>
+            <Typography variant="body" sx={{ paddingLeft: '10px'}}>
+              {curUpload.name}
+            </Typography>
+          </Grid>
+          <Grid sx={{marginLeft:'auto'}}>
+            <Typography variant="body" sx={{ paddingLeft: '10px', fontSize:'larger'}}>
+              {curUploadLocation && curUploadLocation.nameProperty ? curUploadLocation.nameProperty : '<location>'}
+            </Typography>
+            <IconButton aria-label="edit" size="small" color={'lightgrey'} onClick={handleEditLocation}>
+              <BorderColorOutlinedIcon sx={{fontSize:'smaller'}}/>
+            </IconButton>
+          </Grid>
         </Grid>
-        <Grid sx={{marginLeft:'auto'}}>
-          <Typography variant="body" sx={{ paddingLeft: '10px', fontSize:'larger'}}>
-            {curUploadLocation && curUploadLocation.nameProperty ? curUploadLocation.nameProperty : '<location>'}
-          </Typography>
-          <IconButton aria-label="edit" size="small" color={'lightgrey'} onClick={handleEditLocation}>
-            <BorderColorOutlinedIcon sx={{fontSize:'smaller'}}/>
-          </IconButton>
-        </Grid>
-      </Grid>
-      { curEditState == editingStates.listImages || curEditState == editingStates.editImage ? 
-          <Box id="image-edit-wrapper-box"
-                style={{ 'marginTop':'23px', 'marginLeft':'10px', 'marginRight':'10px',
-                         'minHeight':(curHeight-sidebarHeightTop-sidebarHeightSpecies-23)+'px',
-                         'maxHeight':(curHeight-sidebarHeightTop-sidebarHeightSpecies-23)+'px',
-                         'height':(curHeight-sidebarHeightTop-sidebarHeightSpecies-23)+'px',
-                         'top':(curStart+sidebarHeightTop+sidebarHeightSpecies)+'px', 
-                         'left':workplaceStartX,
-                         'minWidth':(workspaceWidth-sidebarWidthLeft-(10*2))+'px',
-                         'maxWidth':(workspaceWidth-sidebarWidthLeft-(10*2))+'px',
-                         'width':(workspaceWidth-sidebarWidthLeft-(10*2))+'px', 
-                         'position':'absolute', overflow:'scroll', 'visibility':imageVisibility }}
-          >
-            {generateImageTiles(handleEditingImage)}
-          </Box>
-        : null
-      }
+        { curEditState == editingStates.listImages || curEditState == editingStates.editImage ? 
+            <Box id="image-edit-wrapper-box"
+                  style={{ marginLeft:'10px',
+                           marginRight:'10px',
+                           paddingTop:'10px',
+                           minHeight:(curHeight-sidebarHeightTop-sidebarHeightSpecies)+'px',
+                           maxHeight:(curHeight-sidebarHeightTop-sidebarHeightSpecies)+'px',
+                           height:(curHeight-sidebarHeightTop-sidebarHeightSpecies)+'px',
+                           minWidth:(workspaceWidth-sidebarWidthLeft-(10*2))+'px',
+                           maxWidth:(workspaceWidth-sidebarWidthLeft-(10*2))+'px',
+                           width:(workspaceWidth-sidebarWidthLeft-(10*2))+'px', 
+                           overflow:'scroll', 'visibility':imageVisibility }}
+            >
+              {generateImageTiles(handleEditingImage)}
+            </Box>
+          : null
+        }
+      </Stack>
       { curEditState === editingStates.editImage ?
         <Grid id='image-edit-edit' container direction="column" alignItems="center" justifyContent="center"
-              style={{ 'paddingTop':'10px', 'paddingLeft':'10px',
-                       'minHeight':curHeight+'px', 'maxHeight':curHeight+'px', 'height':curHeight+'px',
-                       'top':(curStart)+'px', 
-                       'left':workplaceStartX,
-                       'minWidth':(workspaceWidth-sidebarWidthLeft)+'px',
-                       'maxWidth':(workspaceWidth-sidebarWidthLeft)+'px',
-                       'width':(workspaceWidth-sidebarWidthLeft)+'px', 
-                       'position':'absolute', 'visibility':imageVisibility, backgroundColor:'rgb(0,0,0,0.7)' }}>
+              style={{ paddingTop:'10px',
+                       paddingLeft:'10px',
+                       minHeight:curHeight+'px',
+                       maxHeight:curHeight+'px', 'height':curHeight+'px',
+                       left:workplaceStartX,
+                       minWidth:(workspaceWidth-sidebarWidthLeft)+'px',
+                       maxWidth:(workspaceWidth-sidebarWidthLeft)+'px',
+                       width:(workspaceWidth-sidebarWidthLeft)+'px', 
+                       position:'absolute',
+                       visibility:imageVisibility,
+                       backgroundColor:'rgb(0,0,0,0.7)' }}>
           <Grid id='image-edit-edit-wrapper' sx={{borderLeft:'4px solid white', borderRight:'4px solid white'}} >
             <ImageEdit url={curImageEdit.url}
                        type={curImageEdit.type}
@@ -1085,6 +1151,6 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup}) {
               </div>
             </Grid>
       }
-    </Box>
+    </Stack>
   );
 }

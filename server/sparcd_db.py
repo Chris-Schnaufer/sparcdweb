@@ -1,14 +1,19 @@
 """This script contains the database interface for the SPARCd Web app
 """
 
-import os
+import json
 import logging
+import os
 from typing import Optional
 
 from spd_types.userinfo import UserInfo
 from spd_database.spdsqlite import SPDSQLite
 
+# Maximum number of expired tokens to keep around on a per-user basis
 MAX_ALLOWED_EXPIRED_TOKENS_PER_USER = 1
+
+# Maximum lock elapsed time in seconds before a lock is considered abandoned
+MAX_LOCK_WAIT_TIME_SEC = 2 * 60
 
 class SPARCdDatabase:
     """Class handling access connections to the database
@@ -165,30 +170,6 @@ class SPARCdDatabase:
         """
         self._db.update_user_settings(username, settings, email)
 
-    def get_collections(self, timeout_sec:int) -> Optional[list]:
-        """ Returns the collection information stored in the database
-        Arguments:
-            timeout_sec: the amount of time before the table entries can be
-                         considered expired
-        Returns:
-            Returns None if there are no collections or a list of dict with the name and the
-            json keys containing the names of the collections and their associated json
-        """
-        res = self._db.get_collections(timeout_sec)
-        if not res or len(res) < 1:
-            return None
-
-        return [{'name':row[0], 'json':row[1]} for row in res]
-
-    def save_collections(self, collections: tuple) -> bool:
-        """ Saves the collections to the database
-        Arguments:
-            collections: a tuple of dicts containing the collection name and data json
-        Return:
-            Returns True if data is saved, and False if something went wrong
-        """
-        return self._db.save_collections(collections)
-
     def get_sandbox(self, s3_url: str) -> Optional[tuple]:
         """ Returns the sandbox items
         Arguments:
@@ -207,34 +188,34 @@ class SPARCdDatabase:
                  'location_id': row[3]
                } for row in res]
 
-    def get_uploads(self, s3_url: str, bucket: str, timeout_sec: int) -> Optional[tuple]:
+    def get_uploads(self, s3_id: str, bucket: str, timeout_sec: int) -> Optional[tuple]:
         """ Returns the uploads for this collection from the database
         Arguments:
-            s3_url: the URL associated with this request
+            s3_id: the ID of the S3 instance
             bucket: The bucket to get uploads for
             timeout_sec: the amount of time before the table entries can be
                          considered expired
         Return:
             Returns the loaded tuple of upload names and data
         """
-        res = self._db.get_uploads(s3_url, bucket, timeout_sec)
+        res = self._db.get_uploads(s3_id, bucket, timeout_sec)
 
         if not res or len(res) < 1:
             return None
 
         return [{'name':row[0], 'json':row[1]} for row in res]
 
-    def save_uploads(self, s3_url: str, bucket: str, uploads: tuple) -> bool:
+    def save_uploads(self, s3_id: str, bucket: str, uploads: tuple) -> bool:
         """ Save the upload information into the table
         Arguments:
-            s3_url: the URL associated with this request
+            s3_id: the ID of the S3 instance
             bucket: the bucket name to save the uploads under
             uploads: the uploads to save containing the collection name,
                 upload name, and associated JSON
         Return:
             Returns True if the data was saved and False if something went wrong
         """
-        return self._db.save_uploads(s3_url, bucket, uploads)
+        return self._db.save_uploads(s3_id, bucket, uploads)
 
     def save_query_path(self, token: str, file_path: str) -> bool:
         """ Stores the specified query file path in the database
@@ -384,31 +365,6 @@ class SPARCdDatabase:
         """
         self._db.sandbox_upload_complete(username, upload_id)
 
-    def sandbox_abandon_upload(self, s3_url: str, username: str, upload_id: str) -> Optional[int]:
-        """ Marks the upload as abandoned
-        Arguments:
-            s3_url: the URL to the s3 instance the upload is for
-            username: the name of the person starting the upload
-            upload_id: the ID of the upload
-        Return:
-            Returns the count of completed file uploads or None if the upload can't be found
-        """
-        res = self._db.sandbox_get_upload(s3_url, username, path)
-
-        if not res or len(res) < 3:
-            return None
-
-        sandbox_id = res[0]
-
-        res = self._db.sandbox_uploaded_files(username, sandbox_id)
-
-        if not res or len(res) < 1:
-            return None
-
-        self._db.sandbox_abandon_upload(s3_url, username, upload_id)
-        
-        return int(res[0]) if res[0] is not None else None
-
 
     def sandbox_file_uploaded(self, username: str, upload_id: str, filename: str, \
                                                                     mimetype: str) -> Optional[str]:
@@ -555,6 +511,17 @@ class SPARCdDatabase:
                 file_species[one_result[0]] = [one_result[1:]]
 
         return {bucket + ':' + upload_path:file_species}
+
+    def have_upload_changes(self, s3_url: str, bucket: str, upload_name: str) -> bool:
+        """ Returns if there are changes stored in the database for the upload
+        Arguments:
+            s3_url: the URL to the S3 instance
+            bucket: the S3 bucket the collection is in
+            upload_name: the upload name to get the edit for
+        Return:
+            Returns True if some image edits for this
+        """
+        return self._db.have_upload_changes(s3_url, bucket, upload_name)
 
     def get_admin_edit_users(self) -> tuple:
         """ Returns the user information for administrative editing
@@ -733,21 +700,27 @@ class SPARCdDatabase:
         """
         return self.common_get_next_files_info(s3_url, username, 0, s3_path=s3_path)
 
-    def get_edited_files_info(self, s3_url: str, username: str, upload_id: str) -> Optional[tuple]:
+    def get_edited_files_info(self, s3_url: str, username: str, upload_id: str, \
+                                                            force: bool=False) -> Optional[tuple]:
         """ Returns the file editing information for a user, possibly for only one location
         Arguments:
             s3_url: the URL to the S3 instance
             username: the name of the user to check for
             upload_id: the ID of the upload to search for
+            force: Set to True to force any and all incomplete edits to be included in the returned
+                    results
         Return:
             Returns a tuple of file information dict containing each image's name, bucket, s3_path,
             and species. The species key contains a tuple of species common (name), 
             scientific (name), and the count. None is returned if there are no records
         """
-        return self.common_get_next_files_info(s3_url, username, 1, upload_id=upload_id)
+
+        return self.common_get_next_files_info(s3_url, username, 1, upload_id=upload_id,
+                                                                        allow_smaller_values=force)
 
     def common_get_next_files_info(self, s3_url: str, username: str, updated_value: int, \
-                                        s3_path:str=None, upload_id: str=None) -> Optional[tuple]:
+                                        s3_path:str=None, upload_id: str=None, \
+                                        allow_smaller_values: bool=False) -> Optional[tuple]:
         """ Returns the file editing information for a user, possibly for only one location
         Arguments:
             s3_url: the URL to the S3 instance
@@ -755,6 +728,8 @@ class SPARCdDatabase:
             updated_level: the numeric updated value to check for in the query
             s3_path: optional S3 upload path to get changes for
             upload_id: optional upload ID to look for
+            allow_smaller_values: When set to True, the update value parameter is considered an
+            upper bound of valid values
         Return:
             Returns a tuple of file information dict containing each image's name, bucket, s3_path,
             and species. The species key contains a tuple of species common (name), 
@@ -763,7 +738,8 @@ class SPARCdDatabase:
             It's recommended that only one of the S3 path, or the upload ID, is specified, not both.
         """
         # pylint: disable=too-many-arguments, too-many-positional-arguments
-        res = self._db.get_next_files_info(s3_url, username, updated_value, s3_path, upload_id)
+        res = self._db.get_next_files_info(s3_url, username, updated_value, s3_path, upload_id,
+                                                                            allow_smaller_values)
 
         res_dict = {}
         for one_res in res:
@@ -834,3 +810,178 @@ class SPARCdDatabase:
             new_updated: the new updated column value for entries that were found
         """
         self._db.complete_image_edits(username, files, old_updated, new_updated)
+
+    def get_all_collections(self, s3_id: str, timeout_sec: int=None) -> Optional[tuple]:
+        """ Gets all the collections associated with the collection
+        Arguments:
+            s3_id: The ID of the S3 endpoint
+            timeout_sec: the number of seconds all the saved collections are valid
+        Return:
+            Returns the collection information as tuples. Each tuple consists a dict with name and
+            the JSON of the collection and its uploads. If there are no collections, or if at least
+            one collection has expired, None is returned
+        """
+        if timeout_sec is None:
+            raise RuntimeError('Missing timeout seconds parameter when getting all collections')
+        if not isinstance(timeout_sec, int):
+            try:
+                timeout_sec = int(timeout_sec)
+            except ValueError as ex:
+                raise RuntimeError('Invalid timeout seconds parameter when getting all ' \
+                                                            f'collections: {timeout_sec}') from ex
+
+        all_coll = self._db.get_collections(s3_id)
+
+        if not all_coll or len(all_coll) <= 0:
+            return None
+
+        for one_coll in all_coll:
+            try:
+                if int(one_coll[2]) >= timeout_sec:
+                    return None
+            except ValueError:
+                # We have a problem that indicates the DB might be corrupted
+                print('Error: database returned an invalid timeout value when getting all ' \
+                                                                                    'collections')
+                return None
+
+        return [json.loads(one_coll[1]) for one_coll in all_coll]
+
+    def save_all_collections(self, s3_id: str, collections: tuple) -> None:
+        """ Saves/replaces the collections into the database under the indicated ID
+        Arguments:
+            s3_id: The ID of the S3 endpoint
+            collections: a tuple of collection dicts containing the collection id
+                and other information
+        """
+        self._db.save_collections(s3_id,
+                        [{'id': one_coll['id'], 'name': one_coll['name'], \
+                                                            'json': json.dumps(one_coll)} \
+                                    for one_coll in collections])
+
+    def collection_update(self, s3_id: str, collection: dict, timeout_sec: int=None) -> bool:
+        """ Updates the collection in the database if it's not expired
+        Arguments:
+            s3_id: The ID of the S3 endpoint
+            collection: collection information including the collection id and other values
+            timeout_sec: the number of seconds all the saved collections are valid
+        Return:
+            Returns True if the collection was updated and False if it wasn't
+        """
+        if timeout_sec is None:
+            raise RuntimeError('Missing timeout seconds parameter when getting all collections')
+
+        if not isinstance(timeout_sec, int):
+            try:
+                timeout_sec = int(timeout_sec)
+            except ValueError as ex:
+                raise RuntimeError('Invalid timeout seconds parameter when getting all ' \
+                                                            f'collections: {timeout_sec}') from ex
+
+        elapsed_sec = self._db.collection_elapsed_sec(s3_id, collection['id'])
+        if elapsed_sec is None or elapsed_sec >= timeout_sec:
+            return False
+
+        self._db.collection_update(s3_id, collection['id'], json.dumps(collection))
+        return True
+
+    def get_lock(self, name: str, max_lock_sec: int=MAX_LOCK_WAIT_TIME_SEC) -> Optional[int]:
+        """ Attempts to get a named lock in a non-blocking fashion
+        Arguments:
+            name: the name of the lock get get
+            max_lock_sec: maximum number of seconds to a lock is allowed to be locked before it's
+                    considered to be abandoned
+        Return:
+            Returns the lock ID if the lock is available and None if it isn't
+        """
+        if not name or max_lock_sec < 0 or max_lock_sec is None:
+            raise RuntimeError(f'Invalid parameters for named lock "{name}": {max_lock_sec}')
+
+        return self._db.lock_get(name, max_lock_sec)
+
+    def release_lock(self, name: str, lock_id: int) -> None:
+        """ Releases a named lock
+        Arguments:
+            name: the name of the lock get release
+            lock_id: the ID of the lock returned by get_lock()
+        """
+        if not name or not lock_id:
+            return
+
+        self._db.lock_release(name, lock_id)
+
+    def upload_images_get(self, s3_id: str, collection_id: str, upload_name: str, \
+                                                                    timeout_sec: int=None) -> tuple:
+        """ Returns the images associated with a particular upload
+        Arguments:
+            s3_id: The ID of the S3 endpoint
+            collection_id: collection ID  of the upload
+            upload_name: the name of the collection's upload
+            timeout_sec: the number of seconds the upload data is considered valid
+        Return:
+            Returns True if the upload images were saved and False if not
+        """
+        if timeout_sec is None:
+            raise RuntimeError('Missing timeout seconds parameter when getting upload images')
+
+        if not isinstance(timeout_sec, int):
+            try:
+                timeout_sec = int(timeout_sec)
+            except ValueError as ex:
+                raise RuntimeError('Invalid timeout seconds parameter when getting upload ' \
+                                                                f'images: {timeout_sec}') from ex
+
+        upload_res = self._db.upload_get(s3_id, collection_id, upload_name)
+
+        if not upload_res or len(upload_res) <= 0:
+            return None
+
+        try:
+            if int(upload_res[2]) >= timeout_sec:
+                return None
+        except ValueError:
+            # We have a problem that indicates the DB might be corrupted
+            print('Error: database returned an invalid timeout value when getting upload ' \
+                                                                                'images')
+            return None
+
+        return (json.loads(one_res[0]) for one_res in self._db.upload_images_get(upload_res[0]))
+
+    def upload_images_save(self, s3_id: str, collection_id: str, upload_name: str, \
+                                                                            images: tuple) -> bool:
+        """ Saves/replaces the images associated with a particular upload
+        Arguments:
+            s3_id: The ID of the S3 endpoint
+            collection_id: collection ID  of the upload
+            upload_name: the name of the collection's upload
+            images: the images to save
+        Return:
+            Returns True if the upload images were saved and False if not
+        """
+        upload_id = self._db.upload_save(s3_id, collection_id, upload_name, None)
+        if upload_id is None:
+            return False
+
+        return self._db.upload_images_save(upload_id,
+                                [{'json':json.dumps(one_image)}|one_image for one_image in images])
+
+    def get_image_data(self, s3_id: str, collection_id: str, upload_name: str, \
+                                                                image_key: str) -> Optional[dict]:
+        """ Returns the image data associated with the image key
+        Arguments:
+            s3_id: the unique ID of the S3 instance
+            collection_id: the ID of the collection of the upload
+            upload_name: the name of the upload to get images for
+            image_key: the key of the image to get
+        Return:
+            Returns the data for the found image or None if not found
+        """
+        image_data = self._db.get_image_data(s3_id, collection_id, upload_name, image_key)
+
+        if not image_data or len(image_data) <= 0:
+            return None
+
+        try:
+            return json.loads(image_data[0])
+        except json.JSONDecodeError:
+            return None

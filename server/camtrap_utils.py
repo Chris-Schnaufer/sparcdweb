@@ -1,5 +1,6 @@
 """ Utilities to help working with CamTrap data """
 
+import datetime
 import os
 import tempfile
 from typing import Callable, Optional
@@ -193,6 +194,7 @@ def create_observation_data(ct: camtrap.CamTrap, deployment_id: str, s3_base_pat
         obs = ct.observation(os.path.basename(one_file))
         obs.deployment_id = deployment_id
         obs.media_id = media_id
+        obs.timestamp = datetime.datetime.now(datetime.UTC).isoformat()
         obs.camera_setup = 'FALSE'
 
         result.append(ct.from_observation(obs))

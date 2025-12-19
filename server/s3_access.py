@@ -8,6 +8,7 @@ import datetime
 from io import BytesIO, StringIO
 import json
 import os
+import shutil
 import tempfile
 import traceback
 from typing import Optional, Callable
@@ -543,7 +544,7 @@ class S3Connection:
 
     @staticmethod
     def get_images(url: str, user: str, password: str, collection_id: str, \
-                   upload_name: str) -> Optional[tuple]:
+                   upload_name: str, need_url: bool=True) -> Optional[tuple]:
         """ Returns the image information for an upload of a collection
         Arguments:
             url: the URL to the s3 instance
@@ -551,6 +552,7 @@ class S3Connection:
             password: the user's password
             collection_id: the ID of the collection of the upload
             upload_name: the name of the upload to get image data on
+            need_url: set to False if a remote URL to the image isn't needed
         Returns:
             Returns the images, or None
         """
@@ -560,10 +562,11 @@ class S3Connection:
 
         minio = Minio(url, access_key=user, secret_key=password)
 
-        images = get_s3_images(minio, bucket, [upload_path])
+        images = get_s3_images(minio, bucket, [upload_path], need_url)
 
         images_dict = {obj['s3_path']: obj for obj in images}
 
+        # Temp file for getting observations
         temp_file = tempfile.mkstemp(prefix=SPARCD_PREFIX)
         os.close(temp_file[0])
 
@@ -621,13 +624,14 @@ class S3Connection:
 
         minio = Minio(url, access_key=user, secret_key=password)
 
-        temp_file = tempfile.mkstemp(prefix=SPARCD_PREFIX)
-        os.close(temp_file[0])
         # Get the uploads and their information
         coll_uploads = []
+        temp_folder = tempfile.mkdtemp(prefix=SPARCD_PREFIX)
         for one_obj in minio.list_objects(bucket, uploads_path):
             if one_obj.is_dir and not one_obj.object_name == uploads_path:
                 # Get the data on this upload
+                temp_file = tempfile.mkstemp(prefix=SPARCD_PREFIX, dir=temp_folder)
+                os.close(temp_file[0])
 
                 # Upload information
                 upload_info_path = make_s3_path((one_obj.object_name,S3_UPLOAD_META_JSON_FILE_NAME))
@@ -695,7 +699,10 @@ class S3Connection:
                 meta_info_data['images'] = cur_images
                 coll_uploads.append(meta_info_data)
 
-        os.unlink(temp_file[1])
+                if os.path.exists(temp_file[1]):
+                    os.unlink(temp_file[1])
+
+        shutil.rmtree(temp_folder)
 
         return coll_uploads
 
@@ -1086,8 +1093,8 @@ class S3Connection:
 
 
     @staticmethod
-    def update_upload_metadata_comment(url: str, user: str, password: str, bucket: str, \
-                                                    upload_path: str, new_comment: str) -> bool:
+    def update_upload_metadata(url: str, user: str, password: str, bucket: str, upload_path: str, \
+                                    new_comment: str=None, images_species_count: int=None) -> bool:
         """ Update the upload's metadata on the S3 instance with a new count
         Arguments:
             url: the URL to the s3 instance
@@ -1096,6 +1103,7 @@ class S3Connection:
             bucket: the bucket to upload to
             upload_path: path under the bucket to the metadata
             new_comment: the comment to add to the metadata
+            images_species_count: The count of images that have species
         Return:
             Returns True if no problem was found and False otherwise
         """
@@ -1120,7 +1128,10 @@ class S3Connection:
             return False
 
         # Update and save the upload information
-        coll_info['editComments'].append(new_comment)
+        if new_comment is not None:
+            coll_info['editComments'].append(new_comment)
+        if images_species_count is not None:
+            coll_info['imagesWithSpecies'] = images_species_count
         data = json.dumps(coll_info, indent=2)
         minio.put_object(bucket, upload_info_path, BytesIO(data.encode()), len(data),
                                                                     content_type='application/json')

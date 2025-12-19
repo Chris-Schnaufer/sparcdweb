@@ -6,6 +6,7 @@ import styles from './page.module.css';
 import { ThemeProvider } from "@mui/material/styles";
 import Typography from '@mui/material/Typography';
 
+import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import CollectionsManage from './CollectionsManage';
 import FooterBar from './components/FooterBar';
@@ -241,7 +242,7 @@ export default function Home() {
     const titleEl = document.getElementById('sparcd-header');
     if (titleEl) {
       titleSize = titleEl.getBoundingClientRect();
-      setSizeTitle({top:0.0, left:0.0, width:window.width, height:titleSize});
+      setSizeTitle({top:0.0, left:0.0, width:window.width, height:titleSize.height});
     }
 
     // Get the title size
@@ -627,20 +628,25 @@ export default function Home() {
   }
 
   /**
-   * Common function that loads the upload information for editing purposes
+   * Common function that loads the upload image information for editing purposes
    * @function
    * @param {string} collectionId The ID of the collection containing the upload 
    * @param {string} uploadId The ID of the upload to edit
-   * @param {string} breadcrumbName The name of the navigation breadcrumb to use
+   * @param {function} {cbSuccess} Function to call upon success
+   * @param {function} {cbFailure} Function to call upon failure
    */
-  function editCollectionUpload(collectionId, uploadId, breadcrumbName) {
-    const uploadUrl = serverURL + '/upload?t=' + encodeURIComponent(lastToken) + 
-                                          '&id=' + encodeURIComponent(collectionId) + 
-                                          '&up=' + encodeURIComponent(uploadId);
+  function editCollectionUpload(collectionId, uploadId, cbSuccess, cbFailure) {
+    const uploadUrl = serverURL + '/uploadImages?t=' + encodeURIComponent(lastToken);
+    const formData = new FormData();
+
+    formData.append('id', collectionId);
+    formData.append('up', uploadId);
+
     // Get the information on the upload
     try {
       const resp = fetch(uploadUrl, {
-        method: 'GET',
+        method: 'POST',
+        body: formData
       }).then(async (resp) => {
             if (resp.ok) {
               return resp.json();
@@ -654,29 +660,46 @@ export default function Home() {
             const curUpload = curCollection.uploads.find((item) => item.key === uploadId);
             if (curUpload) {
               // Add our token in
-              const curImages = respData.map((img) => {img['url'] = img['url'] + '&t=' + lastToken; return img;})
-              setCurrentAction(UserActions.UploadEdit, 
-                               {collectionId, name:curUpload.name, upload:curUpload.key, location:curUpload.location, images:curImages},
-                               true,
-                               breadcrumbName);
+              if (cbSuccess) {
+                const curImages = respData.map((img) => {img['url'] = img['url'] + '&t=' + lastToken; return img;})
+                cbSuccess(curUpload, curImages);
+              }
             } else {
               console.log('ERROR: unable to find upload ID', uploadId, 'for collection ID', collectionId);
               addMessage(Level.Warning, "Unable to find the upload to edit");
+              if (cbFailure) cbFailure();
             }
           } else {
             console.log('ERROR: unable to find collection ID', collectionId);
             addMessage(Level.Warning, "Unable to find the collection for editing");
+            if (cbFailure) cbFailure();
           }
         })
         .catch(function(err) {
           console.log('Error: ',err);
           addMessage(Level.Error, 'A problem ocurred while fetching the upload information');
+          if (cbFailure) cbFailure();
       });
     } catch (error) {
       console.log('Error: ',error);
       addMessage(Level.Error, 'An unknown problem ocurred while fetching the upload information');
+      if (cbFailure) cbFailure();
     }
   }
+
+  /**
+   * Reloads the information on the current upload
+   * @function
+   */
+  const uploadReload = React.useCallback(() => {
+    let actionData = curActionData;
+    editCollectionUpload(actionData.collectionId, actionData.upload, 
+                              (curUpload, curImages) => { // Success callback
+                                        actionData.images = curImages;
+                                        setCurActionData(actionData);
+                                      }
+                        )
+  }, [curActionData, editCollectionUpload, setCurActionData]);
 
   /**
    * Calls the callback to perform a search
@@ -981,7 +1004,7 @@ export default function Home() {
                 <CollectionsInfoContext.Provider value={collectionInfo}>
                   <SandboxInfoContext.Provider value={sandboxInfo}>
                     <Landing loadingCollections={loadingCollections} loadingSandbox={loadingSandbox} onUserAction={setCurrentAction} 
-                             onEditUpload={editCollectionUpload} onSandboxRefresh={() => {loadSandbox(lastToken);loadCollections(lastToken);}}
+                             onSandboxRefresh={() => {loadSandbox(lastToken);loadCollections(lastToken);}}
                     />
                   </SandboxInfoContext.Provider>
                 </CollectionsInfoContext.Provider>
@@ -996,7 +1019,18 @@ export default function Home() {
             <TokenContext.Provider value={lastToken}>
               <AddMessageContext.Provider value={addMessage}>
                 <SandboxInfoContext.Provider value={sandboxInfo}>
-                  <UploadManage selectedUpload={curActionData} onEditUpload={editCollectionUpload} />
+                  <UploadManage selectedUpload={curActionData} 
+                          onEditUpload={(collectionId, uploadId, breadcrumbName) =>
+                                          editCollectionUpload(collectionId, uploadId, 
+                                              (curUpload, curImages) => { // Success callback
+                                                  setCurrentAction(UserActions.UploadEdit, 
+                                                                   {collectionId, name:curUpload.name, upload:curUpload.key, location:curUpload.location, images:curImages},
+                                                                   true,
+                                                                   breadcrumbName);
+                                                  }
+                                              )
+                                        }
+                  />
                 </SandboxInfoContext.Provider>
               </AddMessageContext.Provider>
             </TokenContext.Provider>
@@ -1011,7 +1045,9 @@ export default function Home() {
                   <SpeciesInfoContext.Provider value={speciesInfo}>
                     <UploadEdit selectedUpload={curActionData.uploadName}
                             onCancel={() => setCurrentAction(UserActions.Upload, curActionData, false)} 
-                            searchSetup={setupSearch} />
+                            searchSetup={setupSearch}
+                            uploadReload={uploadReload}
+                    />
                   </SpeciesInfoContext.Provider>
                 </LocationsInfoContext.Provider>
               </UploadEditContext.Provider>
@@ -1025,7 +1061,18 @@ export default function Home() {
               <AddMessageContext.Provider value={addMessage}>
                 <CollectionsInfoContext.Provider value={collectionInfo}>
                   <CollectionsManage loadingCollections={loadingCollections} selectedCollection={curActionData} 
-                                     onEditUpload={editCollectionUpload} searchSetup={setupSearch} />
+                          searchSetup={setupSearch}
+                          onEditUpload={(collectionId, uploadId, breadcrumbName) =>
+                                          editCollectionUpload(collectionId, uploadId, 
+                                              (curUpload, curImages) => { // Success callback
+                                                  setCurrentAction(UserActions.UploadEdit, 
+                                                                   {collectionId, name:curUpload.name, upload:curUpload.key, location:curUpload.location, images:curImages},
+                                                                   true,
+                                                                   breadcrumbName);
+                                                  }
+                                              )
+                                        }
+                  />
                 </CollectionsInfoContext.Provider>
               </AddMessageContext.Provider>
              </TokenContext.Provider>
@@ -1069,69 +1116,73 @@ export default function Home() {
         <SizeContext.Provider value={{footer:sizeFooter, title:sizeTitle, window:sizeWindow, workspace:sizeWorkspace}}>
         <UserNameContext.Provider value={userSettings.name}>
         <UserSettingsContext.Provider value={userSettings.settings}>
-            <TokenContext.Provider value={lastToken}>
-            <AddMessageContext.Provider value={addMessage}>
-            <CollectionsInfoContext.Provider value={collectionInfo}>
+          <TokenContext.Provider value={lastToken}>
+          <AddMessageContext.Provider value={addMessage}>
+          <CollectionsInfoContext.Provider value={collectionInfo}>
+            <Grid id='sparcd-wrapper' container direction="row" alignItems="start" justifyContent="start" sx={{minWidth:'100vw',minHeight:'100vh'}}>
               <TitleBar searchTitle={curSearchTitle} onSearch={handleSearch} onSettings={loggedIn ? handleSettings : null}
                         onLogout={handleLogout} size={narrowWindow?"small":"normal"} 
                         breadcrumbs={breadcrumbs} onBreadcrumb={restoreBreadcrumb} onAdminSettings={handleAdminSettings} onOwnerSettings={handleOwnerSettings}/>
-            </CollectionsInfoContext.Provider>
-            </AddMessageContext.Provider>
-            </TokenContext.Provider>
-            {!curLoggedIn ? 
-              <LoginValidContext.Provider value={loginValidStates}>
-                <Login prev_url={dbURL} prev_user={dbUser} prev_remember={dbRemember} onLogin={handleLogin}
-                       onRememberChange={handleRememberChanged} />
-              </LoginValidContext.Provider>
-              :
-                <AddMessageContext.Provider value={addMessage}>
-                  {renderAction(curAction, editing)}
-                </AddMessageContext.Provider>
-              }
-            <FooterBar />
-            <Grid id="login-checking-wrapper" container direction="row" alignItems="center" justifyContent="center"
-                  sx={{...theme.palette.login_checking_wrapper, visibility:checkedToken ? 'hidden':'visible', display:checkedToken ? 'none':'inherit'}}
-            >
-              <div style={{...theme.palette.login_checking}}>
-                <Grid container direction="column" alignItems="center" justifyContent="center" >
-                    <Typography gutterBottom variant="body2" color="lightgrey">
-                      Restoring previous session, please wait...
-                    </Typography>
-                    <CircularProgress variant="indeterminate" />
-                </Grid>
-              </div>
+              <Box id='sparcd-middle-wrapper' sx={{overflow:"scroll"}} >
+                {!curLoggedIn ? 
+                  <LoginValidContext.Provider value={loginValidStates}>
+                    <Login prev_url={dbURL} prev_user={dbUser} prev_remember={dbRemember} onLogin={handleLogin}
+                           onRememberChange={handleRememberChanged} />
+                  </LoginValidContext.Provider>
+                  :
+                    <AddMessageContext.Provider value={addMessage}>
+                      {renderAction(curAction, editing)}
+                    </AddMessageContext.Provider>
+                  }
+                </Box>
+              <FooterBar />
             </Grid>
-            { displayAdminSettings &&
-                  <TokenContext.Provider value={lastToken}>
-                  <CollectionsInfoContext.Provider value={collectionInfo}>
-                  <LocationsInfoContext.Provider value={locationInfo}>
-                  <SpeciesInfoContext.Provider value={speciesInfo}>
-                  <AddMessageContext.Provider value={addMessage}>
-                    <SettingsAdmin loadingCollections={loadingCollections} loadingLocations={loadingLocations}
-                                    onConfirmPassword={confirmAdminPassword} onClose={() => setDisplayAdminSettings(false)}/>
-                  </AddMessageContext.Provider>
-                  </SpeciesInfoContext.Provider>
-                  </LocationsInfoContext.Provider>
-                  </CollectionsInfoContext.Provider>
-                  </TokenContext.Provider>
-            }
-            { displayOwnerSettings &&
-                  <TokenContext.Provider value={lastToken}>
-                  <CollectionsInfoContext.Provider value={collectionInfo}>
-                  <AddMessageContext.Provider value={addMessage}>
-                    <SettingsOwner loadingCollections={loadingCollections}
-                                    onConfirmPassword={confirmOwnerPassword} onClose={() => setDisplayOwnerSettings(false)}/>
-                  </AddMessageContext.Provider>
-                  </CollectionsInfoContext.Provider>
-                  </TokenContext.Provider>
-            }
-            { // Make sure this is is last
-              messages.length > 0 && 
-                <Grid id="messages-wrapper" container direction="row" alignItems="start" justifyContent="center"
-                      sx={{...theme.palette.messages_wrapper, top: workspaceTop}}>
-                  <Messages messages={messages} close_cb={handleCloseMessage}/>
-                </Grid>
-            }
+          </CollectionsInfoContext.Provider>
+          </AddMessageContext.Provider>
+          </TokenContext.Provider>
+          <Grid id="login-checking-wrapper" container direction="row" alignItems="center" justifyContent="center"
+                sx={{...theme.palette.login_checking_wrapper, visibility:checkedToken ? 'hidden':'visible', display:checkedToken ? 'none':'inherit'}}
+          >
+            <div style={{...theme.palette.login_checking}}>
+              <Grid container direction="column" alignItems="center" justifyContent="center" >
+                  <Typography gutterBottom variant="body2" color="lightgrey">
+                    Restoring previous session, please wait...
+                  </Typography>
+                  <CircularProgress variant="indeterminate" />
+              </Grid>
+            </div>
+          </Grid>
+          { displayAdminSettings &&
+                <TokenContext.Provider value={lastToken}>
+                <CollectionsInfoContext.Provider value={collectionInfo}>
+                <LocationsInfoContext.Provider value={locationInfo}>
+                <SpeciesInfoContext.Provider value={speciesInfo}>
+                <AddMessageContext.Provider value={addMessage}>
+                  <SettingsAdmin loadingCollections={loadingCollections} loadingLocations={loadingLocations}
+                                  onConfirmPassword={confirmAdminPassword} onClose={() => setDisplayAdminSettings(false)}/>
+                </AddMessageContext.Provider>
+                </SpeciesInfoContext.Provider>
+                </LocationsInfoContext.Provider>
+                </CollectionsInfoContext.Provider>
+                </TokenContext.Provider>
+          }
+          { displayOwnerSettings &&
+                <TokenContext.Provider value={lastToken}>
+                <CollectionsInfoContext.Provider value={collectionInfo}>
+                <AddMessageContext.Provider value={addMessage}>
+                  <SettingsOwner loadingCollections={loadingCollections}
+                                  onConfirmPassword={confirmOwnerPassword} onClose={() => setDisplayOwnerSettings(false)}/>
+                </AddMessageContext.Provider>
+                </CollectionsInfoContext.Provider>
+                </TokenContext.Provider>
+          }
+          { // Make sure this is is last
+            messages.length > 0 && 
+              <Grid id="messages-wrapper" container direction="row" alignItems="start" justifyContent="center"
+                    sx={{...theme.palette.messages_wrapper, top: workspaceTop}}>
+                <Messages messages={messages} close_cb={handleCloseMessage}/>
+              </Grid>
+          }
         </UserSettingsContext.Provider>
         </UserNameContext.Provider>
         </SizeContext.Provider>

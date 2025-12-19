@@ -286,60 +286,6 @@ def update_admin_locations(url: str, user: str, password: str, s3_id: str, chang
     return True
 
 
-def load_timed_temp_colls(user: str, admin: bool, s3_id: str) -> Optional[list]:
-    """ Loads collection information from a temporary file
-    Arguments:
-        user: username to find permissions for and filter on
-        admin: if set to True all the collections are returned
-        s3_id: ID associated with the S3 endpoint
-    Return:
-        Returns the loaded collection data if valid, otherwise None is returned
-    """
-    coll_file_path = os.path.join(tempfile.gettempdir(), s3_id + '-' + TEMP_COLLECTION_FILE_NAME)
-    loaded_colls = sdfu.load_timed_info(coll_file_path, TIMEOUT_COLLECTIONS_FILE_SEC)
-    if loaded_colls is None:
-        return None
-
-    # Make sure we have a boolean value for admin and not Truthiness
-    if not admin in [True, False]:
-        admin = False
-
-    # Get this user's permissions
-    user_coll = []
-    for one_coll in loaded_colls:
-        user_has_permissions = False
-        new_coll = one_coll
-        new_coll['permissions'] = None
-        if 'allPermissions' in one_coll and one_coll['allPermissions']:
-            try:
-                for one_perm in one_coll['allPermissions']:
-                    if one_perm and 'usernameProperty' in one_perm and \
-                                one_perm['usernameProperty'] == user:
-                        new_coll['permissions'] = one_perm
-                        user_has_permissions = True
-                        break
-            finally:
-                pass
-
-        # Only return collections that the user has permissions to
-        if admin is True or user_has_permissions is True:
-            user_coll.append(new_coll)
-
-    # Return the collections
-    return user_coll
-
-
-def save_timed_temp_colls(colls: tuple, s3_id: str) -> None:
-    """ Attempts to save the collections to a temporary file on disk
-    Arguments:
-        colls: the collection information to save
-        s3_id: ID associated with the S3 endpoint
-    """
-    # pylint: disable=broad-exception-caught
-    coll_file_path = os.path.join(tempfile.gettempdir(), s3_id + '-' + TEMP_COLLECTION_FILE_NAME)
-    sdfu.save_timed_info(coll_file_path, colls)
-
-
 def format_upload_date(date_json: object) -> str:
     """ Returns the date string from an upload's date JSON
     Arguments:
@@ -670,7 +616,7 @@ def process_upload_changes(s3_url: str, username: str, fetch_password: Callable,
             # Get the image to work with
             if file_ext not in UPLOAD_KNOWN_MOVIE_EXT:
                 S3Connection.download_image(s3_url, username, fetch_password(), one_file['bucket'],
-                                                                        one_file['s3_path'], save_path)
+                                                                    one_file['s3_path'], save_path)
                 cur_species, cur_location, _ = image_utils.get_embedded_image_info(save_path)
                 if cur_species is None:
                     cur_species = []
@@ -728,18 +674,19 @@ def process_upload_changes(s3_url: str, username: str, fetch_password: Callable,
                                 loc_lon = save_location['loc_lon'] if save_location else None,
                                 species_data = save_species):
                         # Put the file back onto S3
-                        S3Connection.upload_file(s3_url, username, fetch_password(), one_file['bucket'],
-                                                                        one_file['s3_path'], save_path)
+                        S3Connection.upload_file(s3_url, username, fetch_password(),
+                                                    one_file['bucket'], one_file['s3_path'],
+                                                    save_path)
 
                         # Register this file as a success
                         success_files.append(one_file)
                     else:
                         # File did not update
-                        failed_files.append(file_info_dict[file_key] if file_key in file_info_dict else\
-                                                one_file|{'species': []})
+                        failed_files.append(file_info_dict[file_key] if file_key in file_info_dict \
+                                                else one_file|{'species': []})
                 else:
-                        # Register this movie file as a success
-                        success_files.append(one_file)
+                    # Register this movie file as a success
+                    success_files.append(one_file)
             else:
                 # Register this file as a success
                 success_files.append(one_file)
@@ -751,6 +698,7 @@ def process_upload_changes(s3_url: str, username: str, fetch_password: Callable,
     finally:
         # Remove the downloading folder
         shutil.rmtree(edit_folder)
+        pass
 
     return success_files, failed_files
 
@@ -830,12 +778,13 @@ def list_uploads_thread(s3_url: str, user_name: str, user_secret: str, bucket: s
     return {'bucket': bucket, 'uploads_info': uploads_info}
 
 
-def species_stats(db: SPARCdDatabase, colls: tuple, s3_url: str, user_name: str, \
+def species_stats(db: SPARCdDatabase, colls: tuple, s3_id: str, s3_url: str, user_name: str, \
                                                     fetch_password: Callable) -> Optional[dict]:
     """ Filters the collections in an efficient manner
     Arguments:
         db - connections to the current database
         colls - the list of collections
+        s3_id - the ID of the S3 instance
         s3_url - the URL to the S3 instance
         user_name - the user's name for S3
         fetch_password - returns the user's password
@@ -847,8 +796,8 @@ def species_stats(db: SPARCdDatabase, colls: tuple, s3_url: str, user_name: str,
 
     # Load all the DB data first
     for one_coll in colls:
-        cur_bucket = one_coll['json']['bucketProperty']
-        uploads_info = db.get_uploads(s3_url, cur_bucket, TIMEOUT_UPLOADS_SEC)
+        cur_bucket = one_coll['bucket']
+        uploads_info = db.get_uploads(s3_id, cur_bucket, TIMEOUT_UPLOADS_SEC)
         if uploads_info is not None and uploads_info:
             uploads_info = [{'bucket':cur_bucket,       \
                              'name':one_upload['name'],                     \
@@ -858,7 +807,7 @@ def species_stats(db: SPARCdDatabase, colls: tuple, s3_url: str, user_name: str,
             s3_uploads.append(cur_bucket)
             continue
 
-        # Filter on current DB uploads
+        # Accumulate the uploads we have
         if len(uploads_info) > 0:
             all_results = all_results + uploads_info
 
@@ -880,9 +829,10 @@ def species_stats(db: SPARCdDatabase, colls: tuple, s3_url: str, user_name: str,
                                          'info':one_upload,
                                          'json':json.dumps(one_upload)
                                         } for one_upload in uploads_results['uploads_info']]
-                        db.save_uploads(s3_url, uploads_results['bucket'], uploads_info)
+                        db.save_uploads(s3_id, uploads_results['bucket'][len(SPARCD_PREFIX):],
+                                                                                    uploads_info)
 
-                        # Filter on current DB uploads
+                        # Accumulate the uploads we have
                         if len(uploads_info) > 0:
                             all_results = all_results + uploads_info
 
