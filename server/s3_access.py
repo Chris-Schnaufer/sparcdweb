@@ -91,7 +91,7 @@ def put_s3_file(minio: Minio, bucket: str, file: str, src_file: str, \
         minio: the s3 client instance
         bucket: the bucket to download from
         file: the S3 file to update
-        src_file: the location file to upload to the server
+        src_file: the location of the file to upload to the server
         content_type: the content type of the upload
     Returns:
         Returns the content of the file or None if there was an error
@@ -102,7 +102,7 @@ def put_s3_file(minio: Minio, bucket: str, file: str, src_file: str, \
         if ex.code != "NoSuchKey":
             raise ex
 
-def get_user_collections(minio: Minio, user: str, buckets: tuple) -> tuple():
+def get_user_collections(minio: Minio, user: str, buckets: tuple) -> tuple:
     """ Gets the collections that the user can access
     Arguments:
         minio: the s3 client instance
