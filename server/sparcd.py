@@ -19,11 +19,12 @@ from dateutil.relativedelta import relativedelta
 from PIL import Image
 
 import requests
-from minio import Minio
-from minio.error import MinioException
 from flask import Flask, make_response, render_template, request, Response, send_file, \
                   send_from_directory, url_for
 from flask_cors import cross_origin
+from minio import Minio
+from minio.error import MinioException
+from moviepy import VideoFileClip
 
 import spd_crypt as crypt
 from camtrap.v016 import camtrap
@@ -1503,13 +1504,12 @@ def sandbox_file():
 
     # Upload all the received files and update the database
     for one_file in request.files:
-        # We always use a JPEG suffix for the temporary file since the uploaded is saved with the
-        # correct name on the server and it makes things easier here (get_embedded_image_info()
-        # needs a JPG extension). Could be confusing on disk however
-        temp_file = tempfile.mkstemp(suffix='.JPG', prefix=SPARCD_PREFIX)
+        file_ext = os.path.splitext(one_file)[1].lower()
+
+        # Get temporary file
+        temp_file = tempfile.mkstemp(suffix=file_ext, prefix=SPARCD_PREFIX)
         os.close(temp_file[0])
 
-        file_ext = os.path.splitext(one_file)[1].lower()
         request.files[one_file].save(temp_file[1])
 
         if not file_ext in sdu.UPLOAD_KNOWN_MOVIE_EXT:
@@ -1542,11 +1542,29 @@ def sandbox_file():
                         f'{request.files[one_file].filename} with upload_id {upload_id}'
                      , flush=True)
 
+        # Check if we need to convert the file to another format
+        if file_ext.lower() == '.mov':
+            mp4_filename = os.path.splitext(temp_file[1])[0] + '.mp4'
+            try:
+                video_clip = VideoFileClip(temp_file[1])
+                video_clip.write_videofile(mp4_filename,
+                                 codec='libx264',
+                                 audio_codec='aac',
+                                 ffmpeg_params=['-preset', 'fast', '-crf', '23', '-threads', '4'],
+                                 logger=None)
+                upload_file = mp4_filename
+            except OSError as ex:
+                print(f'Exception caught when converting MOV to .mp4: {temp_file[1]}', flush=True)
+                print(ex,flush=True)
+                raise ex
+        else:
+            upload_file = temp_file[1]
+
         # Upload the file to S3
         S3Connection.upload_file(s3_url, user_info.name,
                                         get_password(token, db), s3_bucket,
                                         s3_path + '/' + request.files[one_file].filename,
-                                        temp_file[1])
+                                        upload_file)
 
         # Update the database entry to show the file is uploaded
         file_id = db.sandbox_file_uploaded(user_info.name, upload_id,
@@ -1557,6 +1575,8 @@ def sandbox_file():
                    'uploaded but not not found in the database - database not updated')
             if os.path.exists(temp_file[1]):
                 os.unlink(temp_file[1])
+            if os.path.exists(upload_file):
+                os.unlink(upload_file)
             continue
 
         # Check if we need to store the species and locations in camtrap
@@ -1566,6 +1586,8 @@ def sandbox_file():
 
         if os.path.exists(temp_file[1]):
             os.unlink(temp_file[1])
+        if os.path.exists(upload_file):
+            os.unlink(upload_file)
 
     return json.dumps({'success': True})
 

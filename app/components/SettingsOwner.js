@@ -318,7 +318,7 @@ export default function SettingsOwner({loadingCollections, onConfirmPassword, on
     return (
       <Grid id='admin-settings-collections-details-wrapper' container direction="column" justifyContent="center" alignItems="center"
             sx={{width:'100%', padding:'0px 5px 0 5px'}} >
-        <Grid id="admin-settings-collection-header" container direction="row" justifyContent="space-between" alignItems="start"
+        <Grid id="admin-settings-collection-details-header" container direction="row" justifyContent="space-between" alignItems="start"
               sx={{width:'100%', backgroundColor:'lightgrey', borderBottom:'1px solid black'}} >
           <Grid size={5}>
             <Typography nowrap="true" variant="body" sx={{fontWeight:'bold', paddingLeft:'5px'}}>

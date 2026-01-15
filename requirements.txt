@@ -10,3 +10,4 @@ gdal==3.10
 python-dateutil
 requests
 Pillow
+moviepy

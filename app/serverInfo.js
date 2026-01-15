@@ -49,5 +49,6 @@ export const AllowedImageMime = [
 
 /** Allowed movie types **/
 export const AllowedMovieMime = [
-  'video/mp4'
+  'video/mp4',
+  'video/quicktime',
 ];
