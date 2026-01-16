@@ -50,10 +50,11 @@ const DEF_IMG_HEIGHT = 300;
  * @param {object} navigation Set truthiness to true to display the previous and next navigation elements by providing handlers
  * @param {array} species Array of species already available for the image
  * @param {function} onSpeciesChange Function to call when a species is added or a count is modified
+ * @param {object} ref Our reference
  * @returns {object} The UI to render
  */
 export default function ImageEdit({url, type, name, parentId, maxWidth, maxHeight, onClose, adjustments, dropable,
-                                   navigation, species, onSpeciesChange}) {
+                                   navigation, species, onSpeciesChange, ref}) {
   const imageTransformWrapperRef = React.useRef(null);
   const navigationMaskTimeoutId = React.useRef(null);         // Holds the timeout ID for removing the navigation mask
   const speciesItems = React.useContext(SpeciesInfoContext);  // All the species
@@ -84,6 +85,16 @@ export default function ImageEdit({url, type, name, parentId, maxWidth, maxHeigh
   // Used to prevent multiple clicks during navigation
   let navigationLocked = false;
 
+  // Special handling from our parent
+  React.useImperativeHandle(ref, () => ({
+    resetZoom: () => {
+      // Reset the image zoom/pan control
+      if (imageTransformWrapperRef.current) {
+        imageTransformWrapperRef.current.resetTransform();
+      }
+    }
+  }), [imageTransformWrapperRef]);
+
   // Check if the URL is new to us and reset the image manipulations
   React.useLayoutEffect(() => {
     if (lastUrl !== url) {
@@ -92,9 +103,10 @@ export default function ImageEdit({url, type, name, parentId, maxWidth, maxHeigh
       setContrast(50);
       setHue(50);
       setSaturation(50);
+
       setLastUrl(url);
     }
-  }, [lastUrl, setBrightness, setContrast, setHue, setLastUrl, setSaturation, url]);
+  }, [imageTransformWrapperRef, lastUrl, setBrightness, setContrast, setHue, setLastUrl, setSaturation, url]);
 
   /**
    * Sets the image size based upon the rendered image
@@ -544,7 +556,7 @@ export default function ImageEdit({url, type, name, parentId, maxWidth, maxHeigh
   const dropExtras = dropable ? {onDrop:dropHandler,onDragOver:dragoverHandler} : {};
   return (
     <React.Fragment>
-      <Box id="edit-image-frame" sx={{backgroundColor:'white', backgroundImage:'url("loading.gif")', backgroundRepeat:'no-repeat',
+      <Box id="edit-image-frame" ref={ref} sx={{backgroundColor:'white', backgroundImage:'url("loading.gif")', backgroundRepeat:'no-repeat',
                                         backgroundSize:'cover', padding:'10px 8px', position:'relative'}} {...dropExtras} >
         <TransformWrapper ref={imageTransformWrapperRef}>
           <TransformComponent>
