@@ -55,6 +55,7 @@ def __fetch_upload_file_names(url: str, user: str, password: str, bucket: str, u
     return found_files if len(found_files) > 0 else None
 
 
+# DO NOT CALL THIS WITH ACTUAL SETTNGS FILES
 def __confirm_delete_configuration_file(filename: str, url: str, user: str, password: str) -> tuple:
     """ Confirms a configuration file is on S3 and then deletes that file
     Arguments:

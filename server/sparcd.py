@@ -10,8 +10,9 @@ import os
 import sys
 import tempfile
 import threading
+import time
 import types
-from typing import Optional
+from typing import Callable, Optional
 import uuid
 import dateutil.parser
 import dateutil.tz
@@ -110,6 +111,14 @@ KNOWN_QUERY_KEYS = ['collections','dayofweek','elevations','endDate','hour','loc
 # Species that aren't part of the statistics
 SPECIES_STATS_EXCLUDE = ('Ghost', 'None', 'Test')
 
+# Maximum tries to get a lock for loading collections
+MAX_STAT_FETCH_TRIES = 10
+# Maximium number of seconds to wait for collections to get loaded before giving up
+MAX_STAT_FETCH_WAIT_SEC = 5 * 60
+# Sleep interval value while waiting for collections to load
+STAT_FETCH_WAIT_INTERVAL_SEC = (MAX_STAT_FETCH_WAIT_SEC) / \
+                                                ((MAX_STAT_FETCH_TRIES+1)*MAX_STAT_FETCH_TRIES/2)
+
 # Don't run if we don't have a database or passcode
 if not DEFAULT_DB_PATH or not os.path.exists(DEFAULT_DB_PATH):
     sys.exit(f'Database not found. Set the {ENV_NAME_DB} environment variable to the full path ' \
@@ -137,6 +146,68 @@ del _db
 _db = None
 print(f'Using database at {DEFAULT_DB_PATH}', flush=True)
 print(f'Temporary folder at {tempfile.gettempdir()}', flush=True)
+
+
+def load_species_stats(db: SPARCdDatabase, is_admin: bool, s3_url: str, user_name: str, \
+                                                    fetch_password: Callable) -> Optional[tuple]:
+    """ Generates the species stats
+    Arguments:
+        db: the database to access
+        s3_id: the unique ID of the S3 instance
+        s3_url: the URL to the S3 instance
+        user_name: the S3 user name
+        fetch_password: callable that returns the S3 password
+    Return:
+        Returns the loaded stats or None if a problem is found
+    """
+    loaded_stats = None
+
+    lock_name = 'species_stats'
+
+    stats_temp_filename = os.path.join(tempfile.gettempdir(), hash2str(s3_url) + \
+                                                            TEMP_SPECIES_STATS_FILE_NAME_POSTFIX)
+    loaded_stats = sdfu.load_timed_info(stats_temp_filename, TEMP_SPECIES_STATS_FILE_TIMEOUT_SEC)
+    if loaded_stats is None:
+        # If we can get the lock we load the stats, otherwise wait for the stats to generate
+        have_lock = False
+        lock_id = None
+        try:
+            lock_id = db.get_lock(lock_name)
+            if lock_id is not None:
+                have_lock = True
+
+                # Get collections from the database
+                coll_info = sdc.load_collections(db, hash2str(s3_url), is_admin, s3_url, user_name,
+                                                                                    fetch_password)
+                if coll_info:
+                    # Generate the stats
+                    loaded_stats = sdu.species_stats(db, coll_info, hash2str(s3_url),  s3_url,
+                                                                        user_name, fetch_password)
+
+                db.release_lock(lock_name, lock_id)
+                have_lock = False
+                lock_id = None
+
+                if loaded_stats is not None:
+                    sdfu.save_timed_info(stats_temp_filename, loaded_stats)
+            else:
+                # We wait for the collections to get loaded
+                # This uses a linear wait/sleep but that can be changed
+                tries = 0
+                while tries < MAX_STAT_FETCH_TRIES:
+                    tries += 1
+                    time.sleep(tries * STAT_FETCH_WAIT_INTERVAL_SEC)
+
+                    loaded_stats = sdfu.load_timed_info(stats_temp_filename,
+                                                                TEMP_SPECIES_STATS_FILE_TIMEOUT_SEC)
+                    if loaded_stats:
+                        tries += MAX_STAT_FETCH_TRIES
+        finally:
+            # If we have the lock, something must have happened so we release the lock
+            if have_lock is True and lock_id is not None:
+                db.release_lock(lock_name, lock_id)
+
+    return loaded_stats
 
 
 def get_password(token: str, db: SPARCdDatabase) -> Optional[str]:
@@ -602,26 +673,14 @@ def species_stats():
     s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
 
     # Check if we already have the stats
-    stats_temp_filename = os.path.join(tempfile.gettempdir(), hash2str(s3_url) + \
-                                                            TEMP_SPECIES_STATS_FILE_NAME_POSTFIX)
-    stats = sdfu.load_timed_info(stats_temp_filename, TEMP_SPECIES_STATS_FILE_TIMEOUT_SEC)
-    if stats is None:
-        # Get collections from the database
-        coll_info = sdc.load_collections(db, hash2str(s3_url), bool(user_info.admin), s3_url,
+    stats = load_species_stats(db, bool(user_info.admin), s3_url,
                                                     user_info.name, lambda: get_password(token, db))
-        if coll_info:
-            # Generate the stats
-            stats = sdu.species_stats(db, coll_info, hash2str(s3_url),  s3_url,
-                                                    user_info.name, lambda: get_password(token, db))
-
-            if stats is not None:
-                sdfu.save_timed_info(stats_temp_filename, stats)
-
-                # Remove the unofficial species file so that if can be recreated
-                otherspecies_temp_filename = os.path.join(tempfile.gettempdir(),  \
-                                            hash2str(s3_url) +TEMP_OTHER_SPECIES_FILE_NAME_POSTFIX)
-                if os.path.exists(otherspecies_temp_filename):
-                    os.unlink(otherspecies_temp_filename)
+    if stats is not None:
+        # Remove the unofficial species file so that it can be recreated
+        otherspecies_temp_filename = os.path.join(tempfile.gettempdir(),  \
+                                    hash2str(s3_url) +TEMP_OTHER_SPECIES_FILE_NAME_POSTFIX)
+        if os.path.exists(otherspecies_temp_filename):
+            os.unlink(otherspecies_temp_filename)
 
     if stats is None:
         return "Not Found", 404

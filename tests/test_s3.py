@@ -281,7 +281,8 @@ def test_get_s3_file(s3_endpoint, s3_name, s3_secret, s3_test_bucket, s3_test_up
 
             assert data == one_test['value']
         finally:
-            os.unlink(temp_file[1])
+            if os.path.exists(temp_file[1]):
+                os.unlink(temp_file[1])
 
 # pylint: disable=redefined-outer-name
 def test_get_user_collections(s3_endpoint, s3_name, s3_secret, s3_test_bucket) -> None:

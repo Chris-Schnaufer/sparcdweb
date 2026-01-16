@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 from cryptography.fernet import InvalidToken
 
 from sparcd_file_utils import load_timed_info, save_timed_info
-from s3_access import S3Connection
+from s3_access import S3Connection, SPECIES_JSON_FILE_NAME
 
 
 def web_to_s3_url(url: str, decrypt: Callable) -> str:
@@ -17,6 +17,7 @@ def web_to_s3_url(url: str, decrypt: Callable) -> str:
         http and https to port numbers
     Arguments:
         url: the URL to convert
+        decrypt: function to call if needing to decrypt the url
     Return:
         Returns a URL that can be used to access minio
     Notes:
@@ -81,7 +82,7 @@ def load_sparcd_config(sparcd_file: str, timed_file: str, url: str, user: str, \
 
 
 def save_sparcd_config(config_data, sparcd_file: str, timed_file: str, url: str, user: str, \
-                                                            fetch_password: Callable):
+                                                            fetch_password: Callable) -> None:
     """ Saves the species on S3 and locally
     Arguments:
         config_data: the data to save
@@ -95,4 +96,5 @@ def save_sparcd_config(config_data, sparcd_file: str, timed_file: str, url: str,
     S3Connection.put_configuration(sparcd_file, json.dumps(config_data, indent=4), url, user,
                                                                                 fetch_password())
 
-    save_timed_info(timed_file, config_data)
+    config_file_path = os.path.join(tempfile.gettempdir(), timed_file)
+    save_timed_info(config_file_path, config_data)
