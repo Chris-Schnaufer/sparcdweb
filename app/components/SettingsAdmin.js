@@ -1,6 +1,8 @@
 /** @module components/SettingsAdmin */
 
 import * as React from 'react';
+import ArrowDropDownOutlinedIcon from '@mui/icons-material/ArrowDropDownOutlined';
+import ArrowDropUpOutlinedIcon from '@mui/icons-material/ArrowDropUpOutlined';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
@@ -35,6 +37,14 @@ const EditingStates = {
 };
 
 /**
+ * The direction of a sort
+ */
+const SortDirection = {
+  Ascending: 0,
+  Descending: 1,
+};
+
+/**
  * Returns the UI for administrator tasks
  * @function
  * @param {boolean} loadingCollections Flag indicating collections are being loaded
@@ -64,6 +74,8 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
   const [selectedLocations, setSelectedLocations] = React.useState(loadingLocations ? [] : locationItems); // Used for searches
   const [selectedSpecies, setSelectedSpecies] = React.useState(masterSpecies || []); // Used for searches
   const [selectedUsers, setSelectedUsers] = React.useState(userInfo || []); // Used for searches
+  const [sortColumn, setSortColumn] = React.useState(1);  // Used to indicate which column is sorted (1 represents the first column)
+  const [sortDirection, setSortDirection] = React.useState(SortDirection.Ascending);  // Used to indicate which way a column is sorted
 
   // Check if we have stored changes on the server
   React.useEffect(() => {
@@ -751,6 +763,140 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
   }
 
   /**
+   * Sorts user records by the specified column
+   * @function
+   * @param {string} sortColumn The name of the column to sort on
+   * @param {object} direction The direction to sort in (see SortDirectio)
+   */
+  const SortUsers = React.useCallback((sortColumn, direction) => {
+    const curSortInfo = selectedUsers || [];
+    switch(sortColumn) {
+      case 'name':
+        setSelectedUsers(curSortInfo.sort((a, b) => direction === SortDirection.Ascending ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)));
+        break;
+      case 'email':
+        setSelectedUsers(curSortInfo.sort((a, b) => direction === SortDirection.Ascending ? a.email.localeCompare(b.email) : b.email.localeCompare(a.email)));
+        break;
+      case 'admin':
+        setSelectedUsers(curSortInfo.sort((a, b) => direction === SortDirection.Ascending ? (a.admin === b.admin ? 0 : -1) : (a.admin === b.admin ? -1 : 0) ));
+        break;
+      case 'auto':
+        setSelectedUsers(curSortInfo.sort((a, b) => direction === SortDirection.Ascending ? (a.autoAdded === b.autoAdded ? 0 : -1) : (a.autoAdded === b.autoAdded ? -1 : 0) ));
+        break;
+    }
+  }, [selectedUsers, setSelectedUsers]);
+
+  /**
+   * Sorts collections records by the specified column
+   * @function
+   * @param {string} sortColumn The name of the column to sort on
+   * @param {object} direction The direction to sort in (see SortDirectio)
+   */
+  const SortCollections = React.useCallback((sortColumn, direction) => {
+    const curSortInfo = selectedCollections || [];
+    switch(sortColumn) {
+      case 'name':
+        setSelectedCollections(curSortInfo.sort((a, b) => direction === SortDirection.Ascending ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)));
+        break;
+      case 'id':
+        setSelectedCollections(curSortInfo.sort((a, b) => direction === SortDirection.Ascending ? a.id.localeCompare(b.id) : b.id.localeCompare(a.id)));
+        break;
+      case 'email':
+        setSelectedCollections(curSortInfo.sort((a, b) => direction === SortDirection.Ascending ? a.email.localeCompare(b.email) : b.email.localeCompare(a.email)));
+        break;
+    }
+  }, [selectedCollections, setSelectedCollections]);
+
+  /**
+   * Sorts species records by the specified column
+   * @function
+   * @param {string} sortColumn The name of the column to sort on
+   * @param {object} direction The direction to sort in (see SortDirectio)
+   */
+  const SortSpecies = React.useCallback((sortColumn, direction) => {
+    const curSortInfo = selectedSpecies || [];
+    switch(sortColumn) {
+      case 'name':
+        setSelectedSpecies(curSortInfo.sort((a, b) => direction === SortDirection.Ascending ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)));
+        break;
+      case 'sciName':
+        setSelectedSpecies(curSortInfo.sort((a, b) => direction === SortDirection.Ascending ? a.scientificName.localeCompare(b.scientificName) :
+                                                                                                                b.scientificName.localeCompare(a.scientificName)));
+        break;
+      case 'key':
+        setSelectedSpecies(curSortInfo.sort((a, b) => a.keyBinding  && b.keyBinding ? 
+                                                        direction === SortDirection.Ascending ? a.keyBinding.localeCompare(b.keyBinding) : b.keyBinding.localeCompare(a.keyBinding) :
+                                                          !a.keyBinding ? 1 : -1
+                                            )
+                          );
+        break;
+    }
+  }, [selectedSpecies, setSelectedSpecies]);
+
+  /**
+   * Sorts Locations records by the specified column
+   * @function
+   * @param {string} sortColumn The name of the column to sort on
+   * @param {object} direction The direction to sort in (see SortDirectio)
+   */
+  const SortLocations = React.useCallback((sortColumn, direction) => {
+    const curSortInfo = selectedLocations || [];
+    switch(sortColumn) {
+      case 'name':
+        setSelectedSpecies(curSortInfo.sort((a, b) => direction === SortDirection.Ascending ? a.nameProperty.localeCompare(b.nameProperty) : 
+                                                                                                                  b.nameProperty.localeCompare(a.nameProperty)));
+        break;
+      case 'id':
+        setSelectedSpecies(curSortInfo.sort((a, b) => direction === SortDirection.Ascending ? a.idProperty.localeCompare(b.idProperty) :
+                                                                                                                b.idProperty.localeCompare(a.idProperty)));
+        break;
+      case 'active':
+        setSelectedSpecies(curSortInfo.sort((a, b) => direction === SortDirection.Ascending ? (a.active === b.active ? 0 : 1) : (a.active === b.active ? 1 : 0) ));
+        break;
+    }
+  }, [selectedSpecies, setSelectedSpecies]);
+
+  /**
+   * Generates the UI for a column heading
+   * @function
+   * @param {object} selectId The ID used to identify the column when selected
+   * @param {boolean} sorted True if the column is sorted
+   * @param {object} sortDirection The direction of the sort (see SortDirection). Ignored if sorted is not truthy True
+   * @param {int} size The size of the column
+   * @param {string} title The title of the column
+   * @param {object} titleStyle Addtional styling object
+   * @param {function} {sortCb} Optional column to sort by
+   * @return {object} The UI object to render
+   */
+  const GenerateSettingHeader = React.useCallback((selectId, sorted, sortDirection, size, title, titleStyle, sortCb) => {
+    titleStyle = titleStyle || {};
+
+    return (
+          <Grid container direction="row" justifyContent="space-between" alignItems="start" wrap="nowrap" size={size} sx={{paddingLeft:"2px", borderRight:"1px solid grey"}} 
+                onClick={() => {
+                                const oldSC = sortColumn;
+                                const newSortDirection = oldSC === selectId ? (sortDirection===SortDirection.Ascending?SortDirection.Descending:SortDirection.Ascending) : SortDirection.Ascending;
+                                setSortColumn(selectId);
+                                setSortDirection(newSortDirection);
+                                if (sortCb && typeof(sortCb) === 'function') {
+                                  sortCb(newSortDirection);
+                                }
+                              }
+                        }
+            >
+            <Grid sx={{...titleStyle}} >
+              <Typography nowrap="true" variant="body" sx={{fontWeight:'bold'}}>
+                {title}
+              </Typography>
+            </Grid>
+            {sorted && sortDirection === SortDirection.Ascending && <ArrowDropUpOutlinedIcon />}
+            {sorted && sortDirection === SortDirection.Descending && <ArrowDropDownOutlinedIcon />}
+            {!sorted && <ArrowDropDownOutlinedIcon sx={{visibility:"hidden"}} />}
+          </Grid>
+    );
+  }, [setSortColumn, setSortDirection, sortColumn, sortDirection]);
+
+  /**
    * Returns the UI for editing users. Starts the user information fetch if we don't have it already
    * @function
    * @param {function} dblClickFunc Function to handle the user double clicking on a row
@@ -777,31 +923,11 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
             sx={{width:'100%', padding:'0px 5px 0 5px'}} >
         <Grid id="admin-settings-collection-header" container direction="row" justifyContent="space-between" alignItems="start"
               sx={{width:'100%', backgroundColor:'lightgrey', borderBottom:'1px solid black'}} >
-          <Grid size={2}>
-            <Typography nowrap="true" variant="body" sx={{fontWeight:'bold', paddingLeft:'5px'}}>
-              Name
-            </Typography>
-          </Grid>
-          <Grid size={3}>
-            <Typography nowrap="true" variant="body" sx={{fontWeight:'bold'}}>
-              Email
-            </Typography>
-          </Grid>
-          <Grid size={5}>
-            <Typography nowrap="true" variant="body" sx={{fontWeight:'bold'}}>
-              Collections
-            </Typography>
-          </Grid>
-          <Grid sizeo={1}>
-            <Typography nowrap="true" variant="body" sx={{fontWeight:'bold'}}>
-              Admin
-            </Typography>
-          </Grid>
-          <Grid sizeo={1} sx={{leftMargin:'auto'}}>
-            <Typography nowrap="true" variant="body" sx={{fontWeight:'bold', paddingRight:'5px'}}>
-              Auto
-            </Typography>
-          </Grid>
+          { GenerateSettingHeader(1, sortColumn === 1, sortDirection, 2, 'Name', {marginRight:"auto"}, (dir)=>SortUsers('name', dir) )}
+          { GenerateSettingHeader(2, sortColumn === 2, sortDirection, 3, 'Email', {marginRight:"auto"}, (dir)=>SortUsers('email', dir) )}
+          { GenerateSettingHeader(3, false,            sortDirection, 5, 'Collections', {marginRight:"auto"})}
+          { GenerateSettingHeader(4, sortColumn === 4, sortDirection, 1, 'Admin', {marginLeft:"auto"}, (dir)=>SortUsers('admin', dir) )}
+          { GenerateSettingHeader(5, sortColumn === 5, sortDirection, 1, 'Auto', {marginLeft:"auto", paddingRight:"5px"}, (dir)=>SortUsers('auto', dir) )}
         </Grid>
         <Grid id='admin-settings-details' sx={{overflowX:'scroll',width:'100%', maxHeight:detailsHeight+'px' }}>
         { curUserInfo.map((item,idx) => 
@@ -835,11 +961,11 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
                 </Typography>
               </Grid>
               <Grid size={1}>
-                <Typography nowrap="true" variant="body2" align="right">
+                <Typography nowrap="true" variant="body2" align="center">
                   {item.admin ? 'Y' : ' '}
                 </Typography>
               </Grid>
-              <Grid size={1}>
+              <Grid size={1} sx={{paddingRight:"5px"}} >
                 <Typography nowrap="true" variant="body2" align="right">
                   {item.autoAdded ? 'Y' : 'N'}
                 </Typography>
@@ -870,23 +996,11 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
     return (
       <Grid id='admin-settings-collections-details-wrapper' container direction="column" justifyContent="center" alignItems="center"
             sx={{width:'100%', padding:'0px 5px 0 5px'}} >
-        <Grid id="admin-settings-collection-header" container direction="row" justifyContent="space-between" alignItems="start"
+        <Grid id="admin-settings-collection-details-header" container direction="row" justifyContent="space-between" alignItems="start"
               sx={{width:'100%', backgroundColor:'lightgrey', borderBottom:'1px solid black'}} >
-          <Grid size={5}>
-            <Typography nowrap="true" variant="body" sx={{fontWeight:'bold', paddingLeft:'5px'}}>
-              Name
-            </Typography>
-          </Grid>
-          <Grid size={4} sx={{marginRight:'auto'}}>
-            <Typography nowrap="true" variant="body" sx={{fontWeight:'bold'}}>
-              ID
-            </Typography>
-          </Grid>
-          <Grid sizeo={3} sx={{leftMargin:'auto'}}>
-            <Typography nowrap="true" variant="body" sx={{fontWeight:'bold', paddingRight:'5px'}}>
-              email
-            </Typography>
-          </Grid>
+          { GenerateSettingHeader(1, sortColumn === 1, sortDirection, 5, 'Name', {marginRight:"auto"}, (dir)=>SortCollections('name', dir) )}
+          { GenerateSettingHeader(2, sortColumn === 2, sortDirection, 4, 'ID', {marginRight:"auto"}, (dir)=>SortCollections('id', dir) )}
+          { GenerateSettingHeader(3, sortColumn === 3, sortDirection, 3, 'email', {marginLeft:"auto", paddingRight:"5px"}, (dir)=>SortCollections('email', dir) )}
         </Grid>
         <Grid id='admin-settings-details' sx={{overflowX:'scroll',width:'100%', maxHeight:detailsHeight+'px' }}>
         { selectedCollections.map((item, idx) => 
@@ -941,21 +1055,9 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
             sx={{width:'100%', padding:'0px 5px 0 5px'}} >
         <Grid id="admin-settings-species-header" container direction="row" justifyContent="space-between" alignItems="start"
               sx={{width:'100%', backgroundColor:'lightgrey', borderBottom:'1px solid black'}} >
-          <Grid size={5}>
-            <Typography nowrap="true" variant="body" sx={{fontWeight:'bold', paddingLeft:'5px'}}>
-              Name
-            </Typography>
-          </Grid>
-          <Grid size={5} sx={{marginRight:'auto'}}>
-            <Typography nowrap="true" variant="body" sx={{fontWeight:'bold'}}>
-              Scientific Name
-            </Typography>
-          </Grid>
-          <Grid sizeo={2} sx={{leftMargin:'auto'}}>
-            <Typography nowrap="true" variant="body" sx={{fontWeight:'bold', paddingRight:'5px'}}>
-              Key Binding
-            </Typography>
-          </Grid>
+          { GenerateSettingHeader(1, sortColumn === 1, sortDirection, 5, 'Name', {marginRight:"auto"}, (dir)=>SortSpecies('name', dir) )}
+          { GenerateSettingHeader(2, sortColumn === 2, sortDirection, 5, 'Scientific Name', {marginRight:"auto"}, (dir)=>SortSpecies('sciName', dir) )}
+          { GenerateSettingHeader(3, sortColumn === 3, sortDirection, 2, 'Key Binding', {marginLeft:"auto", paddingRight:"5px"}, (dir)=>SortSpecies('key', dir) )}
         </Grid>
         <Grid id='admin-settings-details' sx={{overflowX:'scroll',width:'100%', maxHeight:detailsHeight+'px' }}>
         { curSpecies.map((item, idx) => 
@@ -1004,26 +1106,10 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
             sx={{width:'100%', padding:'0px 5px 0 5px'}} >
         <Grid id="admin-settings-species-header" container direction="row" justifyContent="space-between" alignItems="start"
               sx={{width:'100%', backgroundColor:'lightgrey', borderBottom:'1px solid black'}} >
-          <Grid size={5}>
-            <Typography nowrap="true" variant="body" sx={{fontWeight:'bold', paddingLeft:'5px'}}>
-              Name
-            </Typography>
-          </Grid>
-          <Grid size={3} sx={{marginRight:'auto'}}>
-            <Typography nowrap="true" variant="body" sx={{fontWeight:'bold'}}>
-              ID
-            </Typography>
-          </Grid>
-          <Grid size={2} sx={{marginRight:'auto'}}>
-            <Typography nowrap="true" variant="body" sx={{fontWeight:'bold'}} align="center" >
-              Active
-            </Typography>
-          </Grid>
-          <Grid sizeo={2} sx={{marginLeft:'auto'}}>
-            <Typography nowrap="true" variant="body" sx={{fontWeight:'bold', paddingRight:'5px'}}>
-              Location
-            </Typography>
-          </Grid>
+          { GenerateSettingHeader(1, sortColumn === 1, sortDirection, 5, 'Name', {marginRight:"auto"}, (dir)=>SortLocations('name', dir) )}
+          { GenerateSettingHeader(2, sortColumn === 2, sortDirection, 3, 'ID', {marginRight:"auto"}, (dir)=>SortLocations('id', dir) )}
+          { GenerateSettingHeader(3, sortColumn === 3, sortDirection, 2, 'Active', {marginRight:"auto"}, (dir)=>SortLocations('active', dir) )}
+          { GenerateSettingHeader(4, false,            sortDirection, 2, 'Location', {marginLeft:"auto", paddingRight:"5px"} )}
         </Grid>
         <Grid id='admin-settings-details' sx={{overflowX:'scroll',width:'100%', maxHeight:detailsHeight+'px' }}>
         { selectedLocations.map((item, idx) => {
@@ -1042,7 +1128,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
                 </Grid>
                 <Grid size={2} sx={{marginRight:'auto'}}>
                   <Typography nowrap="true" variant="body2" align="center">
-                    {item.activeProperty || idx == 0 ? 'Y' : ' '}
+                    {item.activeProperty ? 'Y' : ' '}
                   </Typography>
                 </Grid>
                 <Grid size={2} sx={{marginLeft:'auto'}} >

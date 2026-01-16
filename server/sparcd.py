@@ -10,8 +10,9 @@ import os
 import sys
 import tempfile
 import threading
+import time
 import types
-from typing import Optional
+from typing import Callable, Optional
 import uuid
 import dateutil.parser
 import dateutil.tz
@@ -19,11 +20,12 @@ from dateutil.relativedelta import relativedelta
 from PIL import Image
 
 import requests
-from minio import Minio
-from minio.error import MinioException
 from flask import Flask, make_response, render_template, request, Response, send_file, \
                   send_from_directory, url_for
 from flask_cors import cross_origin
+from minio import Minio
+from minio.error import MinioException
+from moviepy import VideoFileClip
 
 import spd_crypt as crypt
 from camtrap.v016 import camtrap
@@ -96,6 +98,9 @@ TEMP_UPLOAD_STATS_FILE_TIMEOUT_SEC = 1 * 60 * 60
 TEMP_SPECIES_STATS_FILE_NAME_POSTFIX = '-' + SPARCD_PREFIX + 'species-stats.json'
 TEMP_SPECIES_STATS_FILE_TIMEOUT_SEC = 12 * 60 * 60
 
+# Name of temporary upload stats file
+TEMP_OTHER_SPECIES_FILE_NAME_POSTFIX = '-' + SPARCD_PREFIX + 'other-species.json'
+
 # UI definitions for serving
 DEFAULT_TEMPLATE_PAGE = 'index.html'
 
@@ -105,6 +110,14 @@ KNOWN_QUERY_KEYS = ['collections','dayofweek','elevations','endDate','hour','loc
 
 # Species that aren't part of the statistics
 SPECIES_STATS_EXCLUDE = ('Ghost', 'None', 'Test')
+
+# Maximum tries to get a lock for loading collections
+MAX_STAT_FETCH_TRIES = 10
+# Maximium number of seconds to wait for collections to get loaded before giving up
+MAX_STAT_FETCH_WAIT_SEC = 5 * 60
+# Sleep interval value while waiting for collections to load
+STAT_FETCH_WAIT_INTERVAL_SEC = (MAX_STAT_FETCH_WAIT_SEC) / \
+                                                ((MAX_STAT_FETCH_TRIES+1)*MAX_STAT_FETCH_TRIES/2)
 
 # Don't run if we don't have a database or passcode
 if not DEFAULT_DB_PATH or not os.path.exists(DEFAULT_DB_PATH):
@@ -133,6 +146,68 @@ del _db
 _db = None
 print(f'Using database at {DEFAULT_DB_PATH}', flush=True)
 print(f'Temporary folder at {tempfile.gettempdir()}', flush=True)
+
+
+def load_species_stats(db: SPARCdDatabase, is_admin: bool, s3_url: str, user_name: str, \
+                                                    fetch_password: Callable) -> Optional[tuple]:
+    """ Generates the species stats
+    Arguments:
+        db: the database to access
+        s3_id: the unique ID of the S3 instance
+        s3_url: the URL to the S3 instance
+        user_name: the S3 user name
+        fetch_password: callable that returns the S3 password
+    Return:
+        Returns the loaded stats or None if a problem is found
+    """
+    loaded_stats = None
+
+    lock_name = 'species_stats'
+
+    stats_temp_filename = os.path.join(tempfile.gettempdir(), hash2str(s3_url) + \
+                                                            TEMP_SPECIES_STATS_FILE_NAME_POSTFIX)
+    loaded_stats = sdfu.load_timed_info(stats_temp_filename, TEMP_SPECIES_STATS_FILE_TIMEOUT_SEC)
+    if loaded_stats is None:
+        # If we can get the lock we load the stats, otherwise wait for the stats to generate
+        have_lock = False
+        lock_id = None
+        try:
+            lock_id = db.get_lock(lock_name)
+            if lock_id is not None:
+                have_lock = True
+
+                # Get collections from the database
+                coll_info = sdc.load_collections(db, hash2str(s3_url), is_admin, s3_url, user_name,
+                                                                                    fetch_password)
+                if coll_info:
+                    # Generate the stats
+                    loaded_stats = sdu.species_stats(db, coll_info, hash2str(s3_url),  s3_url,
+                                                                        user_name, fetch_password)
+
+                db.release_lock(lock_name, lock_id)
+                have_lock = False
+                lock_id = None
+
+                if loaded_stats is not None:
+                    sdfu.save_timed_info(stats_temp_filename, loaded_stats)
+            else:
+                # We wait for the collections to get loaded
+                # This uses a linear wait/sleep but that can be changed
+                tries = 0
+                while tries < MAX_STAT_FETCH_TRIES:
+                    tries += 1
+                    time.sleep(tries * STAT_FETCH_WAIT_INTERVAL_SEC)
+
+                    loaded_stats = sdfu.load_timed_info(stats_temp_filename,
+                                                                TEMP_SPECIES_STATS_FILE_TIMEOUT_SEC)
+                    if loaded_stats:
+                        tries += MAX_STAT_FETCH_TRIES
+        finally:
+            # If we have the lock, something must have happened so we release the lock
+            if have_lock is True and lock_id is not None:
+                db.release_lock(lock_name, lock_id)
+
+    return loaded_stats
 
 
 def get_password(token: str, db: SPARCdDatabase) -> Optional[str]:
@@ -598,26 +673,91 @@ def species_stats():
     s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
 
     # Check if we already have the stats
-    stats_temp_filename = os.path.join(tempfile.gettempdir(), hash2str(s3_url) + \
-                                                            TEMP_SPECIES_STATS_FILE_NAME_POSTFIX)
-    stats = sdfu.load_timed_info(stats_temp_filename, TEMP_SPECIES_STATS_FILE_TIMEOUT_SEC)
-    if stats is None:
-        # Get collections from the database
-        coll_info = sdc.load_collections(db, hash2str(s3_url), bool(user_info.admin), s3_url,
+    stats = load_species_stats(db, bool(user_info.admin), s3_url,
                                                     user_info.name, lambda: get_password(token, db))
-        if coll_info:
-            # Generate the stats
-            stats = sdu.species_stats(db, coll_info, hash2str(s3_url),  s3_url,
-                                                    user_info.name, lambda: get_password(token, db))
-
-            if stats is not None:
-                sdfu.save_timed_info(stats_temp_filename, stats)
+    if stats is not None:
+        # Remove the unofficial species file so that it can be recreated
+        otherspecies_temp_filename = os.path.join(tempfile.gettempdir(),  \
+                                    hash2str(s3_url) +TEMP_OTHER_SPECIES_FILE_NAME_POSTFIX)
+        if os.path.exists(otherspecies_temp_filename):
+            os.unlink(otherspecies_temp_filename)
 
     if stats is None:
         return "Not Found", 404
 
-    return json.dumps([[key, value] for key, value in stats.items() if key \
+    return json.dumps([[key, value['count']] for key, value in stats.items() if key \
                                                                     not in SPECIES_STATS_EXCLUDE])
+
+
+@app.route('/speciesOther', methods = ['GET'])
+@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+def species_other():
+    """ Returns the species that are not part of the official set
+    Arguments:
+        token - the token to check for
+    Return:
+        Returns the found unofficial species
+    """
+    db = SPARCdDatabase(DEFAULT_DB_PATH)
+    token = request.args.get('t')
+    print('SPECIES OTHER', request, flush=True)
+
+    # Check the credentials
+    token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
+    if token_valid is None or user_info is None:
+        return "Not Found", 404
+    if not token_valid or not user_info:
+        return "Unauthorized", 401
+
+    client_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.environ.get('HTTP_ORIGIN', \
+                                    request.environ.get('HTTP_REFERER',request.remote_addr) \
+                                    ))
+    client_user_agent =  request.environ.get('HTTP_USER_AGENT', None)
+    if not client_ip or client_ip is None or not client_user_agent or client_user_agent is None:
+        return "Not Found", 404
+
+    user_agent_hash = hashlib.sha256(client_user_agent.encode('utf-8')).hexdigest()
+    token_valid, user_info = sdu.token_is_valid(token, client_ip, user_agent_hash, db,
+                                                                            SESSION_EXPIRE_SECONDS)
+    if not token_valid or not user_info:
+        return "Unauthorized", 401
+
+    s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
+
+    # Check if we have the unofficial species already
+    # The temporary file expires after 30 days, it will get regenerated when species load again
+    otherspecies_temp_filename = os.path.join(tempfile.gettempdir(), hash2str(s3_url) + \
+                                                            TEMP_OTHER_SPECIES_FILE_NAME_POSTFIX)
+    others = sdfu.load_timed_info(otherspecies_temp_filename, 30 *24 * 60 * 60)
+    if others:
+        return json.dumps(others)
+
+    # Check if we have the stats needed to regenerate the unofficial species
+    stats_temp_filename = os.path.join(tempfile.gettempdir(), hash2str(s3_url) + \
+                                                            TEMP_SPECIES_STATS_FILE_NAME_POSTFIX)
+    cur_stats = sdfu.load_timed_info(stats_temp_filename, TEMP_SPECIES_STATS_FILE_TIMEOUT_SEC)
+    if cur_stats is None:
+        return json.dumps([])
+
+    # Get the official species
+    cur_species = s3u.load_sparcd_config(SPECIES_JSON_FILE_NAME,
+                                            hash2str(s3_url)+'-'+TEMP_SPECIES_FILE_NAME,
+                                            s3_url, user_info.name, lambda: get_password(token, db))
+    if not cur_species:
+        return json.dumps([])
+
+    # For each species in the official list, we mark that species
+    for one_species in cur_species:
+        if one_species['name'] in cur_stats:
+            cur_stats[one_species['name']]['count'] = -22
+
+    # Collect the unofficial species names by filtering out our matches
+    other_species = [{'name':one_key, 'scientificName':cur_stats[one_key]['scientificName']} \
+                                    for one_key in cur_stats if cur_stats[one_key]['count'] != -22]
+
+    sdfu.save_timed_info(otherspecies_temp_filename, other_species)
+
+    return json.dumps(other_species)
 
 
 @app.route('/uploadImages', methods = ['POST'])
@@ -651,11 +791,16 @@ def upload_images():
     if not collection_id or not collection_upload:
         return "Not Found", 406
 
+    # Get the bucket
+    s3_bucket = collection_id if not collection_id.startswith(SPARCD_PREFIX) else \
+                                                                collection_id[len(SPARCD_PREFIX):]
+
     # The URL to the S3 instance
     s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
 
-    all_images, _ = sdc.get_upload_images(db, hash2str(s3_url), collection_id, collection_upload,
-                                                                s3_url, user_info.name,
+    all_images, _ = sdc.get_upload_images(db, hash2str(s3_url), s3_bucket, collection_id,
+                                                                collection_upload, s3_url,
+                                                                user_info.name,
                                                                 lambda: get_password(token, db))
 
     if isinstance(all_images, types.GeneratorType):
@@ -1418,13 +1563,12 @@ def sandbox_file():
 
     # Upload all the received files and update the database
     for one_file in request.files:
-        # We always use a JPEG suffix for the temporary file since the uploaded is saved with the
-        # correct name on the server and it makes things easier here (get_embedded_image_info()
-        # needs a JPG extension). Could be confusing on disk however
-        temp_file = tempfile.mkstemp(suffix='.JPG', prefix=SPARCD_PREFIX)
+        file_ext = os.path.splitext(one_file)[1].lower()
+
+        # Get temporary file
+        temp_file = tempfile.mkstemp(suffix=file_ext, prefix=SPARCD_PREFIX)
         os.close(temp_file[0])
 
-        file_ext = os.path.splitext(one_file)[1].lower()
         request.files[one_file].save(temp_file[1])
 
         if not file_ext in sdu.UPLOAD_KNOWN_MOVIE_EXT:
@@ -1457,11 +1601,29 @@ def sandbox_file():
                         f'{request.files[one_file].filename} with upload_id {upload_id}'
                      , flush=True)
 
+        # Check if we need to convert the file to another format
+        if file_ext.lower() == '.mov':
+            mp4_filename = os.path.splitext(temp_file[1])[0] + '.mp4'
+            try:
+                video_clip = VideoFileClip(temp_file[1])
+                video_clip.write_videofile(mp4_filename,
+                                 codec='libx264',
+                                 audio_codec='aac',
+                                 ffmpeg_params=['-preset', 'fast', '-crf', '23', '-threads', '4'],
+                                 logger=None)
+                upload_file = mp4_filename
+            except OSError as ex:
+                print(f'Exception caught when converting MOV to .mp4: {temp_file[1]}', flush=True)
+                print(ex,flush=True)
+                raise ex
+        else:
+            upload_file = temp_file[1]
+
         # Upload the file to S3
         S3Connection.upload_file(s3_url, user_info.name,
                                         get_password(token, db), s3_bucket,
                                         s3_path + '/' + request.files[one_file].filename,
-                                        temp_file[1])
+                                        upload_file)
 
         # Update the database entry to show the file is uploaded
         file_id = db.sandbox_file_uploaded(user_info.name, upload_id,
@@ -1472,6 +1634,8 @@ def sandbox_file():
                    'uploaded but not not found in the database - database not updated')
             if os.path.exists(temp_file[1]):
                 os.unlink(temp_file[1])
+            if os.path.exists(upload_file):
+                os.unlink(upload_file)
             continue
 
         # Check if we need to store the species and locations in camtrap
@@ -1481,6 +1645,8 @@ def sandbox_file():
 
         if os.path.exists(temp_file[1]):
             os.unlink(temp_file[1])
+        if os.path.exists(upload_file):
+            os.unlink(upload_file)
 
     return json.dumps({'success': True})
 
@@ -2043,8 +2209,9 @@ def images_all_edited():
     db.finish_image_edits(user_info.name, edited_files_info)
 
     # Save path for this upload to the collection
-    all_images, kept_urls = sdc.get_upload_images(db, hash2str(s3_url), coll_id, upload_id, s3_url,
-                                            user_info.name, lambda: get_password(token, db),
+    all_images, kept_urls = sdc.get_upload_images(db, hash2str(s3_url), s3_bucket, coll_id,
+                                            upload_id, s3_url, user_info.name,
+                                            lambda: get_password(token, db),
                                             force_refresh=True, keep_image_url=True)
 
     # Count all the images with species

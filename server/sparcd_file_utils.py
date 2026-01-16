@@ -5,9 +5,6 @@ import json
 import os
 import time
 
-import dateutil.parser
-import dateutil.tz
-
 
 # Maximum number of times to try updating a temporary file
 TEMP_FILE_MAX_WRITE_TRIES = 7
@@ -36,7 +33,7 @@ def save_timed_info(save_path: str, data, num_retries: int=TEMP_FILE_MAX_WRITE_T
 
     attempts = 0
     informed_exception = False
-    save_info = {'timestamp':datetime.datetime.utcnow().isoformat(),
+    save_info = {'timestamp':datetime.datetime.now(datetime.UTC).isoformat(),
                  'data':data
                 }
     while attempts < num_retries:
@@ -96,8 +93,8 @@ def load_timed_info(load_path: str, timeout_sec: int=TEMP_FILE_EXPIRE_SEC):
             print(ex)
         return None
 
-    old_ts = dateutil.parser.isoparse(loaded_data['timestamp'])
-    ts_diff = datetime.datetime.utcnow() - old_ts
+    old_ts = datetime.datetime.fromisoformat(loaded_data['timestamp'])
+    ts_diff = datetime.datetime.now(datetime.UTC) - old_ts
 
     if ts_diff.total_seconds() > timeout_sec:
         print(f'INFO: Expired timed file {load_path}')
