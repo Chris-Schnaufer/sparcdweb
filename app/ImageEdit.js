@@ -63,6 +63,7 @@ export default function ImageEdit({url, type, name, parentId, maxWidth, maxHeigh
   const [hue, setHue] = React.useState(50);    // From 360 to -360
   const [imageModified, setImageModified] = React.useState(false); // Used to keep track of when an image is modified
   const [imageSize, setImageSize] = React.useState({width:DEF_IMG_WIDTH,height:DEF_IMG_HEIGHT,top:0,left:0,right:DEF_IMG_WIDTH}); // Adjusted when loaded
+  const [lastUrl, setLastUrl] = React.useState(null);  // Used to ensure bightness, et al are reset on a new image
   const [movieSize, setMovieSize] = React.useState({width:'auto', height:'auto', heightRatio:430/640});
   const [showAdjustments, setShowAdjustments] = React.useState(false);  // Show image brightness, etc
   const [saturation, setSaturation] = React.useState(50);              // Image saturation
@@ -82,6 +83,18 @@ export default function ImageEdit({url, type, name, parentId, maxWidth, maxHeigh
 
   // Used to prevent multiple clicks during navigation
   let navigationLocked = false;
+
+  // Check if the URL is new to us and reset the image manipulations
+  React.useLayoutEffect(() => {
+    if (lastUrl !== url) {
+      // Reset image-specific values 
+      setBrightness(50);
+      setContrast(50);
+      setHue(50);
+      setSaturation(50);
+      setLastUrl(url);
+    }
+  }, [lastUrl, setBrightness, setContrast, setHue, setLastUrl, setSaturation, url]);
 
   /**
    * Sets the image size based upon the rendered image
@@ -295,12 +308,6 @@ export default function ImageEdit({url, type, name, parentId, maxWidth, maxHeigh
         window.clearTimeout(curNavMaskTimeoutId);
       }
 
-      // Reset image-specific values 
-      setBrightness(50);
-      setContrast(50);
-      setHue(50);
-      setSaturation(50);
-
       // Perform the navigation
       if (navigation.onNext(imageModified)) {
         // Show the mask after a timeout if we have navigation
@@ -316,7 +323,7 @@ export default function ImageEdit({url, type, name, parentId, maxWidth, maxHeigh
 
     navigationLocked = false;
 
-  }, [imageTransformWrapperRef, navigation, navigationLocked, NAVIGATION_MASK_TIMEOUT, navigationMaskTimeoutId, setBrightness, setContrast, setHue, setSaturation]);
+  }, [imageTransformWrapperRef, navigation, navigationLocked, NAVIGATION_MASK_TIMEOUT, navigationMaskTimeoutId]);
 
   /**
    * Handles the click of the prev image button
@@ -343,12 +350,6 @@ export default function ImageEdit({url, type, name, parentId, maxWidth, maxHeigh
         window.clearTimeout(curNavMaskTimeoutId);
       }
 
-      // Reset image-specific values 
-      setBrightness(50);
-      setContrast(50);
-      setHue(50);
-      setSaturation(50);
-
       // Perform the navigation
       if (navigation.onPrev(imageModified)) {
         // Show the mask after a timeout if we have navigation
@@ -364,7 +365,7 @@ export default function ImageEdit({url, type, name, parentId, maxWidth, maxHeigh
 
     navigationLocked = false;
 
-  }, [imageTransformWrapperRef, navigation, navigationLocked, NAVIGATION_MASK_TIMEOUT, navigationMaskTimeoutId, setBrightness, setContrast, setHue, setSaturation]);
+  }, [imageTransformWrapperRef, navigation, navigationLocked, NAVIGATION_MASK_TIMEOUT, navigationMaskTimeoutId]);
 
   /**
    * Adjusts the movie size after loading
