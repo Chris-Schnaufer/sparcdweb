@@ -44,6 +44,26 @@ const prevUploadCheckState = {
   checkAbandon: 3,
 };
 
+
+/**
+ * Checks if we're in a low memory sitation. If not supported by browser, false is returned
+ * @function
+ * @return {boolean} A value of true if we're in a low memory situation, otherwise false
+ */
+function haveLowMemory() {
+  if (window.performance && window.performance.memory) {
+    const memUsed = performance.memory.usedJSHeapSize;
+    const memMax = performance.memory.jsHeapSizeLimit;
+
+    // Return whether we have enough available memory
+    console.log('HACK: MEMORY: ', memMax / (1024*1024), memUsed / (1024*1024), (memMax * 0.8) / (1024*1024));
+    return memUsed > memMax * 0.8;  // True if we're low on memory
+  }
+
+  return false;
+}
+
+
 // Be sure to add new known upload types to the parameter definition below
 /**
  * Renders the UI for uploading a folder of images
@@ -192,7 +212,7 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
       console.log('Upload Images Counts Unknown Error: ',err);
       addMessage(Level.Error, 'An unkown problem ocurred while checking upload image counts');
     }
-  }, [serverURL, uploadToken, setUploadingFileCounts, setUploadCompleted, addMessage])
+  }, [addMessage, cancelUploadCountCheck, serverURL, setUploadingFileCounts, setUploadCompleted, uploadToken])
 
   /**
    * Sends the completion status to the server
@@ -248,7 +268,7 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
    * @param {number} numFiles The number of images to send
    * @param {number} attempts The remaining number of attempts to try
    */
-  function uploadChunk(fileChunk, uploadId, numFiles = 1, attempts = 3) {
+  const uploadChunk = React.useCallback((fileChunk, uploadId, numFiles = 1, attempts = 3) => {
     const sandboxFileUrl = serverURL + '/sandboxFile?t=' + encodeURIComponent(uploadToken);
     const formData = new FormData();
     const maxAttempts = attempts;
@@ -260,6 +280,7 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
     for (let idx = 0; idx < numFiles && idx < fileChunk.length; idx++) {
       formData.append(fileChunk[idx].name, fileChunk[idx]);
     }
+    console.log('HACK: NUMFILES: ',numFiles, fileChunk.length);
 
     try {
       const resp = fetch(sandboxFileUrl, {
@@ -278,7 +299,13 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
             if (nextChunk.length > 0) {
               let curUploadCount = MAX_FILES_UPLOAD_SPLIT;
               const perFileSec = ((Date.now() - startTs) / 1000.0) / numFiles;
-              curUploadCount = Math.max(1, MAX_FILES_UPLOAD_SPLIT - Math.round(perFileSec / 7.0));
+              console.log('HACK:     : ', perFileSec);
+              // Check if we have low memory (only works on Chrome-like browsers)
+              if (!haveLowMemory()) {
+                curUploadCount = Math.max(1, MAX_FILES_UPLOAD_SPLIT - Math.round(perFileSec / 3.0)); // Checking against 3.0 seconds (aka magic number)
+              } else {
+                curUploadCount = 1
+              }
               window.setTimeout(() => uploadChunk(nextChunk, uploadId, curUploadCount), 10);
             }
         })
@@ -293,13 +320,15 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
           } else {
             // TODO: Make this a single instance
             addMessage(Level.Error, 'A problem ocurred while uploading images');
+            cancelUploadCountCheck = true;
           }
       });
     } catch (error) {
       console.log('Upload Images Unknown Error: ',err);
       addMessage(Level.Error, 'An unkown problem ocurred while uploading images');
+      cancelUploadCountCheck = true;
     }
-  }
+  }, [addMessage, cancelUploadCountCheck, options, selectedTimezone, serverURL, uploadToken]);
 
   /**
    * Handles uploading a folder of files
