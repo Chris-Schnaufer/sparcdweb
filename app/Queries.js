@@ -72,7 +72,7 @@ export default function Queries({loadingCollections}) {
 
   let activeQuery = null;
 
-  let mergedSpecies = React.useMemo(() => [].concat(speciesItems).concat(speciesOtherItems), [speciesItems,speciesOtherItems]);
+  let mergedSpecies = React.useMemo(() => [].concat(speciesItems).concat(speciesOtherItems ? speciesOtherItems : []), [speciesItems,speciesOtherItems]);
 
   /**
    * Updates fields when a new tab is selected for display

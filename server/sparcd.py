@@ -1696,11 +1696,42 @@ def sandbox_counts():
     if not upload_id:
         return "Not Found", 406
 
-    # Mark the upload as completed
+    # Get the count of uploaded files
     counts = db.sandbox_upload_counts(user_info.name, upload_id)
 
     return json.dumps({'total': counts[0], 'uploaded': counts[1]})
 
+
+@app.route('/sandboxUnloadedFiles', methods = ['GET'])
+@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+def sandbox_unloaded_files():
+    """ Returns the list of files that are not loaded
+    Arguments: (GET)
+        t - the session token
+        i - The upload ID
+    Return:
+        Returns the list of file names that have not been uploaded yet
+    Notes:
+         If the token is invalid, or a problem occurs, a 404 error is returned
+   """
+    db = SPARCdDatabase(DEFAULT_DB_PATH)
+    token = request.args.get('t')
+    print('SANDBOX COUNTS', flush=True)
+
+    # Check the credentials
+    token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
+    if token_valid is None or user_info is None:
+        return "Not Found", 404
+    if not token_valid or not user_info:
+        return "Unauthorized", 401
+
+    # Check what we have from the requestor
+    upload_id = request.args.get('i')
+    if not upload_id:
+        return "Not Found", 406
+
+    # Get the list of files not uploaded
+    return json.dumps(db.sandbox_files_not_uploaded(user_info.name, upload_id))
 
 @app.route('/sandboxReset', methods = ['POST'])
 @cross_origin(origins="http://localhost:3000", supports_credentials=True)
