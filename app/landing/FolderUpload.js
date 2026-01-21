@@ -90,10 +90,12 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
   const [filesSelected, setFilesSelected] = React.useState(0);
   const [finishingUpload, setFinishingUpload] = React.useState(false); // Used when finishing up an upload
   const [forceRedraw, setForceRedraw] = React.useState(0);
+  const [haveFailedUpload, setHaveFailedUpload] = React.useState(false); // Used to flag that some files didn't get uploaded successfully
   const [inputSize, setInputSize] = React.useState({'width':252,'height':21}); // Updated when UI rendered
   const [locationSelection, setLocationSelection] = React.useState(null);
   const [newUpload, setNewUpload] = React.useState(false); // Used to indicate that we have  a new upload
   const [newUploadFiles, setNewUploadFiles] = React.useState(null); // The list of files to upload
+  const [pendingFailedUploads, setPendingFailedUploads] = React.useState(false); // Used to indicate that we have failed uploads and are waiting
   const [prevUploadCheck, setPrevUploadCheck] = React.useState(prevUploadCheckState.noCheck); // Used to check if the user wants to perform a reset or new upload
   const [uploadPath, setUploadPath] = React.useState(null);
   const [uploadCompleted, setUploadCompleted] = React.useState(false); // Uploads are done
@@ -104,7 +106,6 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
   const { options, parseTimezone } = useTimezoneSelect({ labelStyle:'altName', allTimezones });
   const [selectedTimezone, setSelectedTimezone] = React.useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
 
-  let cancelUploadCountCheck = false; // Used to stop the checks for upload counts (which would go until the counts match)
   let disableUploadDetails = false; // Used to lock out multiple clicks
   let disableUploadPrev = false; // Used to lock out multiple clicks
   let disableUploadCheck = false; // Used to lock out multiple clicks (resets next time page is redrawn)
@@ -167,14 +168,63 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
   }
 
   /**
-   * Gets the counts of an upload
+   * Handles failed uploaded files
    * @function
-   * @param {string} uploadId The ID of the upload that's completed
+   * @param {string} uploadId The ID of the upload that's in progress
    */
-  const getUploadCounts = React.useCallback((uploadId) => {
+  const handleFailedUploads = React.useCallback((uploadId, numRetries = 0, prevUploadCount = null, startTs = null) => {
+    const failedUploadsUrl = serverURL + '/sandboxUnloadedFiles?t=' + encodeURIComponent(uploadToken) + 
+                                                              '&i=' + encodeURIComponent(uploadId);
+    // Remove the message
+    setPendingFailedUploads(false);
+
+    try {
+      const resp = fetch(failedUploadsUrl, {
+        method: 'GET'
+      }).then(async (resp) => {
+            if (resp.ok) {
+              return resp.json();
+            } else {
+              throw new Error(`Failed to get failed files for upload: ${resp.status}`, {cause:resp});
+            }
+          })
+        .then((respData) => {
+            // Build up list of files to retry
+            const failedFiles = newUploadFiles.filter((item) => respData.indexOf((oneName) => oneName.toLowerCase() === item.name.toLowerCase()) !== -1)
+            if (failedFiles) {
+              window.setTimeout(() => uploadChunk(failedFiles, uploadId), 200);
+            } else {
+              console.log('ERROR: Unable to find failed files in list of files to upload');
+              addMessage(Level.Error, 'Unexpected error ocurred while trying to fetch list of failed files from the server');
+            }
+        })
+        .catch(function(err) {
+          if (numRetries >= 6) {
+            console.log('Getting Failed Files For Upload Error: ', err);
+            addMessage(Level.Error, 'A problem ocurred while getting failed files for the upload');
+          } else {
+            numRetries++;
+            window.setTimeout(() => handleFailedUploads(uploadId, numRetries), 10000 * numRetries);
+          }
+      });
+    } catch (error) {
+      console.log('Getting Failed Files For Upload  Unknown Error: ',err);
+      addMessage(Level.Error, 'An unkown problem ocurred while getting failed files for the upload');
+      setPendingFailedUploads(false);
+    }
+  }, [addMessage, serverURL, uploadToken]);
+
+  /**
+   * Internal function that gets the counts of an upload
+   * @function
+   * @param {string} uploadId The ID of the upload that's in progress
+   * @param {number} numRetries The working number of retries when called recursively during error handling.
+   * @param {number} prevUploadCount The number of uploaded files used when uploads are failing.
+   * @param {number} startTs The timestamp of when the prevUploadCount last changed
+   */
+  const internalGetUploadCounts = React.useCallback((uploadId, numRetries = 0, prevUploadCount = null, startTs = null) => {
     const sandboxCountsUrl = serverURL + '/sandboxCounts?t=' + encodeURIComponent(uploadToken) + 
                                                               '&i=' + encodeURIComponent(uploadId);
-    let numRetries = 0;
 
     try {
       const resp = fetch(sandboxCountsUrl, {
@@ -183,36 +233,65 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
             if (resp.ok) {
               return resp.json();
             } else {
-              throw new Error(`Failed to mark upload as completed: ${resp.status}`, {cause:resp});
+              throw new Error(`Failed to get uploaded files count: ${resp.status}`, {cause:resp});
             }
           })
         .then((respData) => {
             // Process the results
             setUploadingFileCounts(respData);
-            if (cancelUploadCountCheck) {
-              // Do Nothing except reset the flag
-              cancelUploadCountCheck = false;
-            } if (respData.uploaded === respData.total) {
+            if (respData.uploaded === respData.total) {
+              // We are done uploading
               setUploadCompleted(true);
+              setPendingFailedUploads(false);
             } else {
-              numRetries = 0;
-              window.setTimeout(() => getUploadCounts(uploadId), 2000);
+              // If we don't have failed uploads, we continue as usual
+              if (!haveFailedUpload) {
+                window.setTimeout(() => internalGetUploadCounts(uploadId), 2000);
+              } else {
+                // We have failed uploads. Keep track of what we have so that we can retry when
+                // the uploads have stabilized (the ones that could succeed, have succeeded)
+                if (respData.uploaded !== prevUploadCount || !startTs) {
+                  // Something updated, we're not ready to get the failed images
+                  window.setTimeout(() => internalGetUploadCounts(uploadId, 0, respData.uploaded, Date.now()), 2000);
+                  setPendingFailedUploads(false);
+                } else {
+                  const elapsedSec = Math.trunc((Date.now() - startTs) / 1000);
+                  // Check if we're ready to display a pending message
+                  if (elapsedSec >= 1 * 60 * 1000) {    // 2 minutes
+                    setPendingFailedUploads(true);
+                  }
+                  if (elapsedSec >= 3 * 60 * 1000) {    // 5 minutes
+                    handleFailedUploads(uploadId);
+                  }
+                }
+              }
             }
         })
         .catch(function(err) {
-          if (numRetries >= 3) {
+          if (numRetries >= 6) {
             console.log('Upload Images Counts Error: ', err);
             addMessage(Level.Error, 'A problem ocurred while checking upload image counts');
           } else {
             numRetries++;
-            window.setTimeout(() => getUploadCounts(uploadId), 7000 * numRetries);
+            window.setTimeout(() => internalGetUploadCounts(uploadId, numRetries), 7000 * numRetries);
+            setPendingFailedUploads(false);
           }
       });
     } catch (error) {
       console.log('Upload Images Counts Unknown Error: ',err);
       addMessage(Level.Error, 'An unkown problem ocurred while checking upload image counts');
     }
-  }, [addMessage, cancelUploadCountCheck, serverURL, setUploadingFileCounts, setUploadCompleted, uploadToken])
+  }, [addMessage, serverURL, setUploadingFileCounts, setUploadCompleted, uploadToken])
+
+  /**
+   * Gets the counts of an upload
+   * @function
+   * @param {string} uploadId The ID of the upload that's completed
+   */
+  const getUploadCounts = React.useCallback((uploadId) => {
+    internalGetUploadCounts(uploadId);
+  }, [internalGetUploadCounts]);
+  
 
   /**
    * Sends the completion status to the server
@@ -261,6 +340,35 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
   }
 
   /**
+   * Returns the remaining set of files of files and upload count of files to send
+   * @function
+   * @param {array} files The files to remove a leading count from
+   * @param {number} count The integer number of files already uploaded which is removed from the front of the files
+   * @param {number} prevTimestamp The starting timestamp value used to calculate how much time it takes to load a single file
+   * @return {object} The remaining files to upload and the calculated upload count
+   */
+  function getNextUploadChunk(files, count, startTimestamp) {
+      const remainingFiles = files.slice(count);
+      if (remainingFiles.length <= 0) {
+        return {files:remainingFiles, count: 0};
+      }
+
+      // Figure out how many files to upload next
+      let curUploadCount = MAX_FILES_UPLOAD_SPLIT;
+      const perFileSec = ((Date.now() - startTimestamp) / 1000.0) / count;
+      console.log('HACK:     :', perFileSec);
+      // Check if we have low memory (only works on Chrome-like browsers)
+      if (!haveLowMemory()) {
+        curUploadCount = Math.max(1, MAX_FILES_UPLOAD_SPLIT - Math.round(perFileSec / 3.0)); // Checking against 3.0 seconds (aka magic number)
+      } else {
+        curUploadCount = 1
+      }
+
+      console.log('HACK: NUMFILES:',curUploadCount, remainingFiles.length);
+      return {files:remainingFiles, count:curUploadCount};
+  }
+
+  /**
    * Uploads chunks of files from the list
    * @function
    * @param {object} fileChunk The array of files to upload
@@ -280,7 +388,6 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
     for (let idx = 0; idx < numFiles && idx < fileChunk.length; idx++) {
       formData.append(fileChunk[idx].name, fileChunk[idx]);
     }
-    console.log('HACK: NUMFILES: ',numFiles, fileChunk.length);
 
     try {
       const resp = fetch(sandboxFileUrl, {
@@ -295,40 +402,41 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
           })
         .then((respData) => {
             // Process the results
-            const nextChunk = fileChunk.slice(numFiles);
-            if (nextChunk.length > 0) {
-              let curUploadCount = MAX_FILES_UPLOAD_SPLIT;
-              const perFileSec = ((Date.now() - startTs) / 1000.0) / numFiles;
-              console.log('HACK:     : ', perFileSec);
-              // Check if we have low memory (only works on Chrome-like browsers)
-              if (!haveLowMemory()) {
-                curUploadCount = Math.max(1, MAX_FILES_UPLOAD_SPLIT - Math.round(perFileSec / 3.0)); // Checking against 3.0 seconds (aka magic number)
-              } else {
-                curUploadCount = 1
-              }
-              window.setTimeout(() => uploadChunk(nextChunk, uploadId, curUploadCount), 10);
+            const nextFiles = getNextUploadChunk(fileChunk, numFiles, startTs);
+            // If we have no more files to upload, we are done
+            if (nextFiles.files.length > 0) {
+              window.setTimeout(() => uploadChunk(nextFiles.files, uploadId, nextFiles.count), 10);
             }
         })
         .catch(function(err) {
+          // Report this the first time we encounter it
           if (attempts == 3) {
             console.log('Upload File Error: ',err);
           }
+          // Try uploading this chunk a few times
           attempts--;
           if (attempts > 0) {
-            // TODO: Split this chunk into single uploads (if not already) in case the problem one or more files
+            // Split this chunk into single uploads (if not already) in case the problem is with one or more files
             window.setTimeout(uploadChunk(fileChunk, uploadId, numFiles, attempts), 5000 * (maxAttempts - attempts));
           } else {
-            // TODO: Make this a single instance
-            addMessage(Level.Error, 'A problem ocurred while uploading images');
-            cancelUploadCountCheck = true;
+            // Tell the database about the failed files
+            // After several failures to upload, move on - we will catch them later and try again
+            const nextFiles = getNextUploadChunk(fileChunk, numFiles, startTs);
+            setHaveFailedUpload(true);
+            if (nextFiles.files.length > 0) {
+              window.setTimeout(() => uploadChunk(nextFiles.files, uploadId, nextFiles.count), 10);
+            } else {
+              // Check for failed uploaded files and try to upload those. If we have uploads that failed and we can't
+              // seem to get the uploaded, let the user know and have them decide next steps
+              /* newUploadFiles */
+            }
           }
       });
     } catch (error) {
       console.log('Upload Images Unknown Error: ',err);
       addMessage(Level.Error, 'An unkown problem ocurred while uploading images');
-      cancelUploadCountCheck = true;
     }
-  }, [addMessage, cancelUploadCountCheck, options, selectedTimezone, serverURL, uploadToken]);
+  }, [addMessage, options, selectedTimezone, serverURL, setHaveFailedUpload, uploadToken]);
 
   /**
    * Handles uploading a folder of files
@@ -336,7 +444,7 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
    * @param {array} uploadFiles The list of files to upload
    * @param {string} uploadId The ID associated with the upload
    */
-  function uploadFolder(uploadFiles, uploadId) {
+  const uploadFolder = React.useCallback((uploadFiles, uploadId) => {
     // Check that we have something to upload
     if (!uploadFiles || uploadFiles.length <= 0) {
       // TODO: Make the message part of the displayed window?
@@ -349,6 +457,7 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
     }
 
     setUploadingFiles(true);
+    setHaveFailedUpload(false);
 
     // Figure out how many instances we want sending data
     const numInstance = uploadFiles.length < MAX_CHUNKS ? uploadFiles.length : MAX_CHUNKS;
@@ -366,7 +475,7 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
     window.setTimeout(() => getUploadCounts(uploadId), 1000);
 
     setWorkingUploadId(uploadId);
-  }
+  }, [addMessage, getUploadCounts, setHaveFailedUpload, setWorkingUploadId, setUploadingFiles, uploadChunk]);
 
   /**
    * Handles the user wanting to upload files
@@ -889,16 +998,23 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
     }
 
     if (uploadingFiles) {
-      // TODO: adjust upload percent to include already uploaded images
+      // TODO: adjust upload percent to include already uploaded images when continued upload restarts
       let uploadCount = uploadingFileCounts.uploaded;
       let percentComplete = uploadingFileCounts.total ? Math.floor((uploadCount / uploadingFileCounts.total) * 100) : 100;
 
       return (
-        <Grid id="grid" container direction="column" alignItems="center" justifyContent="center" sx={{minWidth: curWidth+'px', minHeight: curHeight+'px'}}>
-          <Typography gutterBottom variant="body3" noWrap="true">
-          {uploadingFileCounts.uploaded} of {uploadingFileCounts.total} uploaded
-          </Typography>
-          <ProgressWithLabel value={percentComplete}/>
+        <Grid id="uploading-wrapper" container direction="row" alignItems="start" justifyContent="center">
+          <Grid id="uploading-grid" container direction="column" alignItems="center" justifyContent="center" sx={{minWidth: curWidth+'px', minHeight: curHeight+'px'}}>
+            <Typography gutterBottom variant="body3" noWrap="true">
+            {uploadingFileCounts.uploaded} of {uploadingFileCounts.total} uploaded
+            </Typography>
+            <ProgressWithLabel value={percentComplete}/>
+          </Grid>
+          { pendingFailedUploads && 
+            <Typography gutterBottom variant="body">
+              Some files failed upload, waiting before attempting to retry
+            </Typography>
+          }
         </Grid>
       );
     }

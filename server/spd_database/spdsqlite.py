@@ -1022,6 +1022,33 @@ class SPDSQLite:
 
         return res
 
+
+    def sandbox_files_not_uploaded(self, username: str, upload_id: str) -> tuple:
+        """ Gets the list of file names of any files not yet marked as uploaded
+        Arguments:
+            username: the name of the person starting the upload
+            upload_id: the ID of the upload
+        Return:
+            Returns the list of files that are waiting to be uploaded
+        """
+        if self._conn is None:
+            raise RuntimeError('Attempting to get files not uploaded to the database '\
+                                                                                'before connecting')
+
+        # Get the date
+        cursor = self._conn.cursor()
+        cursor.execute('WITH upid AS ' \
+                    '(SELECT id FROM sandbox ' \
+                                    'WHERE name=? AND upload_id=? AND path <> "")' \
+                'SELECT filename FROM sandbox_files, upid WHERE ' \
+                                                        'sandbox_id = upid.id AND uploaded = 0',
+                                                                            (username, upload_id))
+
+        res = cursor.fetchall()
+        cursor.close()
+
+        return res
+
     def sandbox_reset_upload(self, username: str, upload_id: str, files: tuple) -> Optional[str]:
         """ Resets an upload for another attempt
         Arguments:

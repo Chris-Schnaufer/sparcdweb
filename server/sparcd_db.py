@@ -379,6 +379,17 @@ class SPARCdDatabase:
         """
         return self._db.sandbox_file_uploaded(username, upload_id, filename, mimetype)
 
+    def sandbox_files_not_uploaded(self, username: str, upload_id: str) -> tuple:
+        """ Returns the list of known files that haven't been uploaded yet
+        Arguments:
+            username: the name of the person starting the upload
+            upload_id: the ID of the upload
+        Return:
+            Returns the list of file names that haven't been uploaded
+        """
+        return self._db.sandbox_files_not_uploaded(username, upload_id)
+
+
     def sandbox_add_file_info(self, file_id: str, species: tuple, location: dict, \
                                                                         timestamp: str) -> None:
         """ Marks the file as upload as uploaded
