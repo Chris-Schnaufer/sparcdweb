@@ -162,7 +162,7 @@ class SPDSQLite:
 
         cursor = self._conn.cursor()
         cursor.execute('WITH ti AS (SELECT token, name, timestamp, client_ip, user_agent,' \
-                          '(strftime("%s", "now")-timestamp) AS elapsed_sec, s3_url FROM TOKENS ' \
+                          '(strftime("%s", "now")-timestamp) AS elapsed_sec, s3_url FROM tokens ' \
                           'WHERE token=(?)) '\
                        'SELECT u.name, u.email, u.settings, u.species, u.administrator, ' \
                           'ti.s3_url, ti.timestamp, ti.client_ip, ti.user_agent, ti.elapsed_sec ' \
@@ -633,10 +633,10 @@ class SPDSQLite:
 
         return res
 
-    def get_sandbox(self, s3_url: str) -> Optional[tuple]:
+    def get_sandbox(self, s3_id: str) -> Optional[tuple]:
         """ Returns the sandbox items
         Arguments:
-            s3_url: the url of the s3 instance to fetch for
+            s3_id: the id of the s3 instance to fetch for
         Returns:
             A tuple containing the row tuples of the s3_path, bucket, the base upload path, and
             location ID
@@ -646,8 +646,8 @@ class SPDSQLite:
                                                                                     'connecting')
         # Get the Sandbox information
         cursor = self._conn.cursor()
-        cursor.execute('SELECT path, bucket, s3_base_path, location_id FROM sandbox WHERE s3_url=?',
-                                                                                        (s3_url,))
+        cursor.execute('SELECT path, bucket, s3_base_path, location_id FROM sandbox WHERE s3_id=?',
+                                                                                        (s3_id,))
         res = cursor.fetchall()
 
         cursor.close()
@@ -853,10 +853,10 @@ class SPDSQLite:
 
         return res
 
-    def sandbox_get_upload(self, s3_url: str, username: str, path: str) -> Optional[tuple]:
+    def sandbox_get_upload(self, s3_id: str, username: str, path: str) -> Optional[tuple]:
         """ Gets the upload associated with the url , user, and upload path
         Arguments:
-            s3_url: the URL to the s3 instance to look for
+            s3_id: the ID to the s3 instance to look for
             username: the user associated with the upload
             path: the source path of the uploads
         Returns:
@@ -870,8 +870,8 @@ class SPDSQLite:
         # Find the upload
         cursor = self._conn.cursor()
         cursor.execute('SELECT id, upload_id, (strftime("%s", "now")-timestamp) AS elapsed_sec ' \
-                        'FROM sandbox WHERE s3_url=? AND name=? AND path=? LIMIT 1',
-                                                                        (s3_url, username, path))
+                        'FROM sandbox WHERE s3_id=? AND name=? AND path=? LIMIT 1',
+                                                                        (s3_id, username, path))
 
         res = cursor.fetchone()
         cursor.close()
@@ -917,13 +917,13 @@ class SPDSQLite:
 
         return new_upload_id
 
-    def sandbox_new_upload(self, s3_url: str, username: str, path: str, files: tuple, \
+    def sandbox_new_upload(self, s3_id: str, username: str, path: str, files: tuple, \
                                             s3_bucket: str, s3_path: str, location_id: str, \
                                             location_name: str, location_lat: float, \
                                             location_lon: float, location_ele: float) -> str:
         """ Adds new sandbox upload entries
         Arguments:
-            s3_url: the URL to the s3 instance the upload is for
+            s3_id: the ID to the s3 instance the upload is for
             username: the name of the person starting the upload
             path: the source path of the images
             files: the list of filenames (or partial paths) that's to be uploaded
@@ -945,12 +945,12 @@ class SPDSQLite:
         # Create the upload
         upload_id = uuid.uuid4().hex
         cursor = self._conn.cursor()
-        cursor.execute('INSERT INTO sandbox(s3_url, name, path, bucket, s3_base_path, ' \
+        cursor.execute('INSERT INTO sandbox(s3_id, name, path, bucket, s3_base_path, ' \
                                             'location_id, location_name, location_lat, ' \
                                             'location_lon, location_ele, '\
                                             'timestamp, upload_id) ' \
                                     'VALUES(?,?,?,?,?,?,?,?,?,?,strftime("%s", "now"),?)', 
-                            (s3_url, username, path, s3_bucket, s3_path, location_id, \
+                            (s3_id, username, path, s3_bucket, s3_path, location_id, \
                                 location_name, location_lat, location_lon, location_ele, upload_id))
 
         sandbox_id = cursor.lastrowid
@@ -1272,11 +1272,11 @@ class SPDSQLite:
 
         return res
 
-    def add_collection_edit(self, s3_url: str, bucket: str, upload_path: str, username: str, \
+    def add_collection_edit(self, s3_id: str, bucket: str, upload_path: str, username: str, \
                                 timestamp: str, loc_id: str, loc_name: str, loc_ele: float) -> None:
         """ Stores the edit for a collection
         Arguments:
-            s3_url: the URL of the S3 instance
+            s3_id: the URL of the S3 instance
             bucket: the S3 bucket the collection is in
             upload_path: the path to the uploads folder under the bucket
             username: the name of the user making the change
@@ -1292,22 +1292,22 @@ class SPDSQLite:
 
         # Add the entry to the database
         cursor = self._conn.cursor()
-        cursor.execute('INSERT INTO collection_edits(s3_url, bucket, s3_base_path, username, ' \
+        cursor.execute('INSERT INTO collection_edits(s3_id, bucket, s3_base_path, username, ' \
                                                     'edit_timestamp, loc_id, loc_name, loc_ele, ' \
                                                     'timestamp) '\
                                     'VALUES(?,?,?,?,?,?,?,?,strftime("%s", "now"))', 
-                            (s3_url, bucket, upload_path, username, timestamp, loc_id, \
+                            (s3_id, bucket, upload_path, username, timestamp, loc_id, \
                                                                                 loc_name, loc_ele))
 
         self._conn.commit()
         cursor.close()
 
-    def add_image_species_edit(self, s3_url: str, bucket: str, file_path: str, username: str, \
+    def add_image_species_edit(self, s3_id: str, bucket: str, file_path: str, username: str, \
                                 timestamp: str, common: str, species: str, count: str,
                                 request_id: str) -> None:
         """ Adds a species entry for a file to the database
         Arguments:
-            s3_url: the URL to the S3 instance
+            s3_id: the ID to the S3 instance
             bucket: the S3 bucket the file is in
             file_path: the path to the file the change applies to
             username: the name of the user making the change
@@ -1324,11 +1324,11 @@ class SPDSQLite:
 
         # Add the entry to the database
         cursor = self._conn.cursor()
-        cursor.execute('INSERT INTO image_edits(s3_url, bucket, s3_file_path, username, ' \
+        cursor.execute('INSERT INTO image_edits(s3_id, bucket, s3_file_path, username, ' \
                                         'edit_timestamp, obs_common, obs_scientific, obs_count,' \
                                         ' request_id, timestamp) '\
                                     'VALUES(?,?,?,?,?,?,?,?,?, strftime("%s", "now"))', 
-                                (s3_url, bucket, file_path, username, timestamp, common, \
+                                (s3_id, bucket, file_path, username, timestamp, common, \
                                                                     species, count, request_id))
 
         self._conn.commit()
@@ -1351,10 +1351,10 @@ class SPDSQLite:
         self._conn.commit()
         cursor.close()
 
-    def get_image_species_edits(self, s3_url: str, bucket: str, upload_path: str) -> dict:
+    def get_image_species_edits(self, s3_id: str, bucket: str, upload_path: str) -> dict:
         """ Returns all the saved edits for this bucket and upload path
         Arguments:
-            s3_url: the URL to the S3 instance
+            s3_id: the ID to the S3 instance
             bucket: the S3 bucket the collection is in
             upload_path: the upload name
         Return:
@@ -1368,19 +1368,19 @@ class SPDSQLite:
         # Get the edits
         cursor = self._conn.cursor()
         cursor.execute('SELECT s3_file_path, obs_scientific, obs_count FROM image_edits WHERE ' \
-                                    's3_url=? AND bucket=? AND s3_file_path like ? ' \
+                                    's3_id=? AND bucket=? AND s3_file_path like ? ' \
                                 'ORDER BY edit_timestamp ASC',
-                            (s3_url, bucket, upload_path+'%'))
+                            (s3_id, bucket, upload_path+'%'))
 
         res = cursor.fetchall()
         cursor.close()
 
         return res
 
-    def have_upload_changes(self, s3_url: str, bucket: str, upload_name: str) -> bool:
+    def have_upload_changes(self, s3_id: str, bucket: str, upload_name: str) -> bool:
         """ Returns True if there are changes in the database for the upload
         Arguments:
-            s3_url: the URL to the S3 instance
+            s3_id: the URL to the S3 instance
             bucket: the S3 bucket the collection is in
             upload_name: the upload name
         Return:
@@ -1392,8 +1392,8 @@ class SPDSQLite:
         # Get the edits
         cursor = self._conn.cursor()
         cursor.execute('SELECT count(1) FROM image_edits WHERE ' \
-                                    's3_url=? AND bucket=? AND s3_file_path like ? ',
-                            (s3_url, bucket, '%'+upload_name+'%'))
+                                    's3_id=? AND bucket=? AND s3_file_path like ? ',
+                            (s3_id, bucket, '%'+upload_name+'%'))
 
         res = cursor.fetchone()
         cursor.close()
@@ -1469,11 +1469,11 @@ class SPDSQLite:
         self._conn.commit()
         cursor.close()
 
-    def update_species(self, s3_url: str, username: str, old_scientific: str, new_scientific: str, \
+    def update_species(self, s3_id: str, username: str, old_scientific: str, new_scientific: str, \
                                         new_name: str, new_keybind: str, new_icon_url: str) -> bool:
         """ Adds the species in the database for later submission
         Arguments:
-            s3_url: the URL to the S3 instance
+            s3_id: the ID to the S3 instance
             username: the name of the user making the change
             old_scientific: the old scientific name of the species
             new_scientific: the new scientific name of the species
@@ -1497,23 +1497,23 @@ class SPDSQLite:
             return False
         user_id = res[0][0]
 
-        cursor.execute('INSERT INTO admin_species_edits(s3_url, user_id, timestamp, ' \
+        cursor.execute('INSERT INTO admin_species_edits(s3_id, user_id, timestamp, ' \
                             'old_scientific_name, new_scientific_name, name, keybind, iconURL) ' \
                             'VALUES(?,?,strftime("%s", "now"),?,?,?,?,?)',
-                                    (s3_url, user_id, old_scientific, new_scientific, new_name, \
+                                    (s3_id, user_id, old_scientific, new_scientific, new_name, \
                                             new_keybind, new_icon_url))
         self._conn.commit()
         cursor.close()
 
         return True
 
-    def update_location(self, s3_url: str, username: str, loc_name: str, loc_id: str, \
+    def update_location(self, s3_id: str, username: str, loc_name: str, loc_id: str, \
                         loc_active: bool, loc_ele: float, loc_old_lat: float, loc_old_lng: float, \
                         loc_new_lat: float, loc_new_lng: float) -> bool:
 
         """ Adds the location information to the database for later submission
         Arguments:
-            s3_url: the URL to the S3 isntance
+            s3_id: the ID to the S3 isntance
             username: the name of the user making the change
             loc_name: the name of the location
             loc_id: the ID of the location
@@ -1540,21 +1540,21 @@ class SPDSQLite:
             return False
         user_id = res[0][0]
 
-        cursor.execute('INSERT INTO admin_location_edits(s3_url, user_id, timestamp, loc_name, ' \
+        cursor.execute('INSERT INTO admin_location_edits(s3_id, user_id, timestamp, loc_name, ' \
                                         'loc_id, loc_active, loc_ele, loc_old_lat, loc_old_lng, ' \
                                         'loc_new_lat, loc_new_lng) ' \
                             'VALUES(?,?,strftime("%s", "now"),?,?,?,?,?,?,?,?)',
-                                    (s3_url, user_id, loc_name, loc_id, loc_active, loc_ele, \
+                                    (s3_id, user_id, loc_name, loc_id, loc_active, loc_ele, \
                                             loc_old_lat, loc_old_lng, loc_new_lat,loc_new_lng))
         self._conn.commit()
         cursor.close()
 
         return True
 
-    def get_admin_locations(self, s3_url: str, username: str) -> dict:
+    def get_admin_locations(self, s3_id: str, username: str) -> dict:
         """ Returns any saved administrative location changes
         Arguments:
-            s3_url: the URL to the S3 instance
+            s3_id: the ID to the S3 instance
             username: the name of the user to fetch for
         Return:
             Returns a tuple or location row tuples
@@ -1568,17 +1568,17 @@ class SPDSQLite:
         cursor.execute('WITH u AS (SELECT id FROM users WHERE name=?) ' \
                         'SELECT loc_name, loc_id, loc_active, loc_ele, loc_old_lat, loc_old_lng, ' \
                             'loc_new_lat, loc_new_lng FROM admin_location_edits ale, u '\
-                        'WHERE ale.s3_url=? AND ale.user_id = u.id AND ale.location_updated = 0 ' \
-                        'ORDER BY timestamp ASC', (username, s3_url))
+                        'WHERE ale.s3_id=? AND ale.user_id = u.id AND ale.location_updated = 0 ' \
+                        'ORDER BY timestamp ASC', (username, s3_id))
         res = cursor.fetchall()
         cursor.close()
 
         return res
 
-    def get_admin_species(self, s3_url: str, username: str) -> dict:
+    def get_admin_species(self, s3_id: str, username: str) -> dict:
         """ Returns any saved administrative species changes
         Arguments:
-            s3_url: the URL to the S3 instance
+            s3_id: the ID to the S3 instance
             username: the name of the user to fetch for
         Return:
             Returns tuple of species row tuples
@@ -1592,17 +1592,17 @@ class SPDSQLite:
         cursor.execute('WITH u AS (SELECT id FROM users WHERE name=?) ' \
                         'SELECT old_scientific_name, new_scientific_name, name, keybind, iconURL '\
                         'FROM admin_species_edits ase, u ' \
-                        'WHERE ase.s3_url=? AND ase.user_id = u.id AND ase.s3_updated = 0 ' \
-                        'ORDER BY timestamp ASC', (username, s3_url))
+                        'WHERE ase.s3_id=? AND ase.user_id = u.id AND ase.s3_updated = 0 ' \
+                        'ORDER BY timestamp ASC', (username, s3_id))
         res = cursor.fetchall()
         cursor.close()
 
         return res
 
-    def admin_location_counts(self, s3_url: str, username: str) -> dict:
+    def admin_location_counts(self, s3_id: str, username: str) -> dict:
         """ Returns any saved administrative location changes
         Arguments:
-            s3_url: the URL to the S3 instance
+            s3_id: the ID to the S3 instance
             username: the name of the user to fetch for
         Return:
             Returns a result tuple containing the count
@@ -1614,18 +1614,18 @@ class SPDSQLite:
         cursor = self._conn.cursor()
         cursor.execute('WITH u AS (SELECT id FROM users WHERE name=?) ' \
                         'SELECT count(1) FROM admin_location_edits ale, u ' \
-                        'WHERE ale.s3_url=? AND ale.user_id = u.id AND ale.location_updated = 0',
-                                                                                (username, s3_url))
+                        'WHERE ale.s3_id=? AND ale.user_id = u.id AND ale.location_updated = 0',
+                                                                                (username, s3_id))
         res = cursor.fetchone()
         cursor.close()
 
         return res
 
 
-    def admin_species_counts(self, s3_url: str, username: str) -> dict:
+    def admin_species_counts(self, s3_id: str, username: str) -> dict:
         """ Returns any saved administrative species changes
         Arguments:
-            s3_url: the URL to the S3 instance
+            s3_id: the ID to the S3 instance
             username: the name of the user to fetch for
         Return:
             Returns a result tuple containing the count
@@ -1636,17 +1636,17 @@ class SPDSQLite:
         cursor = self._conn.cursor()
         cursor.execute('WITH u AS (SELECT id FROM users WHERE name=?) ' \
                         'SELECT count(1) FROM admin_species_edits ase, u ' \
-                        'WHERE ase.s3_url=? AND ase.user_id = u.id AND ase.s3_updated = 0',
-                            (username, s3_url))
+                        'WHERE ase.s3_id=? AND ase.user_id = u.id AND ase.s3_updated = 0',
+                            (username, s3_id))
         res = cursor.fetchone()
         cursor.close()
 
         return res
 
-    def clear_admin_location_changes(self, s3_url: str, username: str) -> None:
+    def clear_admin_location_changes(self, s3_id: str, username: str) -> None:
         """ Cleans up the administration location changes for this use
         Arguments:
-            s3_url: the URL to the S3 instance
+            s3_id: the ID to the S3 instance
             username: the name of the user to mark the locations for
         """
         if self._conn is None:
@@ -1654,17 +1654,17 @@ class SPDSQLite:
                                                                                 'before connecting')
 
         cursor = self._conn.cursor()
-        query = 'UPDATE admin_location_edits SET location_updated = 1 WHERE s3_url=? ' \
+        query = 'UPDATE admin_location_edits SET location_updated = 1 WHERE s3_id=? ' \
                     'AND user_id IN (SELECT id FROM users WHERE name=?)'
-        cursor.execute(query, (s3_url, username))
+        cursor.execute(query, (s3_id, username))
 
         self._conn.commit()
         cursor.close()
 
-    def clear_admin_species_changes(self, s3_url: str, username: str) -> None:
+    def clear_admin_species_changes(self, s3_id: str, username: str) -> None:
         """ Cleans up the administration species changes for this use
         Arguments:
-            s3_url: the URL to the S3 instance
+            s3_id: the ID to the S3 instance
             username: the name of the user to mark the species for
         """
         if self._conn is None:
@@ -1672,17 +1672,17 @@ class SPDSQLite:
                                                                                 'before connecting')
 
         cursor = self._conn.cursor()
-        query = 'UPDATE admin_species_edits SET s3_updated = 1 WHERE s3_url=? AND user_id in ' \
+        query = 'UPDATE admin_species_edits SET s3_updated = 1 WHERE s3_id=? AND user_id in ' \
                     '(SELECT id FROM users where name=?)'
-        cursor.execute(query, (s3_url, username))
+        cursor.execute(query, (s3_id, username))
 
         self._conn.commit()
         cursor.close()
 
-    def get_next_upload_location(self, s3_url: str, username: str) -> Optional[dict]:
+    def get_next_upload_location(self, s3_id: str, username: str) -> Optional[dict]:
         """ Returns the next edit location for this user at the specified endpoint
         Arguments:
-            s3_url: the URL to the S3 instance
+            s3_id: the ID to the S3 instance
             username: the name of the user to check for
         Return:
             Returns a tuple with the bucket, S3 upload path, location ID, location name,
@@ -1694,19 +1694,19 @@ class SPDSQLite:
 
         cursor = self._conn.cursor()
         cursor.execute('SELECT bucket, s3_base_path, loc_id, loc_name, loc_ele FROM ' \
-                            'collection_edits WHERE s3_url=? AND username=? AND updated=0 LIMIT 1',
-                        (s3_url, username))
+                            'collection_edits WHERE s3_id=? AND username=? AND updated=0 LIMIT 1',
+                        (s3_id, username))
 
         res = cursor.fetchone()
         cursor.close()
 
         return res
 
-    def complete_upload_location(self, s3_url: str, username: str, bucket: str, \
+    def complete_upload_location(self, s3_id: str, username: str, bucket: str, \
                                                                             base_path: str) -> None:
         """ Marks the location information as having completed updating
         Arguments:
-            s3_url: the URL to the S3 instance
+            s3_id: the ID to the S3 instance
             username: the name of the user to check for
             bucket: the bucket associated with the location change
             base_path: the upload path where the location was change
@@ -1716,19 +1716,19 @@ class SPDSQLite:
                                                                                 'before connecting')
 
         cursor = self._conn.cursor()
-        cursor.execute('UPDATE collection_edits SET updated=1 WHERE s3_url=? AND username=? AND ' \
+        cursor.execute('UPDATE collection_edits SET updated=1 WHERE s3_id=? AND username=? AND ' \
                             'bucket=? AND s3_base_path=? AND timeout=strftime("%s", "now")',
-                        (s3_url, username, bucket, base_path))
+                        (s3_id, username, bucket, base_path))
 
         self._conn.commit()
         cursor.close()
 
-    def get_next_files_info(self, s3_url: str, username: str, updated_value: int, s3_path:str=None,\
+    def get_next_files_info(self, s3_id: str, username: str, updated_value: int, s3_path:str=None,\
                                             upload_id: str=None, \
                                             check_smaller_values: bool=False) -> Optional[tuple]:
         """ Returns the file editing information for a user, possibly for only one location
         Arguments:
-            s3_url: the URL to the S3 instance
+            s3_id: the ID to the S3 instance
             username: the name of the user to check for
             updated_level: the numeric updated value to check for in the query
             s3_path: optional S3 upload path to get changes for
@@ -1752,14 +1752,14 @@ class SPDSQLite:
 
         cursor = self._conn.cursor()
         query = 'SELECT bucket, s3_file_path, obs_common, obs_scientific, obs_count, request_id ' +\
-                                    'FROM image_edits WHERE s3_url=? AND username=? ' + \
+                                    'FROM image_edits WHERE s3_id=? AND username=? ' + \
                                     updated_query_fragment + \
                                     ('AND s3_file_path=? ' if s3_path is not None else '') + \
                                     ('AND s3_file_path LIKE ? ' if upload_id is not None else '') +\
                                     'ORDER BY obs_scientific ASC, edit_timestamp ASC'
         if upload_id is not None:
             upload_id = '%' + upload_id + '%'
-        query_data = tuple(val for val in [s3_url, username, updated_value, s3_path, upload_id] \
+        query_data = tuple(val for val in [s3_id, username, updated_value, s3_path, upload_id] \
                                                                                 if val is not None)
 
         cursor.execute(query, query_data)
@@ -1782,7 +1782,7 @@ class SPDSQLite:
 
         cursor = self._conn.cursor()
         cursor.execute('UPDATE collection_edits SET updated=1 ' \
-                                        'WHERE s3_url=? username=? AND bucket=? AND s3_base_path=?',
+                                        'WHERE s3_id=? username=? AND bucket=? AND s3_base_path=?',
                         (collection_info['s3_url'], username, collection_info['bucket'], \
                                                                     collection_info['base_path']))
 
@@ -1806,7 +1806,7 @@ class SPDSQLite:
         cur_idx = 0
         count = 0
         cursor = self._conn.cursor()
-        query = 'UPDATE image_edits SET updated=? WHERE s3_url=? AND username=? AND bucket=? AND ' \
+        query = 'UPDATE image_edits SET updated=? WHERE s3_id=? AND username=? AND bucket=? AND ' \
                 's3_file_path=? AND updated=?'
         while True:
             cur_file = files[cur_idx]

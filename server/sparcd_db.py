@@ -170,14 +170,14 @@ class SPARCdDatabase:
         """
         self._db.update_user_settings(username, settings, email)
 
-    def get_sandbox(self, s3_url: str) -> Optional[tuple]:
+    def get_sandbox(self, s3_id: str) -> Optional[tuple]:
         """ Returns the sandbox items
         Arguments:
-            s3_url: the url of the s3 instance to fetch for
+            s3_id: the ID of the s3 instance to fetch for
         Returns:
             A tuple containing the known sandbox items
         """
-        res = self._db.get_sandbox(s3_url)
+        res = self._db.get_sandbox(s3_id)
 
         if not res or len(res) < 1:
             return tuple()
@@ -251,11 +251,11 @@ class SPARCdDatabase:
 
         return res[0], res[1]
 
-    def sandbox_get_upload(self, s3_url: str, username: str, path: str, \
+    def sandbox_get_upload(self, s3_id: str, username: str, path: str, \
                                                     new_upload_id: bool=False) -> Optional[tuple]:
         """ Checks if an upload for the user exists and returns the files that were loaded
         Arguments:
-            s3_url: the URL to the s3 instance to look for
+            s3_id: the ID to the s3 instance to look for
             username: the user associated with the upload
             path: the source path of the uploads
             new_upload_id: creates a new upload ID for an existing upload
@@ -264,7 +264,7 @@ class SPARCdDatabase:
             containing the files that have been uploaded, and a new upload ID if upload exists or
             None if new_upload_id is False or the upload doesn't exist
         """
-        res = self._db.sandbox_get_upload(s3_url, username, path)
+        res = self._db.sandbox_get_upload(s3_id, username, path)
 
         if not res or len(res) < 3:
             return None, None, None, None
@@ -289,13 +289,13 @@ class SPARCdDatabase:
 
         return elapsed_sec, loaded_files, upload_id, old_upload_id
 
-    def sandbox_new_upload(self, s3_url: str, username: str, path: str, files: tuple, \
+    def sandbox_new_upload(self, s3_id: str, username: str, path: str, files: tuple, \
                                             s3_bucket: str, s3_path: str, location_id: str, \
                                             location_name: str, location_lat: float, \
                                             location_lon: float, location_ele: float) -> str:
         """ Adds new sandbox upload entries
         Arguments:
-            s3_url: the URL to the s3 instance the upload is for
+            s3_id: the ID to the s3 instance the upload is for
             username: the name of the person starting the upload
             path: the source path of the images
             files: the list of filenames (or partial paths) that's to be uploaded
@@ -310,7 +310,7 @@ class SPARCdDatabase:
             Returns the upload ID if entries are added to the database
         """
         # pylint: disable=too-many-arguments, too-many-positional-arguments
-        return self._db.sandbox_new_upload(s3_url, username, path, files, s3_bucket, s3_path,
+        return self._db.sandbox_new_upload(s3_id, username, path, files, s3_bucket, s3_path,
                                             location_id, location_name, location_lat, location_lon,
                                             location_ele)
 
@@ -459,11 +459,11 @@ class SPARCdDatabase:
                  'count': one_row[5]
                  } for one_row in res)
 
-    def add_collection_edit(self, s3_url: str, bucket: str, upload_path: str, username: str, \
+    def add_collection_edit(self, s3_id: str, bucket: str, upload_path: str, username: str, \
                                 timestamp: str, loc_id: str, loc_name: str, loc_ele: float) -> None:
         """ Stores the edit for a collection
         Arguments:
-            s3_url: the URL of the S3 instance
+            s3_id: the ID of the S3 instance
             bucket: the S3 bucket the collection is in
             upload_path: the path to the uploads folder under the bucket
             username: the name of the user making the change
@@ -473,15 +473,15 @@ class SPARCdDatabase:
             loc_ele: the elevation of the new location
         """
         # pylint: disable=too-many-arguments, too-many-positional-arguments
-        self._db.add_collection_edit(s3_url, bucket, upload_path, username, timestamp, loc_id,
+        self._db.add_collection_edit(s3_id, bucket, upload_path, username, timestamp, loc_id,
                                      loc_name, loc_ele)
 
-    def add_image_species_edit(self, s3_url: str, bucket: str, file_path: str, username: str, \
+    def add_image_species_edit(self, s3_id: str, bucket: str, file_path: str, username: str, \
                                 timestamp: str, common: str, species: str, count: str, \
                                 request_id: str) -> None:
         """ Adds a species entry for a file to the database
         Arguments:
-            s3_url: the URL to the S3 instance
+            s3_id: the ID to the S3 instance
             bucket: the S3 bucket the file is in
             file_path: the path to the file the change applies to
             username: the name of the user making the change
@@ -492,7 +492,7 @@ class SPARCdDatabase:
             request_id: distinct ID of the edit request
         """
         # pylint: disable=too-many-arguments, too-many-positional-arguments
-        self._db.add_image_species_edit(s3_url, bucket, file_path, username,  timestamp, common,
+        self._db.add_image_species_edit(s3_id, bucket, file_path, username,  timestamp, common,
                                         species, count, request_id)
 
     def save_user_species(self, username: str, species: str) -> None:
@@ -503,10 +503,10 @@ class SPARCdDatabase:
         """
         self._db.save_user_species(username, species)
 
-    def get_image_species_edits(self, s3_url: str, bucket: str, upload_path: str) -> dict:
+    def get_image_species_edits(self, s3_id: str, bucket: str, upload_path: str) -> dict:
         """ Returns all the saved edits for this bucket and upload path
         Arguments:
-            s3_url: the URL to the S3 instance
+            s3_id: the ID to the S3 instance
             bucket: the S3 bucket the collection is in
             upload_path: the upload path to get the edit for
         Return:
@@ -514,7 +514,7 @@ class SPARCdDatabase:
             contains a dict with keys consisting of the file's S3 paths. The value associated with
             the file's paths is a tuple of tuples that contain the scientific name and the count
         """
-        res = self._db.get_image_species_edits(s3_url, bucket, upload_path)
+        res = self._db.get_image_species_edits(s3_id, bucket, upload_path)
 
         if not res or len(res) < 1:
             return {bucket + ':' + upload_path:tuple()}
@@ -528,16 +528,16 @@ class SPARCdDatabase:
 
         return {bucket + ':' + upload_path:file_species}
 
-    def have_upload_changes(self, s3_url: str, bucket: str, upload_name: str) -> bool:
+    def have_upload_changes(self, s3_id: str, bucket: str, upload_name: str) -> bool:
         """ Returns if there are changes stored in the database for the upload
         Arguments:
-            s3_url: the URL to the S3 instance
+            s3_id: the ID to the S3 instance
             bucket: the S3 bucket the collection is in
             upload_name: the upload name to get the edit for
         Return:
             Returns True if some image edits for this
         """
-        return self._db.have_upload_changes(s3_url, bucket, upload_name)
+        return self._db.have_upload_changes(s3_id, bucket, upload_name)
 
     def get_admin_edit_users(self) -> tuple:
         """ Returns the user information for administrative editing
@@ -563,11 +563,11 @@ class SPARCdDatabase:
         """
         self._db.update_user(old_name, new_email, admin)
 
-    def update_species(self, s3_url: str, username: str, old_scientific: str, new_scientific: str, \
+    def update_species(self, s3_id: str, username: str, old_scientific: str, new_scientific: str, \
                                         new_name: str, new_keybind: str, new_icon_url: str) -> bool:
         """ Adds the species in the database for later submission
         Arguments:
-            s3_url: the URL to the S3 instance
+            s3_id: the ID to the S3 instance
             username: the name of the user making the change
             old_scientific: the old scientific name of the species
             new_scientific: the new scientific name of the species
@@ -578,16 +578,16 @@ class SPARCdDatabase:
             Returns True if no issues were found and False otherwise
         """
         # pylint: disable=too-many-arguments, too-many-positional-arguments
-        return self._db.update_species(s3_url, username, old_scientific, new_scientific, new_name,
+        return self._db.update_species(s3_id, username, old_scientific, new_scientific, new_name,
                                        new_keybind, new_icon_url)
 
-    def update_location(self, s3_url: str, username: str, loc_name: str, loc_id: str, \
+    def update_location(self, s3_id: str, username: str, loc_name: str, loc_id: str, \
                         loc_active: bool, loc_ele: float, loc_old_lat: float, loc_old_lng: float, \
                         loc_new_lat: float, loc_new_lng: float) -> bool:
 
         """ Adds the location information to the database for later submission
         Arguments:
-            s3_url: the URL to the S3 isntance
+            s3_id: the ID to the S3 isntance
             username: the name of the user making the change
             loc_name: the name of the location
             loc_id: the ID of the location
@@ -601,13 +601,13 @@ class SPARCdDatabase:
             Returns True if no issues were found and False otherwise
         """
         # pylint: disable=too-many-arguments, too-many-positional-arguments
-        return self._db.update_location(s3_url, username, loc_name, loc_id, loc_active, loc_ele,
+        return self._db.update_location(s3_id, username, loc_name, loc_id, loc_active, loc_ele,
                                         loc_old_lat, loc_old_lng, loc_new_lat, loc_new_lng)
 
-    def get_admin_changes(self, s3_url: str, username: str) -> dict:
+    def get_admin_changes(self, s3_id: str, username: str) -> dict:
         """ Returns any saved administrative location and species changes
         Arguments:
-            s3_url: the URL to the S3 instance
+            s3_id: the ID to the S3 instance
             username: the name of the user to fetch for
         Return:
             Returns a dict of 'locations' and 'species' changes as tuples off the keys. Also returns
@@ -617,7 +617,7 @@ class SPARCdDatabase:
         location_idxs = {'loc_name':0, 'loc_id':1, 'loc_active':2, 'loc_elevation':3, \
                          'loc_old_lat':4, 'loc_old_lng':5, 'loc_new_lat':6, 'loc_new_lng':7 }
 
-        res = self._db.get_admin_locations(s3_url, username)
+        res = self._db.get_admin_locations(s3_id, username)
         if not res:
             locations = []
         else:
@@ -626,7 +626,7 @@ class SPARCdDatabase:
         species_idxs = {'sp_old_scientific':0, 'sp_new_scientific':1, 'sp_name':2, 'sp_keybind': 3,\
                         'sp_icon_url':4}
 
-        res = self._db.get_admin_species(s3_url, username)
+        res = self._db.get_admin_species(s3_id, username)
         if not res:
             species = []
         else:
@@ -634,21 +634,21 @@ class SPARCdDatabase:
 
         return {'locations': locations, 'species': species} | location_idxs | species_idxs
 
-    def have_admin_changes(self, s3_url: str, username: str) -> dict:
+    def have_admin_changes(self, s3_id: str, username: str) -> dict:
         """ Returns any saved administrative location and species changes
         Arguments:
-            s3_url: the URL to the S3 instance
+            s3_id: the ID to the S3 instance
             username: the name of the user to fetch for
         Return:
             Returns a dict of 'locationsCount' and 'speciesCount'
         """
-        res = self._db.admin_location_counts(s3_url, username)
+        res = self._db.admin_location_counts(s3_id, username)
         if not res or len(res) <= 0:
             locations_count = 0
         else:
             locations_count = res[0]
 
-        res = self._db.admin_species_counts(s3_url, username)
+        res = self._db.admin_species_counts(s3_id, username)
         if not res or len(res) <= 0:
             species_count = 0
         else:
@@ -656,55 +656,55 @@ class SPARCdDatabase:
 
         return {'locationsCount': locations_count, 'speciesCount': species_count}
 
-    def clear_admin_location_changes(self, s3_url: str, username: str) -> None:
+    def clear_admin_location_changes(self, s3_id: str, username: str) -> None:
         """ Cleans up the administration location changes for this use
         Arguments:
-            s3_url: the URL to the S3 instance
+            s3_id: the ID to the S3 instance
             username: the name of the user to mark the locations for
         """
-        self._db.clear_admin_location_changes(s3_url, username)
+        self._db.clear_admin_location_changes(s3_id, username)
 
-    def clear_admin_species_changes(self, s3_url: str, username: str) -> None:
+    def clear_admin_species_changes(self, s3_id: str, username: str) -> None:
         """ Cleans up the administration species changes for this use
         Arguments:
-            s3_url: the URL to the S3 instance
+            s3_id: the ID to the S3 instance
             username: the name of the user to mark the species for
         """
-        self._db.clear_admin_species_changes(s3_url, username)
+        self._db.clear_admin_species_changes(s3_id, username)
 
-    def get_next_upload_location(self, s3_url: str, username: str) -> Optional[dict]:
+    def get_next_upload_location(self, s3_id: str, username: str) -> Optional[dict]:
         """ Returns the next edit location for this user at the specified endpoint
         Arguments:
-            s3_url: the URL to the S3 instance
+            s3_id: the ID to the S3 instance
             username: the name of the user to check for
         Return:
             Returns a tuple with the location edit's as a dict containing bucket, 
             base_path (on S3), loc_id, loc_name, loc_ele (with loc_ele containing the elevation).
             None is returned if there are no location changes to process
         """
-        res = self._db.get_next_upload_location(s3_url, username)
+        res = self._db.get_next_upload_location(s3_id, username)
 
         if not res or len(res) <= 0 or len(res[0]) < 5:
             return None
 
-        return {'s3_url': s3_url, 'bucket':res[0], 'base_path':res[1], \
+        return {'s3_url': s3_id, 'bucket':res[0], 'base_path':res[1], \
                  'loc_id':res[2], 'loc_name':res[3], 'loc_ele':res[4]}
 
-    def complete_upload_location(self, s3_url: str, username: str, bucket: str, \
+    def complete_upload_location(self, s3_id: str, username: str, bucket: str, \
                                                                             base_path: str) -> None:
         """ Marks the location information as having completed updating
         Arguments:
-            s3_url: the URL to the S3 instance
+            s3_id: the ID to the S3 instance
             username: the name of the user to check for
             bucket: the bucket associated with the location change
             base_path: the upload path where the location was change
         """
-        self._db.complete_upload_location(s3_url, username, bucket, base_path)
+        self._db.complete_upload_location(s3_id, username, bucket, base_path)
 
-    def get_next_files_info(self, s3_url: str, username: str, s3_path:str=None) -> Optional[tuple]:
+    def get_next_files_info(self, s3_id: str, username: str, s3_path:str=None) -> Optional[tuple]:
         """ Returns the file editing information for a user, possibly for only one location
         Arguments:
-            s3_url: the URL to the S3 instance
+            s3_id: the ID to the S3 instance
             username: the name of the user to check for
             s3_path: the S3 upload path to get changes for
         Return:
@@ -714,13 +714,13 @@ class SPARCdDatabase:
         Notes:
             See add_image_species_edit()
         """
-        return self.common_get_next_files_info(s3_url, username, 0, s3_path=s3_path)
+        return self.common_get_next_files_info(s3_id, username, 0, s3_path=s3_path)
 
-    def get_edited_files_info(self, s3_url: str, username: str, upload_id: str, \
+    def get_edited_files_info(self, s3_id: str, username: str, upload_id: str, \
                                                             force: bool=False) -> Optional[tuple]:
         """ Returns the file editing information for a user, possibly for only one location
         Arguments:
-            s3_url: the URL to the S3 instance
+            s3_id: the ID to the S3 instance
             username: the name of the user to check for
             upload_id: the ID of the upload to search for
             force: Set to True to force any and all incomplete edits to be included in the returned
@@ -731,15 +731,15 @@ class SPARCdDatabase:
             scientific (name), and the count. None is returned if there are no records
         """
 
-        return self.common_get_next_files_info(s3_url, username, 1, upload_id=upload_id,
+        return self.common_get_next_files_info(s3_id, username, 1, upload_id=upload_id,
                                                                         allow_smaller_values=force)
 
-    def common_get_next_files_info(self, s3_url: str, username: str, updated_value: int, \
+    def common_get_next_files_info(self, s3_id: str, username: str, updated_value: int, \
                                         s3_path:str=None, upload_id: str=None, \
                                         allow_smaller_values: bool=False) -> Optional[tuple]:
         """ Returns the file editing information for a user, possibly for only one location
         Arguments:
-            s3_url: the URL to the S3 instance
+            s3_id: the ID to the S3 instance
             username: the name of the user to check for
             updated_level: the numeric updated value to check for in the query
             s3_path: optional S3 upload path to get changes for
@@ -754,7 +754,7 @@ class SPARCdDatabase:
             It's recommended that only one of the S3 path, or the upload ID, is specified, not both.
         """
         # pylint: disable=too-many-arguments, too-many-positional-arguments
-        res = self._db.get_next_files_info(s3_url, username, updated_value, s3_path, upload_id,
+        res = self._db.get_next_files_info(s3_id, username, updated_value, s3_path, upload_id,
                                                                             allow_smaller_values)
 
         res_dict = {}
@@ -772,7 +772,7 @@ class SPARCdDatabase:
                                                          })
                 res_dict[one_res[1]]['request_id'] = one_res[5]
             else:
-                res_dict[one_res[1]] = {'s3_url': s3_url,
+                res_dict[one_res[1]] = {'s3_url': s3_id,
                                         'filename': os.path.basename(one_res[1]),
                                         'bucket': one_res[0],
                                         's3_path': one_res[1],

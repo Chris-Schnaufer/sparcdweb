@@ -118,7 +118,7 @@ def build_database(path: str, admin_info: tuple=None) -> None:
              'CREATE TABLE sandbox(id INTEGER PRIMARY KEY ASC, ' \
                 'name TEXT NOT NULL, ' \
                 'path TEXT NOT NULL, ' \
-                's3_url TEXT NOT NULL, ' \
+                's3_id TEXT NOT NULL, ' \
                 'bucket TEXT NOT NULL, ' \
                 's3_base_path TEXT NOT NULL, ' \
                 'location_id TEXT NOT NULL, ' \
@@ -147,7 +147,7 @@ def build_database(path: str, admin_info: tuple=None) -> None:
                 'loc_id TEXT, ' \
                 'loc_elevation REAL)',
              'CREATE TABLE image_edits(id INTEGER PRIMARY KEY ASC, ' \
-                's3_url TEXT NOT NULL, ' \
+                's3_id TEXT NOT NULL, ' \
                 'bucket TEXT NOT NULL, ' \
                 's3_file_path TEXT NOT NULL,' \
                 'username TEXT NOT NULL, ' \
@@ -159,7 +159,7 @@ def build_database(path: str, admin_info: tuple=None) -> None:
                 'request_id TEXT, ' # Used to keep track of requests \
                 'timestamp INTEGER)',
              'CREATE TABLE collection_edits(id INTEGER PRIMARY KEY ASC, ' \
-                's3_url TEXT NOT NULL, ' \
+                's3_id TEXT NOT NULL, ' \
                 'bucket TEXT NOT NULL, ' \
                 's3_base_path TEXT NOT NULL,'\
                 'username TEXT NOT NULL, ' \
@@ -170,7 +170,7 @@ def build_database(path: str, admin_info: tuple=None) -> None:
                 'updated INTEGER DEFAULT 0, ' \
                 'timestamp INTEGER)',
              'CREATE TABLE admin_species_edits(id INTEGER PRIMARY KEY ASC, ' \
-                's3_url TEXT NOT NULL, ' \
+                's3_id TEXT NOT NULL, ' \
                 'user_id INTEGER NOT NULL,'\
                 'old_scientific_name TEXT,'\
                 'new_scientific_name TEXT NOT NULL, ' \
@@ -180,7 +180,7 @@ def build_database(path: str, admin_info: tuple=None) -> None:
                 's3_updated INTEGER DEFAULT 0,' \
                 'timestamp INTEGER)',
              'CREATE TABLE admin_location_edits(id INTEGER PRIMARY KEY ASC, ' \
-                's3_url TEXT NOT NULL, '\
+                's3_id TEXT NOT NULL, '\
                 'user_id INTEGER NOT NULL,'\
                 'loc_name TEXT NOT NULL,'\
                 'loc_id TEXT NOT NULL, '\
