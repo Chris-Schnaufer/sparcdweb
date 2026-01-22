@@ -37,11 +37,22 @@ const MIN_COMMENT_LEN = 10; // Minimum allowable number of characters for a comm
 const MAX_CHUNKS = 8; // Maximum number of chunks to break file uploads into
 const MAX_FILES_UPLOAD_SPLIT = 5; // Maximum number of files to upload at one time
 
+// Used to indicate the state of checking for a previous upload and what to so about it
 const prevUploadCheckState = {
   noCheck: null,
   checkReset: 1,
   checkNew: 2,
   checkAbandon: 3,
+};
+
+// Used to manage the state of an active upload
+const uploadingState = {
+  none: 0,
+  uploading: 10,
+  haveFailed: 20,
+  retryingFailed: 30,
+  uploadFailure: 31,
+  error: 40,
 };
 
 
@@ -83,6 +94,7 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
   const uiSizes = React.useContext(SizeContext);
   const uploadToken = React.useContext(TokenContext);
   const userSettings = React.useContext(UserSettingsContext);  // User display settings
+  const uploadStateRef = React.useRef(uploadingState.none);  // Used to keep upload state up to date for functions
   const [collectionSelection, setCollectionSelection] = React.useState(null);
   const [comment, setComment] = React.useState(null);
   const [continueUploadInfo, setContinueUploadInfo] = React.useState(null); // Used when continuing a previous upload
@@ -95,12 +107,13 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
   const [locationSelection, setLocationSelection] = React.useState(null);
   const [newUpload, setNewUpload] = React.useState(false); // Used to indicate that we have  a new upload
   const [newUploadFiles, setNewUploadFiles] = React.useState(null); // The list of files to upload
-  const [pendingFailedUploads, setPendingFailedUploads] = React.useState(false); // Used to indicate that we have failed uploads and are waiting
+  const [uploadState, setUploadState] = React.useState(uploadingState.none); // Used to indicate the state of an active upload
   const [prevUploadCheck, setPrevUploadCheck] = React.useState(prevUploadCheckState.noCheck); // Used to check if the user wants to perform a reset or new upload
   const [uploadPath, setUploadPath] = React.useState(null);
   const [uploadCompleted, setUploadCompleted] = React.useState(false); // Uploads are done
   const [uploadingFiles, setUploadingFiles] = React.useState(false);
   const [uploadingFileCounts, setUploadingFileCounts] = React.useState({total:0, uploaded:0});
+  const [workingUploadFiles, setWorkingUploadFiles] = React.useState(null); // Contains the latest/last set of files for upload
   const [workingUploadId, setWorkingUploadId] = React.useState(null); // The active upload ID
 
   const { options, parseTimezone } = useTimezoneSelect({ labelStyle:'altName', allTimezones });
@@ -115,6 +128,11 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
     displayCoordSystem = userSettings['coordinatesDisplay'];
   }
 
+  // Used to keep the upload state reference up to date
+  React.useEffect(() => {
+    uploadStateRef.current = uploadState;
+  }, [uploadState]);
+
   /**
    * Returns whether or not this is a new upload or a continuation of a previous one
    * @function
@@ -123,7 +141,7 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
    * @returns {array} An array of files that have not been uploaded (if a continuation) or a false truthiness value 
    *          for a new upload
    */
-  function checkPreviousUpload(path, files) {
+  const checkPreviousUpload = React.useCallback((path, files) => {
     const sandboxPrevUrl = serverURL + '/sandboxPrev?t=' + encodeURIComponent(uploadToken);
     const formData = new FormData();
 
@@ -146,11 +164,13 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
               setNewUpload(true);
               setNewUploadFiles(files);
               setUploadPath(path);
+              setWorkingUploadFiles(files);
             } else {
               setUploadPath(path);
 
               // Acknowledge that upload should continue or be restarted or as a new one
               const notLoadedFiles = files.filter((item) => !respData.uploadedFiles.includes(item.webkitRelativePath));
+              setWorkingUploadFiles(notLoadedFiles);
               setContinueUploadInfo({files: notLoadedFiles,
                                      elapsedSec: parseInt(respData.elapsed_sec),
                                      allFiles: files,
@@ -165,18 +185,20 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
       console.log('Prev Upload Unknown Error: ',err);
       addMessage(Level.Error, 'An unkown problem ocurred while preparing for upload');
     }
-  }
+  }, [addMessage, serverURL, setContinueUploadInfo, setNewUpload, setNewUploadFiles, setWorkingUploadFiles, setUploadPath, uploadToken]);
 
   /**
    * Handles failed uploaded files
    * @function
    * @param {string} uploadId The ID of the upload that's in progress
+   * @param {object} uploadedFiles The files that were being uploaded
+   * @param {function} cbComplete The function to call if all files are successfully uploaded
+   * @param {function} cbFail The function to call on failure
+   * @param {number} numRetries The number of retry attempts made
    */
-  const handleFailedUploads = React.useCallback((uploadId, numRetries = 0, prevUploadCount = null, startTs = null) => {
-    const failedUploadsUrl = serverURL + '/sandboxUnloadedFiles?t=' + encodeURIComponent(uploadToken) + 
+  const handleFailedUploads = React.useCallback((uploadId, uploadedFiles, cbComplete, cbFail, numRetries = 0) => {
+    const failedUploadsUrl = serverURL + '/sandboxUnloadedFiles?t=' + encodeURIComponent(uploadToken) +
                                                               '&i=' + encodeURIComponent(uploadId);
-    // Remove the message
-    setPendingFailedUploads(false);
 
     try {
       const resp = fetch(failedUploadsUrl, {
@@ -190,39 +212,48 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
           })
         .then((respData) => {
             // Build up list of files to retry
-            const failedFiles = newUploadFiles.filter((item) => respData.indexOf((oneName) => oneName.toLowerCase() === item.name.toLowerCase()) !== -1)
-            if (failedFiles) {
-              window.setTimeout(() => uploadChunk(failedFiles, uploadId), 200);
+            if (respData.length > 0) {
+              const failedFiles = uploadedFiles.filter((item) => respData.findIndex((oneName) => oneName.toLowerCase() === item.webkitRelativePath.toLowerCase()) !== -1 )
+              if (failedFiles.length > 0) {
+                window.setTimeout(() => uploadChunk(failedFiles, uploadId), 200);
+              } else {
+                if (cbFail && typeof(cbFail) === 'function') {
+                  cbFail()
+                }
+              }
             } else {
-              console.log('ERROR: Unable to find failed files in list of files to upload');
-              addMessage(Level.Error, 'Unexpected error ocurred while trying to fetch list of failed files from the server');
+              if (cbComplete && typeof(cbComplete) === 'function') {
+                cbComplete()
+              }
             }
         })
         .catch(function(err) {
           if (numRetries >= 6) {
             console.log('Getting Failed Files For Upload Error: ', err);
             addMessage(Level.Error, 'A problem ocurred while getting failed files for the upload');
+            setUploadState(uploadingState.error);
           } else {
             numRetries++;
-            window.setTimeout(() => handleFailedUploads(uploadId, numRetries), 10000 * numRetries);
+            window.setTimeout(() => handleFailedUploads(uploadId, uploadedFiles, cbComplete, cbFail, numRetries), 10000 * numRetries);
           }
       });
     } catch (error) {
       console.log('Getting Failed Files For Upload  Unknown Error: ',err);
       addMessage(Level.Error, 'An unkown problem ocurred while getting failed files for the upload');
-      setPendingFailedUploads(false);
+      setUploadState(uploadingState.error);
     }
-  }, [addMessage, serverURL, uploadToken]);
+  }, [addMessage, serverURL, setUploadState, uploadToken]);
 
   /**
    * Internal function that gets the counts of an upload
    * @function
    * @param {string} uploadId The ID of the upload that's in progress
+   * @param {object} uploadFiles The arraay of files that are being uploaded
    * @param {number} numRetries The working number of retries when called recursively during error handling.
    * @param {number} prevUploadCount The number of uploaded files used when uploads are failing.
    * @param {number} startTs The timestamp of when the prevUploadCount last changed
    */
-  const internalGetUploadCounts = React.useCallback((uploadId, numRetries = 0, prevUploadCount = null, startTs = null) => {
+  const internalGetUploadCounts = React.useCallback((uploadId, uploadFiles, numRetries = 0, prevUploadCount = null, startTs = null) => {
     const sandboxCountsUrl = serverURL + '/sandboxCounts?t=' + encodeURIComponent(uploadToken) + 
                                                               '&i=' + encodeURIComponent(uploadId);
 
@@ -242,27 +273,47 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
             if (respData.uploaded === respData.total) {
               // We are done uploading
               setUploadCompleted(true);
-              setPendingFailedUploads(false);
+              setUploadState(uploadingState.none);
             } else {
-              // If we don't have failed uploads, we continue as usual
-              if (!haveFailedUpload) {
-                window.setTimeout(() => internalGetUploadCounts(uploadId), 2000);
+              // We have failed uploads. Keep track of what we have so that we can retry when
+              // the uploads have stabilized (the ones that could succeed, have succeeded)
+              if (respData.uploaded !== prevUploadCount || !startTs) {
+                // Something updated, we're not ready to get the failed images
+                window.setTimeout(() => internalGetUploadCounts(uploadId, uploadFiles, 0, respData.uploaded, Date.now()), 2000);
+                if (uploadStateRef.current !== uploadingState.retryingFailed) {
+                  setUploadState(uploadingState.uploading);
+                }
               } else {
-                // We have failed uploads. Keep track of what we have so that we can retry when
-                // the uploads have stabilized (the ones that could succeed, have succeeded)
-                if (respData.uploaded !== prevUploadCount || !startTs) {
-                  // Something updated, we're not ready to get the failed images
-                  window.setTimeout(() => internalGetUploadCounts(uploadId, 0, respData.uploaded, Date.now()), 2000);
-                  setPendingFailedUploads(false);
+                // We haven't had a change in the number of successful uploads
+                const elapsedSec = Math.trunc((Date.now() - startTs) / 1000);
+                // Check if we're ready to display a pending message
+                if (elapsedSec >= 1 * 60) {    // 1 minutes
+                  // Only if we're not retrying
+                  if (uploadStateRef.current !== uploadingState.retryingFailed) {
+                    setUploadState(uploadingState.haveFailed);
+                  }
+                }
+                if (elapsedSec >= 3 * 60) {    // 3 minutes
+                  // Retry only if we're not already retrying
+                  if (uploadStateRef.current !== uploadingState.retryingFailed) {
+                    setUploadState(uploadingState.retryingFailed);
+                    handleFailedUploads(uploadId, uploadFiles, 
+                        () => {   // Success function
+                              setUploadState(uploadingState.none);
+                              },
+                        () => {   // Failure function
+                              console.log('ERROR: Unable to find failed files in list of files to upload');
+                              addMessage(Level.Error, 'An error ocurred while trying to fetch list of failed files from the server');
+                              setUploadState(uploadingState.uploadFailure);
+                              }
+                      );
+                    window.setTimeout(() => internalGetUploadCounts(uploadId, uploadFiles), 2000);
+                  } else {
+                    setUploadState(uploadingState.uploadFailure);
+                  }
                 } else {
-                  const elapsedSec = Math.trunc((Date.now() - startTs) / 1000);
-                  // Check if we're ready to display a pending message
-                  if (elapsedSec >= 1 * 60 * 1000) {    // 2 minutes
-                    setPendingFailedUploads(true);
-                  }
-                  if (elapsedSec >= 3 * 60 * 1000) {    // 5 minutes
-                    handleFailedUploads(uploadId);
-                  }
+                  // Not ready to do take any action yet
+                  window.setTimeout(() => internalGetUploadCounts(uploadId, uploadFiles, 0, respData.uploaded, startTs), 2000);
                 }
               }
             }
@@ -271,25 +322,28 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
           if (numRetries >= 6) {
             console.log('Upload Images Counts Error: ', err);
             addMessage(Level.Error, 'A problem ocurred while checking upload image counts');
+            setUploadState(uploadingState.error);
           } else {
             numRetries++;
-            window.setTimeout(() => internalGetUploadCounts(uploadId, numRetries), 7000 * numRetries);
-            setPendingFailedUploads(false);
+            window.setTimeout(() => internalGetUploadCounts(uploadId, uploadFiles, numRetries), 7000 * numRetries);
+            setUploadState(uploadingState.uploading);
           }
       });
     } catch (error) {
       console.log('Upload Images Counts Unknown Error: ',err);
       addMessage(Level.Error, 'An unkown problem ocurred while checking upload image counts');
+      setUploadState(uploadingState.error);
     }
-  }, [addMessage, serverURL, setUploadingFileCounts, setUploadCompleted, uploadToken])
+  }, [addMessage, haveFailedUpload, serverURL, setUploadingFileCounts, setUploadCompleted, setUploadState, uploadStateRef, uploadToken])
 
   /**
    * Gets the counts of an upload
    * @function
-   * @param {string} uploadId The ID of the upload that's completed
+   * @param {string} uploadId The ID of the upload that's in progress
+   * @param {object} uploadFiles The arraay of files that are being uploaded
    */
-  const getUploadCounts = React.useCallback((uploadId) => {
-    internalGetUploadCounts(uploadId);
+  const getUploadCounts = React.useCallback((uploadId, uploadFiles) => {
+    internalGetUploadCounts(uploadId, uploadFiles);
   }, [internalGetUploadCounts]);
   
 
@@ -424,11 +478,7 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
             const nextFiles = getNextUploadChunk(fileChunk, numFiles, startTs);
             setHaveFailedUpload(true);
             if (nextFiles.files.length > 0) {
-              window.setTimeout(() => uploadChunk(nextFiles.files, uploadId, nextFiles.count), 10);
-            } else {
-              // Check for failed uploaded files and try to upload those. If we have uploads that failed and we can't
-              // seem to get the uploaded, let the user know and have them decide next steps
-              /* newUploadFiles */
+              window.setTimeout(() => uploadChunk(nextFiles.files, uploadId), 10);
             }
           }
       });
@@ -452,12 +502,13 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
       addMessage(Level.Information, 'All files have been uploaded');
       console.log('All files were uploaded', uploadId);
       setWorkingUploadId(uploadId);
-      getUploadCounts(uploadId);
+      getUploadCounts(uploadId, uploadFiles);
       return;
     }
 
     setUploadingFiles(true);
     setHaveFailedUpload(false);
+    setUploadState(uploadingState.uploading);
 
     // Figure out how many instances we want sending data
     const numInstance = uploadFiles.length < MAX_CHUNKS ? uploadFiles.length : MAX_CHUNKS;
@@ -472,10 +523,10 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
       window.setTimeout(() => uploadChunk(one_upload, uploadId), 10);
     }
 
-    window.setTimeout(() => getUploadCounts(uploadId), 1000);
+    window.setTimeout(() => getUploadCounts(uploadId, uploadFiles), 1000);
 
     setWorkingUploadId(uploadId);
-  }, [addMessage, getUploadCounts, setHaveFailedUpload, setWorkingUploadId, setUploadingFiles, uploadChunk]);
+  }, [addMessage, getUploadCounts, haveFailedUpload, setHaveFailedUpload, setWorkingUploadId, setUploadingFiles, uploadChunk]);
 
   /**
    * Handles the user wanting to upload files
@@ -626,6 +677,43 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
       });
   }, [onCompleted, serverUploadCompleted, setCollectionSelection, setComment, setContinueUploadInfo, setLocationSelection, setNewUpload, 
       setNewUploadFiles, setUploadCompleted, setUploadingFileCounts, setUploadingFiles, workingUploadId]);
+
+  /**
+   * Handles the user wanting to ignore the failed uploads for now
+   * @function
+   */
+  const failedIgnore = React.useCallback(() => {
+    const curUploadId = workingUploadId;
+    setContinueUploadInfo(null);
+    setCollectionSelection(null);
+    setLocationSelection(null);
+    setComment(null);
+    setNewUpload(false);
+    setNewUploadFiles(null);
+    setUploadingFiles(false);
+    setUploadCompleted(false);
+    setUploadingFileCounts({total:0, uploaded:0});
+    onCompleted();
+  }, [onCompleted, setCollectionSelection, setComment, setContinueUploadInfo, setLocationSelection, setNewUpload, 
+      setNewUploadFiles, setUploadCompleted, setUploadingFileCounts, setUploadingFiles, workingUploadId]);
+
+  /**
+   * Handles the user wanting to retry sending the failed uploads
+   * @function
+   */
+  const failedRetry = React.useCallback(() => {
+    setUploadState(uploadingState.uploading);
+    uploadFolder(workingUploadFiles, workingUploadId);
+  }, [workingUploadFiles, workingUploadId]);
+
+  /**
+   * Mark the failed upload as completed
+   * @function
+   */
+  const failedDone =  React.useCallback(() => {
+    setUploadState(uploadingState.none);
+    doneUpload();
+  }, [doneUpload, setUploadState]);
 
   /**
    * Calls the cancelation function when the user clicks cancel
@@ -1009,12 +1097,12 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
             {uploadingFileCounts.uploaded} of {uploadingFileCounts.total} uploaded
             </Typography>
             <ProgressWithLabel value={percentComplete}/>
-          </Grid>
-          { pendingFailedUploads && 
             <Typography gutterBottom variant="body">
-              Some files failed upload, waiting before attempting to retry
-            </Typography>
-          }
+              { uploadState === uploadingState.haveFailed && "Some files failed to upload, waiting before attempting to retry" }
+              { uploadState === uploadingState.retryingFailed && "Retrying failed images" }
+              { uploadState === uploadingState.uploadFailure && "Failed to upload all files" }
+          </Typography>
+          </Grid>
         </Grid>
       );
     }
@@ -1106,6 +1194,13 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
               <React.Fragment>
                 <Button id="folder_upload_continue" sx={{'flex':'1'}} size="small" onClick={doneUpload}>Done</Button>
                 <Button id="folder_upload_another" sx={{'flex':'1'}} size="small" onClick={anotherUpload}>Upload Another</Button>
+              </React.Fragment>
+            }
+            { uploadState === uploadingState.uploadFailure &&
+              <React.Fragment>
+                <Button id="folder_upload_fail_retry" sx={{'flex':'1'}} size="small" onClick={failedRetry}>Retry Now</Button>
+                <Button id="folder_upload_fail_ignore" sx={{'flex':'1'}} size="small" onClick={failedIgnore}>Retry Later</Button>
+                <Button id="folder_upload_fail_done" sx={{'flex':'1', whiteSpace:"nowrap"}} size="small" onClick={failedDone}>Mark Completed</Button>
               </React.Fragment>
             }
             </CardActions>

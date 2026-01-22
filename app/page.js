@@ -356,7 +356,7 @@ export default function Home() {
                                                                          first.date.time.second > second.date.time.second || 
                                                                          first.tdate.ime.nano > second.date.time.nano) ? -1 : 1);
           }
-          console.log('COLLECTIONS',curCollections);
+          console.log('HACK: COLLECTIONS',curCollections);
           setCollectionInfo(curCollections);
         })
         .catch((err) => {
@@ -393,7 +393,7 @@ export default function Home() {
         .then((respData) => {
           // Save response data
           setLoadingSandbox(false);
-          console.log('SANDBOX',respData);
+          console.log('HACK: SANDBOX',respData);
           setSandboxInfo(respData);
         })
         .catch((err) => {
@@ -431,7 +431,7 @@ export default function Home() {
           // Save response data
           setLoadingLocations(false);
           const curLocations = respData.sort((first, second) => first.nameProperty.localeCompare(second.nameProperty, undefined, { sensitivity: "base" }));
-          console.log('LOCATIONS RESP:',curLocations);
+          console.log('HACK: LOCATIONS RESP:',curLocations);
           setLocationInfo(curLocations);
         })
         .catch((err) => {

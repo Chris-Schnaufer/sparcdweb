@@ -522,11 +522,11 @@ def sandbox():
     if not token_valid or not user_info:
         return "Unauthorized", 401
 
-    # Get the sandbox information from the database
-    sandbox_items = db.get_sandbox(user_info.url)
-
     # The S3 endpoint in case we need it
     s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
+
+    # Get the sandbox information from the database
+    sandbox_items = db.get_sandbox(hash2str(s3_url))
 
     # Get the collections to fill in the return data (from the DB only - no S3 connection info)
     all_collections = sdc.load_collections(db, hash2str(s3_url), bool(user_info.admin))
@@ -813,7 +813,7 @@ def upload_images():
         edit_key = one_image['bucket'] + ':' + upload_path
         if not edit_key in edits:
             edits = {**edits,
-                     **db.get_image_species_edits(user_info.url, one_image['bucket'],upload_path)
+                     **db.get_image_species_edits(hash2str(s3_url), one_image['bucket'],upload_path)
                     }
         if not one_image['s3_path'] in edits[edit_key]:
             continue
@@ -966,7 +966,9 @@ def check_changes():
     if not collection_id or not collection_upload:
         return "Not Found", 406
 
-    have_changes = db.have_upload_changes(user_info.url, SPARCD_PREFIX+collection_id,
+    s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
+
+    have_changes = db.have_upload_changes(hash2str(s3_url), SPARCD_PREFIX+collection_id,
                                                                                 collection_upload)
 
     return json.dumps({'changesMade': have_changes})
@@ -1420,9 +1422,10 @@ def sandbox_prev():
     if not token_valid or not user_info:
         return "Unauthorized", 401
 
+    s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
 
     # Check with the DB if the upload has been started before
-    elapsed_sec, uploaded_files, upload_id, _ = db.sandbox_get_upload(user_info.url,
+    elapsed_sec, uploaded_files, upload_id, _ = db.sandbox_get_upload(hash2str(s3_url),
                                                                                 user_info.name,
                                                                                 rel_path,
                                                                                 True)
@@ -1517,7 +1520,7 @@ def sandbox_new():
                                         s3_path + '/' + one_file, data, 'application/csv')
 
     # Add the entries to the database
-    upload_id = db.sandbox_new_upload(user_info.url, user_info.name, rel_path, all_files,
+    upload_id = db.sandbox_new_upload(hash2str(s3_url), user_info.name, rel_path, all_files,
                                                                 s3_bucket, s3_path,
                                                                 our_location['idProperty'],
                                                                 our_location['nameProperty'],
@@ -1716,7 +1719,7 @@ def sandbox_unloaded_files():
    """
     db = SPARCdDatabase(DEFAULT_DB_PATH)
     token = request.args.get('t')
-    print('SANDBOX COUNTS', flush=True)
+    print('SANDBOX UNLOADED FILES', flush=True)
 
     # Check the credentials
     token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
@@ -1956,10 +1959,11 @@ def image_location():
     bucket = SPARCD_PREFIX + coll_id
     upload_path = f'Collections/{coll_id}/{S3_UPLOADS_PATH_PART}{upload_id}'
 
-    db.add_collection_edit(user_info.url, bucket, upload_path, user_info.name, timestamp,
+    s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
+
+    db.add_collection_edit(hash2str(s3_url), bucket, upload_path, user_info.name, timestamp,
                                                                         loc_id, loc_name, loc_ele)
 
-    s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
     sdu.process_upload_changes(s3_url, user_info.name, lambda: get_password(token, db),
                                 coll_id, upload_id, hash2str(s3_url)+'-'+TEMP_SPECIES_FILE_NAME,
                                 change_locations={
@@ -2066,7 +2070,9 @@ def image_species():
 
     bucket = SPARCD_PREFIX + coll_id
 
-    db.add_image_species_edit(user_info.url, bucket, path, user_info.name, timestamp,
+    s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
+
+    db.add_image_species_edit(hash2str(s3_url), bucket, path, user_info.name, timestamp,
                                                 common_name, scientific_name, count, str(reqid))
 
     return json.dumps({'success': True})
@@ -2111,7 +2117,7 @@ def image_edit_complete():
     s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
 
     # Get any changes
-    edit_files_info = db.get_next_files_info(user_info.url, user_info.name, path)
+    edit_files_info = db.get_next_files_info(hash2str(s3_url), user_info.name, path)
 
     if not edit_files_info:
         return {'success': True, 'retry': True, 'message': "No changes found for file", \
@@ -2199,7 +2205,7 @@ def images_all_edited():
     s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
 
     # Get any and all changes
-    edited_files_info = db.get_edited_files_info(user_info.url, user_info.name, upload_id, True)
+    edited_files_info = db.get_edited_files_info(hash2str(s3_url), user_info.name, upload_id, True)
 
     if not edited_files_info:
         return {'success': True, 'retry': True, 'foundEdits': 0,  \
@@ -2391,8 +2397,10 @@ def admin_check_changes():
     if user_info.admin != 1:
         return "Not Found", 404
 
+    s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
+
     # Check for changes in the db
-    changed = db.have_admin_changes(user_info.url, user_info.name)
+    changed = db.have_admin_changes(hash2str(s3_url), user_info.name)
 
     return {'success': True, 'locationsChanged': changed['locationsCount'] > 0, \
             'speciesChanged': changed['speciesCount'] > 0}
@@ -2843,7 +2851,7 @@ def admin_species_update():
         return {'success': False, 'message': f'Species "{new_scientific}" already exists'}
 
     # Put the change in the DB
-    if db.update_species(user_info.url, user_info.name, old_scientific, new_scientific, \
+    if db.update_species(hash2str(s3_url), user_info.name, old_scientific, new_scientific, \
                                                                 new_name, key_binding, icon_url):
         return {'success': True, 'message': f'Successfully updated species "{find_scientific}"'}
 
@@ -2966,7 +2974,7 @@ def admin_location_update():
                             ])
 
     # Put the change in the DB
-    if db.update_location(user_info.url, user_info.name, loc_name, loc_id, loc_active,
+    if db.update_location(hash2str(s3_url), user_info.name, loc_name, loc_id, loc_active,
                                         loc_ele,loc_old_lat,loc_old_lng, loc_new_lat, loc_new_lng):
         return_lat = round(loc_new_lat, 3)
         return_lng = round(loc_new_lng, 3)
@@ -3198,7 +3206,7 @@ def admin_complete_changes():
     # Get the locations and species changes logged in the database
     s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
 
-    changes = db.get_admin_changes(user_info.url, user_info.name)
+    changes = db.get_admin_changes(hash2str(s3_url), user_info.name)
     if not changes:
         return {'success': True, 'message': "There were no changes found to apply"}
 
@@ -3210,7 +3218,7 @@ def admin_complete_changes():
                                       changes):
             return 'Unable to update the locations', 422
     # Mark the locations as done in the DB
-    db.clear_admin_location_changes(user_info.url, user_info.name)
+    db.clear_admin_location_changes(hash2str(s3_url), user_info.name)
 
     # Update the species
     if 'species' in changes and changes['species']:
@@ -3223,7 +3231,7 @@ def admin_complete_changes():
                                             hash2str(s3_url)+'-'+TEMP_SPECIES_FILE_NAME,
                                             s3_url, user_info.name, lambda: get_password(token, db))
     # Mark the species as done in the DB
-    db.clear_admin_species_changes(user_info.url, user_info.name)
+    db.clear_admin_species_changes(hash2str(s3_url), user_info.name)
 
     return {'success': True, 'message': "All changes were successully applied"}
 
@@ -3253,10 +3261,12 @@ def admin_abandon_changes():
     if user_info.admin != 1:
         return "Not Found", 404
 
+    s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
+
     # Mark the locations as done in the DB
-    db.clear_admin_location_changes(user_info.url, user_info.name)
+    db.clear_admin_location_changes(hash2str(s3_url), user_info.name)
 
     # Mark the species as done in the DB
-    db.clear_admin_species_changes(user_info.url, user_info.name)
+    db.clear_admin_species_changes(hash2str(s3_url), user_info.name)
 
     return {'success': True, 'message': "All changes were successully abandoned"}
