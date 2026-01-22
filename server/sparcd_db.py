@@ -387,7 +387,12 @@ class SPARCdDatabase:
         Return:
             Returns the list of file names that haven't been uploaded
         """
-        return self._db.sandbox_files_not_uploaded(username, upload_id)
+        found = self._db.sandbox_files_not_uploaded(username, upload_id)
+
+        if not found:
+            return []
+
+        return [one_found[0] for one_found in found]
 
 
     def sandbox_add_file_info(self, file_id: str, species: tuple, location: dict, \

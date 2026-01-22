@@ -1716,7 +1716,7 @@ def sandbox_unloaded_files():
    """
     db = SPARCdDatabase(DEFAULT_DB_PATH)
     token = request.args.get('t')
-    print('SANDBOX COUNTS', flush=True)
+    print('SANDBOX UNLOADED FILES', flush=True)
 
     # Check the credentials
     token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)

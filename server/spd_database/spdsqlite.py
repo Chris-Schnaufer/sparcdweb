@@ -1023,7 +1023,7 @@ class SPDSQLite:
         return res
 
 
-    def sandbox_files_not_uploaded(self, username: str, upload_id: str) -> tuple:
+    def sandbox_files_not_uploaded(self, username: str, upload_id: str) -> Optional[tuple]:
         """ Gets the list of file names of any files not yet marked as uploaded
         Arguments:
             username: the name of the person starting the upload
@@ -1046,6 +1046,9 @@ class SPDSQLite:
 
         res = cursor.fetchall()
         cursor.close()
+
+        if not res or len(res) <= 0:
+            return None
 
         return res
 
