@@ -81,7 +81,7 @@ export default function EditLocation({data, onUpdate, onClose}) {
     let el = document.getElementById('edit-location-name');
     if (el) {
       updatedData.nameProperty = el.value;
-      if (updatedData.nameProperty.length <= 10) {
+      if (updatedData.nameProperty.length <= 2) {
         addMessage(Level.Warning, "Please enter a longer name for the location");
         el.focus();
         return;
