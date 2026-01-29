@@ -14,9 +14,11 @@ export const geographicCoordinates = [
 export const AddMessageContext = createContext(false);
 /** React context for base URL */
 export const BaseURLContext = createContext(null);
+/** React context for a function to call when to disable checking for idle */
+export const DisableIdleCheckFuncContext = createContext(null); // Function accepts true (disable check) or false (enable check) parameter
 /** React context for Collections information */
 export const CollectionsInfoContext = createContext(null);
-/** React context for when a token has exxired */
+/** React context for a function to call when a token has exxired */
 export const ExpiredTokenFuncContext = createContext(null);
 /** React context for locations information */
 export const LocationsInfoContext = createContext(null);

@@ -111,7 +111,8 @@ export default function Landing({loadingCollections, loadingSandbox, onUserActio
             <LandingCard title="Upload Images" subtitle="Add new images to a collection"
                          action={[!mobileDevice ? {title:'Upload Images', onClick:() => newUpload(uploadTypes.uploadImages)}
                                                 : null,
-                                  {title:'Upload Movies', onClick:() => newUpload(uploadTypes.uploadMovies)},
+                                  !mobileDevice ? {title:'Upload Movies', onClick:() => newUpload(uploadTypes.uploadMovies)}
+                                                : null,
                                 ]}
             >
               <LandingUpload loadingSandbox={loadingSandbox} onChange={setUploadSelection} />
