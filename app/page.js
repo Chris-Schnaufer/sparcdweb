@@ -12,6 +12,7 @@ import CollectionsManage from './CollectionsManage';
 import FooterBar from './components/FooterBar';
 import Landing from './Landing';
 import Login from './Login';
+import LoginAgain from './components/LoginAgain';
 import { Level, makeMessage, Messages } from './components/Messages';
 import Maps from './Maps';
 import Queries from './Queries';
@@ -23,9 +24,9 @@ import UploadManage from './UploadManage';
 import UploadEdit from './UploadEdit';
 import UserActions from './components/userActions';
 import { LoginCheck, LoginValidContext, DefaultLoginValid } from './checkLogin';
-import { AddMessageContext, BaseURLContext, CollectionsInfoContext, LocationsInfoContext, MobileDeviceContext, 
-         NarrowWindowContext, SandboxInfoContext, SizeContext, SpeciesInfoContext, SpeciesOtherNamesContext,
-         TokenContext, UploadEditContext, UserNameContext, UserSettingsContext } from './serverInfo';
+import { AddMessageContext, BaseURLContext, CollectionsInfoContext, DisableIdleCheckFuncContext, ExpiredTokenFuncContext, 
+         LocationsInfoContext, MobileDeviceContext, NarrowWindowContext, SandboxInfoContext, SizeContext, SpeciesInfoContext, 
+         SpeciesOtherNamesContext, TokenContext, UploadEditContext, UserNameContext, UserSettingsContext } from './serverInfo';
 import * as utils from './utils';
 
 // This is declared here so that it doesn't raise an error on server-side compile
@@ -113,13 +114,31 @@ const loginStore = {
   }
 };
 
+// Events to tap into when detecting if we're idle
+const idleListenEvents = [
+  "mousedown",
+  "mousemove",
+  "wheel",
+  "keydown",
+  "touchstart",
+  "scroll"
+];
+
+const DEFAULT_IDLE_TIMEOUT_SEC =  20 * 60; // 20 minutes
+const IDLE_LOGOUT_TIMEOUT_SEC =  2 * 60;   // 3 minutes
+
 export default function Home() {
   const DEFAULT_DISPLAY_WIDTH = 800.0;  // Used as default until the window is ready
   const DEFAULT_DISPLAY_HEIGHT = 600.0; // Used as default until the window is ready
   const DEFAULT_HEADER_HEIGHT = 63.0;   // Used as default until the window is ready
   const DEFAULT_FOOTER_HEIGHT = 76.0;   // Used as default until the window is ready
+  const checkForIdleRef = React.useRef(true);   // Reference used to determine if we check for the user being idle
+  const idleTimeoutSecRef = React.useRef(DEFAULT_IDLE_TIMEOUT_SEC);     // Make this server configurable (during login)
+  const idleLogoutTimeoutSecRef = React.useRef(IDLE_LOGOUT_TIMEOUT_SEC);     // Make this server configurable (during login)
+  const idleLastTimestampRef = React.useRef(Date.now());                // The last time detected not being idle
   const defaultUserSettings = {name:'<Zeus>',settings:{},admin:false};
   const [breadcrumbs, setBreadcrumbs] = React.useState([]);
+  const [checkForIdle, setCheckForIdle] = React.useState(true);   // Flag to enable/disable checking for the user being idle
   const [checkedToken, setCheckedToken] = React.useState(false);
   const [collectionInfo, setCollectionInfo] = React.useState(null);
   const [curSearchTitle, setCurSearchTitle] = React.useState(null);
@@ -132,6 +151,7 @@ export default function Home() {
   const [displayOwnerSettings, setDisplayOwnerSettings] =  React.useState(false); // Collection owner settings editing
   const [editing, setEditing] = React.useState(false);
   const [isNarrow, setIsNarrow] = React.useState(null);
+  const [lastIdleTimeoutId, setLastIdleTimeoutId] = React.useState(null);   // The last timeout ID we set for checking the idle
   const [lastToken, setLastToken] = React.useState(null);
   const [loadingCollections, setLoadingCollections] = React.useState(false);
   const [loadingLocations, setLoadingLocations] = React.useState(false);
@@ -158,12 +178,114 @@ export default function Home() {
   const [serverURL, setServerURL] = React.useState(utils.getServer());
   const [speciesInfo, setSpeciesInfo] = React.useState(null);
   const [speciesOtherInfo, setSpeciesOtherInfo] = React.useState(null);
+  const [userLoginAgain, setUserLoginAgain] = React.useState(false);      // The user needs to log in again
+  const [userIdleTimedOut, setUserIdleTimedOut] = React.useState(false);  // The user idles out and needs to log in again
   const [userSettings, setUserSettings] =  React.useState(defaultUserSettings);
 
   const loginValidStates = loginValid;
   let settingsTimeoutId = null;   // Used to manage of the settings calls to the server
   let settingsRequestId = 0;        // Used to prevent sending multiple requests to server
   let curLoggedIn = loggedIn;
+
+
+  /**
+   * Handles the idle events
+   * @function
+   */
+  const idleListener = React.useCallback((event) => {
+    idleLastTimestampRef.current = Date.now();
+  }, [idleLastTimestampRef]);
+
+  // Used to keep the checkForIdleRef up to date
+  React.useEffect(() => {
+    checkForIdleRef.current = checkForIdle;
+  }, [checkForIdle]);
+
+  /**
+   * Handles checking if the user has been idle for too long
+   * @function
+   */
+  const checkIdleTimeout = React.useCallback(() => {
+    // Check if we're disabled
+    if (!checkForIdleRef.current || !loggedIn) {
+      if (lastIdleTimeoutId === null) {
+        setLastIdleTimeoutId(window.setTimeout(checkIdleTimeout, idleTimeoutSecRef.current * 1000));
+      }
+      return;
+    }
+
+    // Get the elapsed time since the user did something
+    const diffSec = (Date.now() - idleLastTimestampRef.current) / 1000;
+
+    // We idle out if we are at, or exceed, the limit
+    if (diffSec >= idleTimeoutSecRef.current) {
+      setLastIdleTimeoutId(null);
+      setUserIdleTimedOut(true);
+    } else {
+      // Set the timeout for our remaining seconds
+      setUserIdleTimedOut(false);
+      if (lastIdleTimeoutId === null) {
+        setLastIdleTimeoutId(window.setTimeout(checkIdleTimeout, (idleTimeoutSecRef.current - diffSec) * 1000) );
+      }
+    }
+
+  }, [checkForIdleRef, idleLastTimestampRef, idleTimeoutSecRef, lastIdleTimeoutId, loggedIn, setLastIdleTimeoutId, setUserIdleTimedOut]);
+
+  // Setup the idle detection
+  React.useEffect(() => {
+    // Adding out listeners
+    idleListenEvents.forEach((name) => window.addEventListener(name, idleListener, { passive:true } ));
+
+    // Start the timer for checking the idle flag (we wait a minimum of the idle timout seconds)
+    if (lastIdleTimeoutId === null) {
+      setLastIdleTimeoutId(window.setTimeout(checkIdleTimeout, idleTimeoutSecRef.current * 1000) );
+    }
+
+    return () => {
+      // Stop any timeout
+      if (lastIdleTimeoutId !== null) {
+        window.clearTimeout(lastIdleTimeoutId);
+        setLastIdleTimeoutId(null);
+      }
+      setCheckForIdle(false);
+
+      // Remove our listeners
+      idleListenEvents.forEach((name) => window.removeEventListener(name, idleListener, { passive:true } ));
+    }
+  }, [checkIdleTimeout, idleListener, lastIdleTimeoutId, setLastIdleTimeoutId]);
+
+  /**
+   * Attempts to login the user with credentials
+   * @function
+   * @param {string} url The url of the storage to access (used as the login validator by the server)
+   * @param {string} user The usernanme for logging in
+   * @param {string} password The user's associated password
+   * @param {function} onSuccess Function to call upon success
+   * @param {function} onFailure Function to call when there's a login failure
+   */
+  const loginUser = React.useCallback((url, user, password, onSuccess, onFailure) => {
+    const formData = new FormData();
+
+    formData.append('url', url);
+    formData.append('user', user);
+    formData.append('password', password);
+
+    commonLoginUser(formData, onSuccess, onFailure);
+  }, [commonLoginUser]);
+
+  // For some reason changing this to useCallback() causes the build to fail 
+  /**
+   * Attempts to login the user with a stored token
+   * @function
+   * @param {string} token The token to try to log in with
+   * @param {function} onSuccess Function to call upon success
+   * @param {function} onFailure Function to call when there's a login failure
+   */
+  const loginUserToken = React.useCallback((token, onSuccess, onFailure) => {
+    const formData = new FormData();
+    formData.append('token', token);
+    commonLoginUser(formData, onSuccess, onFailure);
+  }, [commonLoginUser]);
 
   /**
    * Performs pos-login actions
@@ -177,6 +299,43 @@ export default function Home() {
     loadSpecies(token);
     loadOtherSpecies(token);
   }, [loadCollections, loadLocations, loadOtherSpecies, loadSandbox, loadSpecies]);
+
+  /**
+   * Handles logging in the user and saves the login information
+   * @function
+   * @param {string} url The url of the storage to access (used as the login validator by the server)
+   * @param {string} user The usernanme for logging in
+   * @param {string} password The user's associated password
+   * @param {boolean} remember Set to a truthy value to indicate saving non-sensitive login information
+   */
+  const handleLogin = React.useCallback((url, user, password, remember) => {
+    setDbUser(user);
+    setDbURL(url);
+    setDbRemember(remember);
+    // Check parameters
+    const validCheck = LoginCheck(url, user, password);
+
+    setLoginValid(validCheck);
+    if (validCheck.valid) {
+      // TODO: UI indication while logging in (throbber?)
+
+      // Try to log user in
+      loginUser(url, user, password, (new_token) => {
+        // If log in successful then...
+        if (remember === true) {
+          loginStore.saveLoginInfo(url, user, remember);
+        } else {
+          loginStore.clearLoginInfo();
+        }
+        // Load collections
+        window.setTimeout(() => loginAfterActions(new_token), 500);
+      }, () => {
+        // If log in fails
+        addMessage(Level.Warn, 'Unable to log in. Please check your username and password before trying again', 'Login Failure');
+      });
+    }
+  }, [addMessage, Level, loginAfterActions, LoginCheck, loginStore, loginUser, setDbRemember, setDbUser, setDbURL, setLoginValid]);
+
 
   // TODO: change dependencies to Theme & use @media to adjust
   // Sets the narrow flag when the window is less than 600 pixels
@@ -202,6 +361,7 @@ export default function Home() {
           window.removeEventListener("resize", onResize);
       }
   }, []);
+
 
   // Load saved token and see if session is still valid
   React.useLayoutEffect(() => {
@@ -340,6 +500,10 @@ export default function Home() {
             if (resp.ok) {
               return resp.json();
             } else {
+              if (resp.status === 401) {
+                // User needs to log in again
+                setUserLoginAgain(true);
+              }
               throw new Error(`Failed to get collections: ${resp.status}`, {cause:resp});
             }
           })
@@ -387,6 +551,10 @@ export default function Home() {
             if (resp.ok) {
               return resp.json();
             } else {
+              if (resp.status === 401) {
+                // User needs to log in again
+                setUserLoginAgain(true);
+              }
               throw new Error(`Failed to get sandbox: ${resp.status}`, {cause:resp});
             }
           })
@@ -424,6 +592,10 @@ export default function Home() {
             if (resp.ok) {
               return resp.json();
             } else {
+              if (resp.status === 401) {
+                // User needs to log in again
+                setUserLoginAgain(true);
+              }
               throw new Error(`Failed to get locations: ${resp.status}`, {cause:resp});
             }
           })
@@ -462,6 +634,10 @@ export default function Home() {
             if (resp.ok) {
               return resp.json();
             } else {
+              if (resp.status === 401) {
+                // User needs to log in again
+                setUserLoginAgain(true);
+              }
               throw new Error(`Failed to get species: ${resp.status}`, {cause:resp});
             }
           })
@@ -502,6 +678,10 @@ export default function Home() {
             if (resp.ok) {
               return resp.json();
             } else {
+              if (resp.status === 401) {
+                // User needs to log in again
+                setUserLoginAgain(true);
+              }
               throw new Error(`Failed to get additional species: ${resp.status}`, {cause:resp});
             }
           })
@@ -601,83 +781,13 @@ export default function Home() {
   }
 
   /**
-   * Attempts to login the user with credentials
-   * @function
-   * @param {string} url The url of the storage to access (used as the login validator by the server)
-   * @param {string} user The usernanme for logging in
-   * @param {string} password The user's associated password
-   * @param {function} onSuccess Function to call upon success
-   * @param {function} onFailure Function to call when there's a login failure
-   */
-  function loginUser(url, user, password, onSuccess, onFailure) {
-    const formData = new FormData();
-
-    formData.append('url', url);
-    formData.append('user', user);
-    formData.append('password', password);
-
-    commonLoginUser(formData, onSuccess, onFailure);
-  }
-
-  // For some reason changing this to useCallback() causes the build to fail 
-  /**
-   * Attempts to login the user with a stored token
-   * @function
-   * @param {string} token The token to try to log in with
-   * @param {function} onSuccess Function to call upon success
-   * @param {function} onFailure Function to call when there's a login failure
-   */
-  function loginUserToken(token, onSuccess, onFailure) {
-    const formData = new FormData();
-    formData.append('token', token);
-    commonLoginUser(formData, onSuccess, onFailure);
-  }
-
-  /**
-   * Handles logging in the user and saves the login information
-   * @function
-   * @param {string} url The url of the storage to access (used as the login validator by the server)
-   * @param {string} user The usernanme for logging in
-   * @param {string} password The user's associated password
-   * @param {boolean} remember Set to a truthy value to indicate saving non-sensitive login information
-   */
-  const handleLogin = React.useCallback((url, user, password, remember) => {
-    setDbUser(user);
-    setDbURL(url);
-    setDbRemember(remember);
-    // Check parameters
-    const validCheck = LoginCheck(url, user, password);
-
-    setLoginValid(validCheck);
-    if (validCheck.valid) {
-      // TODO: UI indication while logging in (throbber?)
-
-      // Try to log user in
-      loginUser(url, user, password, (new_token) => {
-        // If log in successful then...
-        if (remember === true) {
-          loginStore.saveLoginInfo(url, user, remember);
-        } else {
-          loginStore.clearLoginInfo();
-        }
-        // Load collections
-        window.setTimeout(() => loginAfterActions(new_token), 500);
-      }, () => {
-        // If log in fails
-        addMessage(Level.Warn, 'Unable to log in. Please check your username and password before trying again', 'Login Failure');
-      });
-    }
-  }, [addMessage, Level, loginAfterActions, LoginCheck, loginStore, loginUser, setDbRemember, setDbUser, setDbURL, setLoginValid]);
-
-  /**
    * Logs the user out
    * @function
    */
-  function handleLogout() {
+  const handleLogout = React.useCallback(() => {
     setCollectionInfo(null);
     setCurAction(UserActions.None);
     setEditing(false);
-    setLastToken(null);
     setLocationInfo(null);
     setLoggedIn(false);
     setLoginValid(DefaultLoginValid);
@@ -685,9 +795,13 @@ export default function Home() {
     setSandboxInfo(null);
     setSpeciesInfo(null);
     setLastToken(null);
+    setUserLoginAgain(false);
     setUserSettings(defaultUserSettings);
+    setUserIdleTimedOut(false);
+    setBreadcrumbs([]);
     loginStore.clearLoginToken();
-  }
+  }, [loginStore, setBreadcrumbs, setCollectionInfo, setCurAction, setEditing, setLastToken, setLocationInfo, setLoggedIn, 
+      setLoginValid, setSpeciesOtherInfo, setSandboxInfo, setSpeciesInfo, setUserLoginAgain, setUserSettings, setUserIdleTimedOut]);
 
   /**
    * Common function that loads the upload image information for editing purposes
@@ -697,7 +811,7 @@ export default function Home() {
    * @param {function} {cbSuccess} Function to call upon success
    * @param {function} {cbFailure} Function to call upon failure
    */
-  function editCollectionUpload(collectionId, uploadId, cbSuccess, cbFailure) {
+  const editCollectionUpload = React.useCallback((collectionId, uploadId, cbSuccess, cbFailure) => {
     const uploadUrl = serverURL + '/uploadImages?t=' + encodeURIComponent(lastToken);
     const formData = new FormData();
 
@@ -713,6 +827,10 @@ export default function Home() {
             if (resp.ok) {
               return resp.json();
             } else {
+              if (resp.status === 401) {
+                // User needs to log in again
+                setUserLoginAgain(true);
+              }
               throw new Error(`Failed to log in: ${resp.status}`, {cause:resp});
             }
           })
@@ -747,7 +865,7 @@ export default function Home() {
       addMessage(Level.Error, 'An unknown problem ocurred while fetching the upload information');
       if (cbFailure) cbFailure();
     }
-  }
+  }, [addMessage, collectionInfo, lastToken, serverURL, setUserLoginAgain]);
 
   /**
    * Reloads the information on the current upload
@@ -802,57 +920,13 @@ export default function Home() {
   }, [clearSearch, setCurSearchTitle, setCurSearchHandler]);
 
   /**
-   * Fetches the user's settings from the server
-   * @function
-   */
-  function getUserSettings() {
-    const settingsUrl = serverURL + '/settings';
-    // Get the information on the upload
-    /* TODO: make call and wait for response & return correct result
-             need to handle null, 'invalid', and token values
-    const resp = await fetch(settingsUrl, {
-      'method': 'GET',
-      'data': formData
-    });
-    console.log(resp);
-    S
-    */
-  }
-
-  /**
    * Handles enabling administration editing
    * @function
    * @param {string} pw The password to use to check for permission
    * @param {function} {cbSuccess} The success callback
    * @param {function} {cbFail} The failure callback
    */
-  function handleAdminSettings(pw, cbSuccess, cbFail) {
-    // Check that the password is accurate and display the admin settings pages
-    cbSuccess ||= () => {};
-    confirmAdminPassword(pw, () => {cbSuccess();setDisplayAdminSettings(true);}, cbFail);
-  }
-
-  /**
-   * Handles enabling collection owner editing
-   * @function
-   * @param {string} pw The password to use to check for permission
-   * @param {function} {cbSuccess} The success callback
-   * @param {function} {cbFail} The failure callback
-   */
-  function handleOwnerSettings(pw, cbSuccess, cbFail) {
-    // Check that the password is accurate and display the admin settings pages
-    cbSuccess ||= () => {};
-    confirmOwnerPassword(pw, () => {cbSuccess();setDisplayOwnerSettings(true);}, cbFail);
-  }
-
-  /**
-   * Handles enabling administration editing
-   * @function
-   * @param {string} pw The password to use to check for permission
-   * @param {function} {cbSuccess} The success callback
-   * @param {function} {cbFail} The failure callback
-   */
-  function confirmAdminPassword(pw, cbSuccess, cbFail) {
+  const confirmAdminPassword = React.useCallback((pw, cbSuccess, cbFail) => {
     // Check that the password is accurate and belongs to an administrator
     const settingsCheckUrl = serverURL + '/settingsAdmin?t=' + encodeURIComponent(lastToken);
     cbSuccess ||= () => {};
@@ -871,6 +945,10 @@ export default function Home() {
             if (resp.ok) {
               return resp.json();
             } else {
+              if (resp.status === 401) {
+                // User needs to log in again
+                setUserLoginAgain(true);
+              }
               throw new Error(`Failed to check admin permissions: ${resp.status}`, {cause:resp});
             }
           })
@@ -890,7 +968,7 @@ export default function Home() {
       console.log('Admin Settings Unknown Error: ',err);
       cbFail();
     }
-  }
+  }, [lastToken, serverURL, setUserLoginAgain]);
 
   /**
    * Handles enabling administration editing
@@ -899,7 +977,20 @@ export default function Home() {
    * @param {function} {cbSuccess} The success callback
    * @param {function} {cbFail} The failure callback
    */
-  function confirmOwnerPassword(pw, cbSuccess, cbFail) {
+  const handleAdminSettings = React.useCallback((pw, cbSuccess, cbFail) => {
+    // Check that the password is accurate and display the admin settings pages
+    cbSuccess ||= () => {};
+    confirmAdminPassword(pw, () => {cbSuccess();setDisplayAdminSettings(true);}, cbFail);
+  }, [confirmAdminPassword, setDisplayAdminSettings]);
+
+  /**
+   * Handles enabling administration editing
+   * @function
+   * @param {string} pw The password to use to check for permission
+   * @param {function} {cbSuccess} The success callback
+   * @param {function} {cbFail} The failure callback
+   */
+  const confirmOwnerPassword = React.useCallback((pw, cbSuccess, cbFail) => {
     // Check that the password is accurate and belongs to an administrator
     const settingsCheckUrl = serverURL + '/settingsOwner?t=' + encodeURIComponent(lastToken);
     cbSuccess ||= () => {};
@@ -918,6 +1009,10 @@ export default function Home() {
             if (resp.ok) {
               return resp.json();
             } else {
+              if (resp.status === 401) {
+                // User needs to log in again
+                setUserLoginAgain(true);
+              }
               throw new Error(`Failed to check owner permissions: ${resp.status}`, {cause:resp});
             }
           })
@@ -937,7 +1032,20 @@ export default function Home() {
       console.log('Owner Settings Unknown Error: ',err);
       cbFail();
     }
-  }
+  }, [lastToken, serverURL, setUserLoginAgain]);
+
+  /**
+   * Handles enabling collection owner editing
+   * @function
+   * @param {string} pw The password to use to check for permission
+   * @param {function} {cbSuccess} The success callback
+   * @param {function} {cbFail} The failure callback
+   */
+  const handleOwnerSettings = React.useCallback((pw, cbSuccess, cbFail) => {
+    // Check that the password is accurate and display the admin settings pages
+    cbSuccess ||= () => {};
+    confirmOwnerPassword(pw, () => {cbSuccess();setDisplayOwnerSettings(true);}, cbFail);
+  }, [confirmOwnerPassword, setDisplayOwnerSettings]);
 
   /**
    * Updates the user's settings on the server
@@ -967,6 +1075,10 @@ export default function Home() {
             if (resp.ok) {
               return resp.json();
             } else {
+              if (resp.status === 401) {
+                // User needs to log in again
+                setUserLoginAgain(true);
+              }
               throw new Error(`Failed to set settings: ${resp.status}`, {cause:resp});
             }
           })
@@ -998,16 +1110,16 @@ export default function Home() {
    * @function
    * @param {boolean} newRemember Set to true for non-sensitive login details to be remembered, or false
    */
-  function handleRememberChanged(newRemember) {
+  const handleRememberChanged = React.useCallback((newRemember) => {
     setDbRemember(newRemember);
-  }
+  }, [setDbRemember]);
 
   /**
    * Handles displaying the user settings
    * @function
    * @param {object} userSettings The user settings to have managed
    */
-  function handleSettings(userSettings) {
+  const handleSettings = React.useCallback((userSettings) => {
     const mySettingsId = settingsRequestId = settingsRequestId+1;
     const workingTimeoutId = settingsTimeoutId;
     settingsTimeoutId = null;
@@ -1024,20 +1136,37 @@ export default function Home() {
         );
       }
     }, 500);
-  }
+  }, [settingsRequestId, settingsTimeoutId, updateUserSettings]);
 
   /**
    * Handles removing a message after it's been closed
    * @function
    * @param {number} messageId The ID of the message to close
    */
-  function handleCloseMessage(messageId) {
+  const handleCloseMessage = React.useCallback((messageId) => {
     const msgIdx = messages.findIndex((item) => item.messageId === messageId);
     if (msgIdx >= 0) {
       messages[msgIdx].closed = true;
       setMessages(messages.toSpliced(msgIdx, 1));
     }
-  }
+  }, [messages, setMessages]);
+
+  /**
+   * Handles disabling and enabling the check for the user being idle
+   * @function
+   * @param {boolean} disabled Set to true to disable the check and false to enable it
+   */
+  const handleDisableIdleCheck = React.useCallback((disabled) => {
+    const prevDisabled = checkForIdleRef.current;
+
+    setCheckForIdle(disabled ? false : true);
+    checkForIdleRef.current = disabled ? false : true;
+
+    // When we're changing from not checking to checking for idle, we need a new timestamp
+    if (prevDisabled === false && checkForIdleRef.current === true) {
+      idleLastTimestampRef.current = Date.now();
+    }
+  }, [checkForIdleRef, idleLastTimestampRef, setCheckForIdle]);
 
   // Get mobile device information if we don't have it yet
   if (typeof window !== 'undefined') {
@@ -1175,6 +1304,8 @@ export default function Home() {
   return (
     <main style={{...theme.palette.main}}>
       <ThemeProvider theme={theme}>
+        <DisableIdleCheckFuncContext.Provider value={handleDisableIdleCheck}>
+        <ExpiredTokenFuncContext.Provider value={() => setUserLoginAgain(true)}>
         <MobileDeviceContext.Provider value={mobileDevice}>
         <NarrowWindowContext.Provider value={narrowWindow}>
         <SizeContext.Provider value={{footer:sizeFooter, title:sizeTitle, window:sizeWindow, workspace:sizeWorkspace}}>
@@ -1240,7 +1371,17 @@ export default function Home() {
                 </CollectionsInfoContext.Provider>
                 </TokenContext.Provider>
           }
-          { // Make sure this is is last
+          { // Needs to be next to last (allow messages to overlay this)
+            (userLoginAgain === true || userIdleTimedOut === true) && 
+              <LoginAgain 
+                      message={userLoginAgain === true ? "Your session has expired. Please log in again" : "This session has been idle for too long. Please login again"}
+                      timeoutSec={userLoginAgain !== true && userIdleTimedOut === true ? idleLogoutTimeoutSecRef.current : null}
+                      onCancelTimeout={() => setUserIdleTimedOut(false) }
+                      onTimedOut={() => {setLastToken(null);loginStore.clearLoginToken();setUserLoginAgain(true);} }
+                      onLogout={handleLogout}
+              />
+          }
+          { // Make sure this is last
             messages.length > 0 && 
               <Grid id="messages-wrapper" container direction="row" alignItems="start" justifyContent="center"
                     sx={{...theme.palette.messages_wrapper, top: workspaceTop}}>
@@ -1252,6 +1393,8 @@ export default function Home() {
         </SizeContext.Provider>
         </NarrowWindowContext.Provider>
         </MobileDeviceContext.Provider>
+        </ExpiredTokenFuncContext.Provider>
+        </DisableIdleCheckFuncContext.Provider>
       </ThemeProvider>
     </main>
   )

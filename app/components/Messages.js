@@ -40,7 +40,7 @@ export const Level = {
  */
 export function makeMessage(level, message, title) {
 	// Check the level to see if it's a valid value
-	const levelLower = level.toLowerCase();
+	let levelLower = level.toLowerCase();
 	if (!LevelValues.find((item) => item === levelLower)) {
 		levelLower = undefined;
 	}

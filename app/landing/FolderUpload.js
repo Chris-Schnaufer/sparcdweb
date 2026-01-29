@@ -29,7 +29,8 @@ import LocationItem from '../components/LocationItem';
 import { meters2feet } from '../utils';
 import ProgressWithLabel from '../components/ProgressWithLabel';
 import { AddMessageContext, AllowedImageMime, AllowedMovieMime, BaseURLContext, CollectionsInfoContext, 
-          LocationsInfoContext,SizeContext, TokenContext, UserSettingsContext } from '../serverInfo';
+          DisableIdleCheckFuncContext, ExpiredTokenFuncContext, LocationsInfoContext,SizeContext, TokenContext,
+          UserSettingsContext } from '../serverInfo';
 
 
 const MAX_FILE_SIZE = 80 * 1000 * 1024; // Number of bytes before a file is too large
@@ -89,7 +90,9 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
   const theme = useTheme();
   const addMessage = React.useContext(AddMessageContext); // Function adds messages for display
   const collectionInfo = React.useContext(CollectionsInfoContext);
+  const disabledIdleCheckFunc = React.useContext(DisableIdleCheckFuncContext);
   const locationItems = React.useContext(LocationsInfoContext);
+  const setExpiredToken = React.useContext(ExpiredTokenFuncContext);
   const serverURL = React.useContext(BaseURLContext);
   const uiSizes = React.useContext(SizeContext);
   const uploadToken = React.useContext(TokenContext);
@@ -155,6 +158,10 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
             if (resp.ok) {
               return resp.json();
             } else {
+              if (resp.status === 401) {
+                // User needs to log in again
+                setExpiredToken();
+              }
               throw new Error(`Failed to check upload: ${resp.status}`, {cause:resp});
             }
           })
@@ -207,6 +214,10 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
             if (resp.ok) {
               return resp.json();
             } else {
+              if (resp.status === 401) {
+                // User needs to log in again
+                setExpiredToken();
+              }
               throw new Error(`Failed to get failed files for upload: ${resp.status}`, {cause:resp});
             }
           })
@@ -264,6 +275,10 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
             if (resp.ok) {
               return resp.json();
             } else {
+              if (resp.status === 401) {
+                // User needs to log in again
+                setExpiredToken();
+              }
               throw new Error(`Failed to get uploaded files count: ${resp.status}`, {cause:resp});
             }
           })
@@ -274,6 +289,7 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
               // We are done uploading
               setUploadCompleted(true);
               setUploadState(uploadingState.none);
+              disabledIdleCheckFunc(false);       // Enable idle checking
             } else {
               // We have failed uploads. Keep track of what we have so that we can retry when
               // the uploads have stabilized (the ones that could succeed, have succeeded)
@@ -300,16 +316,19 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
                     handleFailedUploads(uploadId, uploadFiles, 
                         () => {   // Success function
                               setUploadState(uploadingState.none);
+                              disabledIdleCheckFunc(false);    // Enable checking for idle
                               },
                         () => {   // Failure function
                               console.log('ERROR: Unable to find failed files in list of files to upload');
                               addMessage(Level.Error, 'An error ocurred while trying to fetch list of failed files from the server');
                               setUploadState(uploadingState.uploadFailure);
+                              disabledIdleCheckFunc(false);    // Enable checking for idle
                               }
                       );
                     window.setTimeout(() => internalGetUploadCounts(uploadId, uploadFiles), 2000);
                   } else {
                     setUploadState(uploadingState.uploadFailure);
+                    disabledIdleCheckFunc(false);    // Enable checking for idle
                   }
                 } else {
                   // Not ready to do take any action yet
@@ -323,6 +342,7 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
             console.log('Upload Images Counts Error: ', err);
             addMessage(Level.Error, 'A problem ocurred while checking upload image counts');
             setUploadState(uploadingState.error);
+            disabledIdleCheckFunc(false);    // Enable checking for idle
           } else {
             numRetries++;
             window.setTimeout(() => internalGetUploadCounts(uploadId, uploadFiles, numRetries), 7000 * numRetries);
@@ -333,6 +353,7 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
       console.log('Upload Images Counts Unknown Error: ',err);
       addMessage(Level.Error, 'An unkown problem ocurred while checking upload image counts');
       setUploadState(uploadingState.error);
+      disabledIdleCheckFunc(false);    // Enable checking for idle
     }
   }, [addMessage, haveFailedUpload, serverURL, setUploadingFileCounts, setUploadCompleted, setUploadState, uploadStateRef, uploadToken])
 
@@ -368,6 +389,10 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
             if (resp.ok) {
               return resp.json();
             } else {
+              if (resp.status === 401) {
+                // User needs to log in again
+                setExpiredToken();
+              }
               throw new Error(`Failed to mark upload as completed: ${resp.status}`, {cause:resp});
             }
           })
@@ -451,6 +476,10 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
             if (resp.ok) {
               return resp.json();
             } else {
+              if (resp.status === 401) {
+                // User needs to log in again
+                setExpiredToken();
+              }
               throw new Error(`Failed to check upload: ${resp.status}`, {cause:resp});
             }
           })
@@ -506,6 +535,7 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
       return;
     }
 
+    disabledIdleCheckFunc(true);    // Disable the checks for idle until we're done
     setUploadingFiles(true);
     setHaveFailedUpload(false);
     setUploadState(uploadingState.uploading);
@@ -798,6 +828,10 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
               if (resp.ok) {
                 return resp.json();
               } else {
+                if (resp.status === 401) {
+                  // User needs to log in again
+                  setExpiredToken();
+                }
                 throw new Error(`Failed to add new sandbox upload: ${resp.status}`, {cause:resp});
               }
             })
@@ -894,6 +928,10 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
             if (resp.ok) {
               return resp.json();
             } else {
+              if (resp.status === 401) {
+                // User needs to log in again
+                setExpiredToken();
+              }
               throw new Error(`Failed to reset sandbox upload: ${resp.status}`, {cause:resp});
             }
           })
@@ -942,6 +980,10 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
             if (resp.ok) {
               return resp.json();
             } else {
+              if (resp.status === 401) {
+                // User needs to log in again
+                setExpiredToken();
+              }
               throw new Error(`Failed to abandoning sandbox upload: ${resp.status}`, {cause:resp});
             }
           })
