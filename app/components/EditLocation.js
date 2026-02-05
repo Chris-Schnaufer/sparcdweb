@@ -11,6 +11,10 @@ import Checkbox from '@mui/material/Checkbox';
 import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Grid from '@mui/material/Grid';
+import HttpsIcon from '@mui/icons-material/Https';
+import IconButton from '@mui/material/IconButton';
+import InputAdornment from '@mui/material/InputAdornment';
+import LockOpenIcon from '@mui/icons-material/LockOpen';
 import Radio from '@mui/material/Radio';
 import RadioGroup from '@mui/material/RadioGroup';
 import TextField from '@mui/material/TextField';
@@ -34,6 +38,7 @@ export default function EditLocation({data, onUpdate, onClose}) {
   const addMessage = React.useContext(AddMessageContext); // Function adds messages for display
   const locationItems = React.useContext(LocationsInfoContext);
   const userSettings = React.useContext(UserSettingsContext);  // User display settings
+  const [canEditId, setCanEditId] = React.useState(false);        // Used to allow editing of location ID
   const [isModified, setIsModified] = React.useState(false);
   const [selectedCoordinate, setSelectedCoordinate] = React.useState(userSettings['coordinatesDisplay']);
   const [selectedMeasure, setSelectedMeasure] = React.useState(userSettings['measurementFormat']);
@@ -103,6 +108,17 @@ export default function EditLocation({data, onUpdate, onClose}) {
         return;
       }
     }
+
+    el = document.getElementById('edit-location-description');
+    if (el) {
+      updatedData.descriptionProperty = el.value;
+      if (updatedData.descriptionProperty.length > 0 && updatedData.descriptionProperty.length <= 4) {
+        addMessage(Level.Warning, "Please enter a longer geographic area identifier");
+        el.focus();
+        return;
+      }
+    }
+
 
     el = document.getElementById('edit-location-active');
     if (el) {
@@ -212,6 +228,33 @@ export default function EditLocation({data, onUpdate, onClose}) {
     onUpdate(updatedData, onClose, (message) => addMessage(Level.Warning, message));
   }
 
+  /**
+   * Allows the user to edit the location ID
+   * @function
+   */
+  const handleUnlockEditingId = React.useCallback(() => {
+    console.log('HACK: UNLOCK EDIT ID', canEditId, !canEditId);
+    setCanEditId(!canEditId);
+  }, [canEditId, setCanEditId]);
+
+  /**
+   * Supresses the default handling of a mouse down event on the ID field icon
+   * @function
+   * @param {object} event The event object
+   */
+  const handleMouseDownId = (event) => {
+    event.preventDefault();
+  };
+
+  /**
+   * Supresses the default handliong of a mouse up event on the ID field icon
+   * @function
+   * @param {object} event The event object
+   */
+  const handleMouseUpId = (event) => {
+    event.preventDefault();
+  };
+
   /*
    * Check if we need to break the UTM code into zone and letter
    */
@@ -244,7 +287,7 @@ export default function EditLocation({data, onUpdate, onClose}) {
                                         '&:hover':{backgroundColor:'rgba(255,255,255,0.7)', color:'black'}
                                      }}
                             >
-                                <CloseOutlinedIcon size="small" />
+                              <CloseOutlinedIcon size="small" />
                             </Typography>
                           </Tooltip>
                         </div>
@@ -270,10 +313,39 @@ export default function EditLocation({data, onUpdate, onClose}) {
                   },
                 }}
                 />
-          <TextField disabled={!!(curData && curData.idProperty)}
+          <TextField disabled={curData && curData.idProperty && !canEditId}
                 id='edit-location-id'
                 label="ID"
-                defaultValue={curData ? curData.idProperty : null}
+                defaultValue={curData && curData.idProperty ? curData.idProperty : null}
+                size='small'
+                sx={{margin:'10px'}}
+                onChange={() => setIsModified(true)}
+                inputProps={{style: {fontSize: 12}}}
+                slotProps={{
+                  inputLabel: {
+                    shrink: true,
+                  },
+                  input: {
+                    endAdornment: 
+                      <InputAdornment position='end'>
+                        <IconButton
+                          aria-label={'Unlock editing location ID'}
+                          onClick={handleUnlockEditingId}
+                          onMouseDown={handleMouseDownId}
+                          onMouseUp={handleMouseUpId}
+                          edge='end'
+                        >
+                          {canEditId ? <LockOpenIcon style={{color:"RosyBrown"}} /> : <HttpsIcon style={{color:"RosyBrown"}} />}
+                        </IconButton>
+                      </InputAdornment>,
+                  },
+                }}
+                />
+          <TextField
+                id='edit-location-description'
+                label="Geographic Area"
+                placeholder="e.g. Mountain range"
+                defaultValue={curData ? curData.descriptionProperty : null}
                 size='small'
                 sx={{margin:'10px'}}
                 onChange={() => setIsModified(true)}

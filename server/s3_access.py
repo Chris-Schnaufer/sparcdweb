@@ -1158,7 +1158,7 @@ class S3Connection:
         return True
 
     @staticmethod
-    def needs_repair(url: str, user: str, password: str) -> bool:
+    def needs_repair(url: str, user: str, password: str) -> tuple:
         """ Checks if the S3 endpoint needs repair by looking for buckets and
             certain files
         Arguments:
@@ -1166,22 +1166,23 @@ class S3Connection:
             user: the name of the user to use when connecting
             password: the user's password
         Return:
-            Returns True if the S3 endpoint has collections, or a settings bucket, and is
-            missing configuration files. Also, True will be returned if a settings bucket
-            is missing. False is returned if everything appears to be in order
+            Returns a tuple for if the install is broken, and if the install appears intact.
+            The first element contains True if the S3 endpoint has collections, or a settings
+            bucket, and is missing configuration files. Also, True will be returned if a
+            settings bucket is missing. False is returned if everything appears to be in order
+            The second element contains True if all elements checked are there and False if
+            none of the elements are there (the first element indicated if only some elements are
+            there). None is returned if the install needs repair
         """
         minio = Minio(url, access_key=user, secret_key=password)
 
         settings_bucket = find_settings_bucket(minio)
 
-        # Set the found count to success in case we don't have a settings bucket
-        found_count = len(CONFIGURATION_FILES_LIST)
-
         # If we have a settings bucket we want to make sure all expected files are there
+        found_count = 0
         if settings_bucket is not None:
-            found_count = 0
             # Check for settings files
-            for one_obj in minio.list_objects(settings_bucket, prefix=SETTINGS_FOLDER):
+            for one_obj in minio.list_objects(settings_bucket, prefix=SETTINGS_FOLDER+'/'):
                 if not one_obj.is_dir:
                     check_name = os.path.basename(one_obj.object_name)
                     if check_name.lower() in CONFIGURATION_FILES_LIST:
@@ -1199,9 +1200,12 @@ class S3Connection:
         # If we don't have a settings bucket and we don't have and collections and S3 instance
         #   that wasn't initialized
         # If we have the correct count of things and we have a settings bucket we have an S3
-        #   instance that was initialized
-        return found_count != len(CONFIGURATION_FILES_LIST) or \
-                                                    (have_collection and settings_bucket is None)
+        #   instance that was initialized and looks good
+        return settings_bucket is not None and (found_count != len(CONFIGURATION_FILES_LIST)) or \
+                                                    (settings_bucket is None and have_collection), \
+                True if settings_bucket is not None and found_count == len(CONFIGURATION_FILES_LIST)\
+                else False if settings_bucket is None and found_count == 0 and not have_collection \
+                else None
 
     @staticmethod
     def check_new_install_possible(url: str, user: str, password: str) -> tuple:
@@ -1288,3 +1292,39 @@ class S3Connection:
                 print(ex, flush=True)
 
         return success is True, created_bucket
+
+    @staticmethod
+    def create_sparcd(url: str, user: str, password: str) -> bool:
+        """ Creates the remote instance of SPARCd
+        Arguments:
+            url: the URL to the s3 instance
+            user: the name of the user to use when connecting
+            password: the user's password
+        Return:
+            True is returned if the instance was created and False otherwise
+        """
+        minio = Minio(url, access_key=user, secret_key=password)
+
+        # Check that there isn't a settings bucket
+
+        # Create unique settings bucket
+
+        # Upload files
+
+    @staticmethod
+    def repair_sparcd(url: str, user: str, password: str) -> bool:
+        """ Repairs the remote instance of SPARCd
+        Arguments:
+            url: the URL to the s3 instance
+            user: the name of the user to use when connecting
+            password: the user's password
+        Return:
+            True is returned if the instance was could be repaired and False otherwise
+        """
+        minio = Minio(url, access_key=user, secret_key=password)
+
+        # Check if we need and new settings bucket and create one if we do
+
+        # Get the list of files we have
+
+        # Upload missing files

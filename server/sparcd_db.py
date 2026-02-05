@@ -586,7 +586,7 @@ class SPARCdDatabase:
 
     def update_location(self, s3_id: str, username: str, loc_name: str, loc_id: str, \
                         loc_active: bool, loc_ele: float, loc_old_lat: float, loc_old_lng: float, \
-                        loc_new_lat: float, loc_new_lng: float) -> bool:
+                        loc_new_lat: float, loc_new_lng: float, description: str) -> bool:
 
         """ Adds the location information to the database for later submission
         Arguments:
@@ -600,12 +600,14 @@ class SPARCdDatabase:
             loc_old_lon: the old longitude
             loc_new_lat: the new latitude
             loc_new_lon: the new longitude
+            description: the new description
         Return:
             Returns True if no issues were found and False otherwise
         """
         # pylint: disable=too-many-arguments, too-many-positional-arguments
         return self._db.update_location(s3_id, username, loc_name, loc_id, loc_active, loc_ele,
-                                        loc_old_lat, loc_old_lng, loc_new_lat, loc_new_lng)
+                                        loc_old_lat, loc_old_lng, loc_new_lat, loc_new_lng,
+                                        description)
 
     def get_admin_changes(self, s3_id: str, username: str) -> dict:
         """ Returns any saved administrative location and species changes
@@ -618,7 +620,8 @@ class SPARCdDatabase:
             and 'sp_*' for species
         """
         location_idxs = {'loc_name':0, 'loc_id':1, 'loc_active':2, 'loc_elevation':3, \
-                         'loc_old_lat':4, 'loc_old_lng':5, 'loc_new_lat':6, 'loc_new_lng':7 }
+                         'loc_old_lat':4, 'loc_old_lng':5, 'loc_new_lat':6, 'loc_new_lng':7,
+                         'loc_description': 8 }
 
         res = self._db.get_admin_locations(s3_id, username)
         if not res:
@@ -1015,3 +1018,14 @@ class SPARCdDatabase:
             otherwise
         """
         return self._db.count_admin(s3_id) > 0
+
+    def is_sole_user(self, s3_id: str, user: str) -> bool:
+        """ Returns whether or not the user is the only known for for the S3 instance
+        Arguments:
+            s3_id: the unique ID of the S3 instance
+            user: the user to check on
+        Return:
+            Returns True if this is the only user for this S3 endpoint and False
+            otherwise
+        """
+        return self._db.is_sole_user(s3_id, user)

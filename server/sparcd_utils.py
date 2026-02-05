@@ -248,6 +248,8 @@ def update_admin_locations(url: str, user: str, password: str, s3_id: str, chang
         loc_id = one_change[changes['loc_id']]
         loc_old_lat = one_change[changes['loc_old_lat']]
         loc_old_lon = one_change[changes['loc_old_lng']]
+        loc_descr = one_change[changes['loc_description']] \
+                                                if one_change[changes['loc_description']] else ""
 
         # Update the entry if we have it, otherwise add it
         cur_key = crypt.generate_hash((loc_id, loc_old_lat, loc_old_lon))
@@ -261,14 +263,15 @@ def update_admin_locations(url: str, user: str, password: str, s3_id: str, chang
                 cur_loc['activeProperty'] = one_change[changes['loc_active']]
             elif one_change[changes['loc_active']] == 1:
                 cur_loc['activeProperty'] = True
+            cur_loc['descriptionProperty'] = loc_descr
         else:
-            all_locs[cur_key] = {
-                                    'idProperty': one_change[changes['loc_id']],
+            all_locs[cur_key] = {   'idProperty': one_change[changes['loc_id']],
                                     'nameProperty': one_change[changes['loc_name']],
                                     'latProperty': one_change[changes['loc_new_lat']],
                                     'lngProperty': one_change[changes['loc_new_lng']],
                                     'elevationProperty': one_change[changes['loc_elevation']],
-                                    'activeProperty': one_change[changes['loc_active']] == 1
+                                    'activeProperty': one_change[changes['loc_active']] == 1,
+                                    'descriptionProperty': loc_descr,
                                 }
 
     all_locs = tuple(all_locs.values())

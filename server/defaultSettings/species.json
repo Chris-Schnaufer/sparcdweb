@@ -1,0 +1,62 @@
+[
+  {
+    "name": "Coyote",
+    "scientificName": "Canis latrans",
+    "speciesIconURL": "https://arizona.box.com/shared/static/k6zcxzjfymezhjpocmcvl6qrb9dulo0i.jpg",
+    "keyBinding": "Y"
+  },
+  {
+    "name": "Domestic Dog",
+    "scientificName": "Canis familiaris",
+    "speciesIconURL": "https://arizona.box.com/shared/static/bo10uf996fa6cb75c2rbhwla8e3el1tu.jpg",
+    "keyBinding": "D"
+  },
+  {
+    "name": "Puma",
+    "scientificName": "Puma concolor",
+    "speciesIconURL": "https://arizona.box.com/shared/static/nk4mndfkzl48ecpdty65ps34fev3voy6.jpg",
+    "keyBinding": "P"
+  },
+  {
+    "name": "Skunk",
+    "scientificName": "Mephitis spp. Spilogale sp. Conepatus sp.",
+    "speciesIconURL": "https://arizona.box.com/shared/static/mysrtwqnazahzp3jyun58y3c7gpz0qm9.jpg",
+    "keyBinding": "S"
+  },
+  {
+    "name": "Skunk (Hog-Nosed)",
+    "scientificName": "Conepatus leuconotus",
+    "speciesIconURL": "https://arizona.box.com/shared/static/hpay9f13riudz1bcgvel54xs7i8jlkpg.jpg",
+    "keyBinding": null
+  },
+  {
+    "name": "Skunk (Hooded)",
+    "scientificName": "Mephitis macroura",
+    "speciesIconURL": "https://arizona.box.com/shared/static/ht5ks1kx5lpyg9xnf1amxgaibq9f7r0z.jpg",
+    "keyBinding": null
+  },
+  {
+    "name": "Skunk (Striped)",
+    "scientificName": "Mephitis mephitis",
+    "speciesIconURL": "https://arizona.box.com/shared/static/ff1qzko7jipfr381cjddvtfcf7dc01ig.jpg",
+    "keyBinding": null
+  },
+  {
+    "name": "Skunk (Western Spotted)",
+    "scientificName": "Spilogale gracilis",
+    "speciesIconURL": "https://arizona.box.com/shared/static/kn4qr64s3wfsb6gegscgv4z7461uajpn.jpg",
+    "keyBinding": null
+  },
+  {
+    "name": "Test - Research",
+    "scientificName": "Test",
+    "speciesIconURL": "https://arizona.box.com/shared/static/9505fzv7yd0vj8dhhwu9p662emmq1fj5.jpg",
+    "keyBinding": "T"
+  },
+  {
+    "name": "Unknown",
+    "scientificName": "Incognita",
+    "speciesIconURL": "https://arizona.box.com/shared/static/5i52i7uw79cydn8lrbi74qonbqgxmir3.png",
+    "keyBinding": null
+  }
+]

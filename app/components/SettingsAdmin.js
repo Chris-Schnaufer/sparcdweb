@@ -493,6 +493,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
     formData.append('utm_letter', newInfo.utm_letter);
     formData.append('utm_x', newInfo.utm_x);
     formData.append('utm_y', newInfo.utm_y);
+    formData.append('description', newInfo.descriptionProperty);
 
     try {
       const resp = fetch(locationsUpdateUrl, {

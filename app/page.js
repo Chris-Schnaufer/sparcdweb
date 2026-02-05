@@ -143,11 +143,12 @@ export default function Home() {
   const [checkForIdle, setCheckForIdle] = React.useState(true);   // Flag to enable/disable checking for the user being idle
   const [checkedToken, setCheckedToken] = React.useState(false);
   const [collectionInfo, setCollectionInfo] = React.useState(null);
-  const [createNewInstance, setCreateNewInstance] = React.useState(true);  // Flag used to create a new instance of SPARCd HACK: should be false
+  const [createNewInstance, setCreateNewInstance] = React.useState(false);  // Flag used to create a new instance of SPARCd
   const [curSearchTitle, setCurSearchTitle] = React.useState(null);
   const [curAction, setCurAction] = React.useState(UserActions.None);
   const [curActionData, setCurActionData] = React.useState(null);
   const [curSearchHandler, setCurSearchHandler] = React.useState(null);
+  const [dbRemember, setDbRemember] = React.useState(false);
   const [dbUser, setDbUser] = React.useState('');
   const [dbURL, setDbURL] = React.useState('');
   const [displayAdminSettings, setDisplayAdminSettings] =  React.useState(false); // Admin settings editing
@@ -167,7 +168,7 @@ export default function Home() {
   const [messages, setMessages] = React.useState([]);
   const [mobileDeviceChecked, setMobileDeviceChecked] = React.useState(false);
   const [mobileDevice, setMobileDevice] = React.useState(null);
-  const [dbRemember, setDbRemember] = React.useState(false);
+  const [repairInstance, setRepairInstance] = React.useState(false);    // The S3 side needs repairs
   const [sandboxInfo, setSandboxInfo] = React.useState(null);
   const [savedLoginFetched, setSavedLoginFetched] = React.useState(false);
   const [savedTokenFetched, setSavedTokenFetched] = React.useState(false);
@@ -323,7 +324,7 @@ export default function Home() {
       // TODO: UI indication while logging in (throbber?)
 
       // Try to log user in
-      loginUser(url, user, password, (newToken, newInstance) => {
+      loginUser(url, user, password, (newToken, newInstance, repairServer) => {
         // If log in successful then...
         if (remember === true) {
           loginStore.saveLoginInfo(url, user, remember);
@@ -331,19 +332,23 @@ export default function Home() {
           loginStore.clearLoginInfo();
         }
         // Load collections if it's not a new instance
-        if (!newInstance) {
+        if (!newInstance && !repairServer) {
           window.setTimeout(() => loginAfterActions(newToken), 500);
         } else {
-          // Indicate we have a new instance
-          setCreateNewInstance(true);
-          idleTimeoutSecRef.current = IDLE_NEW_INSTALL_TIMEOUT_SEC;
+          // Indicate we have a new instance or we need to repair
+          setCreateNewInstance(newInstance);
+          setRepairInstance(repairServer);
+          if (newInstance || repairServer) {
+            idleTimeoutSecRef.current = IDLE_NEW_INSTALL_TIMEOUT_SEC;
+          }
         }
       }, () => {
         // If log in fails
         addMessage(Level.Warn, 'Unable to log in. Please check your username and password before trying again', 'Login Failure');
       });
     }
-  }, [addMessage, Level, loginAfterActions, LoginCheck, loginStore, loginUser, setDbRemember, setDbUser, setDbURL, setLoginValid]);
+  }, [addMessage, Level, loginAfterActions, LoginCheck, loginStore, loginUser, setCreateNewInstance, setDbRemember, setDbUser, setDbURL,
+      setLoginValid, setRepairInstance]);
 
 
   // TODO: change dependencies to Theme & use @media to adjust
@@ -775,10 +780,13 @@ export default function Home() {
             setLoggedIn(true);
             setLastToken(loginToken);
             if (onSuccess && typeof(onSuccess) === 'function') {
-              onSuccess(loginToken, respData['newInstance']);
+              onSuccess(loginToken, respData['newInstance'], respData['needsRepair']);
             } else if (respData['newInstance']) {
               // Indicate we have a new instance
               setCreateNewInstance(true);
+            } else if (respData['needsRepair']) {
+              // Indicate we needs to repair the instance
+              setRepairInstance(true);
             }
           }
         })
@@ -1190,8 +1198,9 @@ export default function Home() {
   const handleCancelNewInstallation = React.useCallback(() => {
     idleTimeoutSecRef.current = DEFAULT_IDLE_TIMEOUT_SEC;
     setCreateNewInstance(false);
+    setRepairInstance(false);
     handleLogout();
-  }, [handleLogout, idleTimeoutSecRef, setCreateNewInstance]);
+  }, [handleLogout, idleTimeoutSecRef, setCreateNewInstance, setRepairInstance]);
 
   // Get mobile device information if we don't have it yet
   if (typeof window !== 'undefined') {
@@ -1344,7 +1353,7 @@ export default function Home() {
                         onLogout={handleLogout} size={narrowWindow?"small":"normal"} 
                         breadcrumbs={breadcrumbs} onBreadcrumb={restoreBreadcrumb} onAdminSettings={handleAdminSettings} onOwnerSettings={handleOwnerSettings}/>
               <Box id='sparcd-middle-wrapper' sx={{overflow:"scroll"}} >
-                {!curLoggedIn || createNewInstance === true ? 
+                {!curLoggedIn || createNewInstance === true || repairInstance === true ? 
                   <LoginValidContext.Provider value={loginValidStates}>
                     <Login prev_url={dbURL} prev_user={dbUser} prev_remember={dbRemember} onLogin={handleLogin}
                            onRememberChange={handleRememberChanged} />
@@ -1396,11 +1405,13 @@ export default function Home() {
                 </CollectionsInfoContext.Provider>
                 </TokenContext.Provider>
           }
-          { createNewInstance === true &&
+          { (createNewInstance === true || repairInstance === true) &&
+            <BaseURLContext.Provider value={serverURL}>
             <AddMessageContext.Provider value={addMessage}>
-              <NewInstallation token={lastToken} onCancel={handleCancelNewInstallation} />
+              <NewInstallation token={lastToken} repair={repairInstance} onCancel={handleCancelNewInstallation} />
             </AddMessageContext.Provider>
-          }
+            </BaseURLContext.Provider>
+        }
           { // Needs to be next to last (allow messages to overlay)
             (userLoginAgain === true || userIdleTimedOut === true) && 
               <LoginAgain 

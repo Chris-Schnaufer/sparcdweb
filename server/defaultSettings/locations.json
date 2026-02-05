@@ -1,0 +1,16 @@
+[
+  {
+    "nameProperty": "Lost Angeles",
+    "idProperty": "LOS01",
+    "latProperty": 34.052235,
+    "lngProperty": -118.243683,
+    "elevationProperty": 92.96
+  },
+  {
+    "nameProperty": "Ney York City",
+    "idProperty": "NYC01",
+    "latProperty": 40.730610,
+    "lngProperty": -73.935242,
+    "elevationProperty": 10.06
+  },
+]

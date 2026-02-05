@@ -126,11 +126,11 @@ export default function MapsEsri({center, mapName, mapChoices, onChange, top, wi
                                      }),
                   symbol: {
                     type: "simple-marker", // autocasts as new SimpleMarkerSymbol()
-                    color: "blue",
-                    size: 8,
+                    color: item.activeProperty ? "blue" : "lightgrey",
+                    size: "8px",
                     outline: { // autocasts as new SimpleLineSymbol()
                       width: 0.5,
-                      color: "darkblue"
+                      color: item.activeProperty ? "darkblue" : "grey"
                     }
                   },
                   attributes: {...item, ...{objectId: idx}},

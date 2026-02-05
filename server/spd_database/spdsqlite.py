@@ -96,7 +96,7 @@ class SPDSQLite:
 
         cursor = self._conn.cursor()
         query = 'INSERT INTO tokens(token, name, password, s3_url, s3_id, timestamp, client_ip, ' \
-                'user_agent) VALUES(?,?,?,?,strftime("%s", "now"),?,?)'
+                'user_agent) VALUES(?,?,?,?,?,strftime("%s", "now"),?, ?)'
         cursor.execute(query, (token, user, password, s3_url, s3_id, client_ip, user_agent))
 
         self._conn.commit()
@@ -208,7 +208,7 @@ class SPDSQLite:
 
         cursor = self._conn.cursor()
         try:
-            cursor.execute('INSERT INTO users(name, email, species, s3_id) VALUES(?,?,?)',
+            cursor.execute('INSERT INTO users(name, email, species, s3_id) VALUES(?, ?, ?, ?)',
                                                             (username, email, species, s3_id))
             self._conn.commit()
         except sqlite3.IntegrityError as ex:
@@ -1498,7 +1498,7 @@ class SPDSQLite:
 
     def update_location(self, s3_id: str, username: str, loc_name: str, loc_id: str, \
                         loc_active: bool, loc_ele: float, loc_old_lat: float, loc_old_lng: float, \
-                        loc_new_lat: float, loc_new_lng: float) -> bool:
+                        loc_new_lat: float, loc_new_lng: float, description: str) -> bool:
 
         """ Adds the location information to the database for later submission
         Arguments:
@@ -1512,6 +1512,7 @@ class SPDSQLite:
             loc_old_lon: the old longitude
             loc_new_lat: the new latitude
             loc_new_lon: the new longitude
+            description: the new description
         Return:
             Returns True if no issues were found and False otherwise
         """
@@ -1531,10 +1532,11 @@ class SPDSQLite:
 
         cursor.execute('INSERT INTO admin_location_edits(s3_id, user_id, timestamp, loc_name, ' \
                                         'loc_id, loc_active, loc_ele, loc_old_lat, loc_old_lng, ' \
-                                        'loc_new_lat, loc_new_lng) ' \
-                            'VALUES(?,?,strftime("%s", "now"),?,?,?,?,?,?,?,?)',
+                                        'loc_new_lat, loc_new_lng, loc_description) ' \
+                            'VALUES(?,?,strftime("%s", "now"),?,?,?,?,?,?,?,?,?)',
                                     (s3_id, user_id, loc_name, loc_id, loc_active, loc_ele, \
-                                            loc_old_lat, loc_old_lng, loc_new_lat,loc_new_lng))
+                                            loc_old_lat, loc_old_lng, loc_new_lat,loc_new_lng,
+                                            description))
         self._conn.commit()
         cursor.close()
 
@@ -1556,7 +1558,8 @@ class SPDSQLite:
 
         cursor.execute('WITH u AS (SELECT id FROM users WHERE name=? AND s3_id=?) ' \
                         'SELECT loc_name, loc_id, loc_active, loc_ele, loc_old_lat, loc_old_lng, ' \
-                            'loc_new_lat, loc_new_lng FROM admin_location_edits ale, u '\
+                            'loc_new_lat, loc_new_lng, loc_description ' \
+                        'FROM admin_location_edits ale, u '\
                         'WHERE ale.s3_id=? AND ale.user_id = u.id AND ale.location_updated = 0 ' \
                         'ORDER BY timestamp ASC', (username, s3_id, s3_id))
         res = cursor.fetchall()
@@ -1928,7 +1931,7 @@ class SPDSQLite:
             on what permissions are granted on the S3 instance
         """
         if self._conn is None:
-            raise RuntimeError('Attempting to release a named lock in the database before ' \
+            raise RuntimeError('Attempting to count administrators in the database before ' \
                                                                                     'connecting')
 
         cursor = self._conn.cursor()
@@ -1941,3 +1944,42 @@ class SPDSQLite:
             return 0
 
         return int(res[0])
+
+    def is_sole_user(self, s3_id: str, user: str) -> bool:
+        """ Returns whether or not the user is the only known for for the S3 instance
+        Arguments:
+            s3_id: the unique ID of the S3 instance
+            user: the user to check on
+        Return:
+            Returns True if this is the only user for this S3 endpoint and False
+            otherwise
+        """
+        if self._conn is None:
+            raise RuntimeError('Attempting to determine sole user in the database before ' \
+                                                                                    'connecting')
+
+        cursor = self._conn.cursor()
+        cursor.execute('SELECT count(1) FROM users WHERE s3_id=? and name != ?', (s3_id, ))
+
+        res = cursor.fetchone()
+        cursor.close()
+
+        # Check for a problem
+        if not res or len(res) < 1:
+            return False
+
+        # Check that there are any other users
+        if int(res[0]) > 0:
+            return False
+
+        # Check that this user is in the database
+        cursor = self._conn.cursor()
+        cursor.execute('SELECT count(1) FROM users WHERE s3_id=? and name=?', (s3_id, user))
+
+        res = cursor.fetchone()
+
+        # Check for a problem
+        if not res or len(res) < 1:
+            return False
+
+        return int(res[0]) == 1

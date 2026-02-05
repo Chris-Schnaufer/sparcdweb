@@ -148,6 +148,16 @@ print(f'Using database at {DEFAULT_DB_PATH}', flush=True)
 print(f'Temporary folder at {tempfile.gettempdir()}', flush=True)
 
 
+def hash2str(text: str) -> str:
+    """ Returns the hash of the passed in string
+    Arguments:
+        text: the string to hash
+    Return:
+        The hash value as a string
+    """
+    return hashlib.md5(text.encode('utf-8')).hexdigest()
+
+
 def load_species_stats(db: SPARCdDatabase, is_admin: bool, s3_url: str, user_name: str, \
                                                     fetch_password: Callable) -> Optional[tuple]:
     """ Generates the species stats
@@ -221,16 +231,6 @@ def get_password(token: str, db: SPARCdDatabase) -> Optional[str]:
     return crypt.do_decrypt(WORKING_PASSCODE, db.get_password(token))
 
 
-def hash2str(text: str) -> str:
-    """ Returns the hash of the passed in string
-    Arguments:
-        text: the string to hash
-    Return:
-        The hash value as a string
-    """
-    return hashlib.md5(text.encode('utf-8')).hexdigest()
-
-
 @app.route('/', methods = ['GET'])
 @cross_origin(origins="http://localhost:3000", supports_credentials=True)
 def index():
@@ -253,25 +253,74 @@ def favicon():
                                'favicon.ico', mimetype='image/vnd.microsoft.icon')
 
 
-@app.route('/<string:filename>', methods = ['GET'])
+@app.route('/mapImage.png', methods = ['GET'])
 @cross_origin(origins="http://localhost:3000", supports_credentials=True)
-def sendfile(filename: str):
-    """Return root files"""
-    print("RETURN FILENAME:",filename,flush=True)
+def favicon():
+    """ Return the image """
+    return send_from_directory(app.root_path,
+                               'mapImage.png', mimetype='image/png')
 
-    # Check that the file is allowed
-    if not os.path.splitext(filename)[1].lower() in REQEST_ALLOWED_FILE_EXTENSIONS:
-        return 'Resource not found', 404
 
-    fullpath = os.path.realpath(os.path.join(RESOURCE_START_PATH, filename.lstrip('/')))
-    print("HACK:   FILE PATH:", fullpath,flush=True)
+@app.route('/badimage.png', methods = ['GET'])
+@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+def favicon():
+    """ Return the image """
+    return send_from_directory(app.root_path,
+                               'badimage.png', mimetype='image/png')
 
-    # Make sure we're only serving something that's in the same location that we are in and that
-    # it exists
-    if not fullpath or not os.path.exists(fullpath) or not fullpath.startswith(RESOURCE_START_PATH):
-        return 'Resource not found', 404
 
-    return send_file(fullpath)
+@app.route('/sparcd.png', methods = ['GET'])
+@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+def favicon():
+    """ Return the image """
+    return send_from_directory(app.root_path,
+                               'sparcd.png', mimetype='image/png')
+
+
+@app.route('/wildcatResearch.png', methods = ['GET'])
+@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+def favicon():
+    """ Return the image """
+    return send_from_directory(app.root_path,
+                               'wildcatResearch.png', mimetype='image/png')
+
+
+@app.route('/loading.gif', methods = ['GET'])
+@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+def favicon():
+    """ Return the image """
+    return send_from_directory(app.root_path,
+                               'loading.gif', mimetype='image/gif')
+
+
+@app.route('/sanimalBackground.JPG', methods = ['GET'])
+@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+def favicon():
+    """ Return the image """
+    return send_from_directory(app.root_path,
+                               'sanimalBackground.JPG', mimetype='image/jpeg')
+
+
+## Disable this, only serve files like this explicitly
+#@app.route('/<string:filename>', methods = ['GET'])
+#@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+#def sendfile(filename: str):
+#    """Return root files"""
+#    print("RETURN FILENAME:",filename,flush=True)
+#
+#    # Check that the file is allowed
+#    if not os.path.splitext(filename)[1].lower() in REQEST_ALLOWED_FILE_EXTENSIONS:
+#        return 'Resource not found', 404
+#
+#    fullpath = os.path.realpath(os.path.join(RESOURCE_START_PATH, filename.lstrip('/')))
+#    print("HACK:   FILE PATH:", fullpath,flush=True)
+#
+#    # Make sure we're only serving something that's in the same location that we are in and that
+#    # it exists
+#    if not fullpath or not os.path.exists(fullpath) or not fullpath.startswith(RESOURCE_START_PATH):
+#        return 'Resource not found', 404
+#
+#    return send_file(fullpath)
 
 
 @app.route('/_next/static/<path:path_fagment>', methods = ['GET'])
@@ -435,7 +484,8 @@ def login_token():
         print('S3 exception caught:', ex, flush=True)
         return "Not Found", 404
 
-    # Get whether the endpoint is setup for SPARCd
+    # Get whether the endpoint is setup for SPARCd and if it needs repairs
+    needs_repair, _ = S3Connection.needs_repair(s3_url, user, password)
     new_instance = not s3u.sparcd_config_exists(minio)
 
     # Save information into the database - also cleans up old tokens if there's too many
@@ -469,7 +519,8 @@ def login_token():
     user_info.settings = sdu.secure_user_settings(user_info.settings)
 
     return json.dumps({'success':True, 'value':new_key, 'name':user_info.name,
-                       'settings':user_info.settings, 'newInstance':new_instance})
+                       'settings':user_info.settings, 'newInstance':new_instance,
+                       'needsRepair':needs_repair})
 
 
 @app.route('/collections', methods = ['GET'])
@@ -2859,6 +2910,7 @@ def admin_location_update():
     utm_letter = request.form.get('utm_letter', None)
     utm_x = request.form.get('utm_x', None)
     utm_y = request.form.get('utm_y', None)
+    description = request.form.get('description', None)
 
     # Check what we have from the requestor
     if not all(item for item in [loc_name, loc_id, loc_active, measure, coordinate]):
@@ -2938,7 +2990,8 @@ def admin_location_update():
 
     # Put the change in the DB
     if db.update_location(hash2str(s3_url), user_info.name, loc_name, loc_id, loc_active,
-                                        loc_ele,loc_old_lat,loc_old_lng, loc_new_lat, loc_new_lng):
+                                        loc_ele,loc_old_lat,loc_old_lng, loc_new_lat, loc_new_lng,
+                                        description):
         return_lat = round(loc_new_lat, 3)
         return_lng = round(loc_new_lng, 3)
         return_utm_x, return_utm_y = deg2utm(return_lat, return_lng)
@@ -3234,7 +3287,7 @@ def admin_abandon_changes():
 
     return {'success': True, 'message': "All changes were successully abandoned"}
 
-@app.route('/newInstallCheck', methods = ['PUT'])
+@app.route('/installCheck', methods = ['GET'])
 @cross_origin(origins="http://localhost:3000")#, supports_credentials=True)
 def new_install_check():
     """ Checks if the S3 endpoint can support a new installation
@@ -3261,47 +3314,148 @@ def new_install_check():
     # Perform the checks on the S3 instance to see that we can support a new installation
     s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
 
-    # Check that the user is in the DB for this endpoint and is/is not an administrator
-    if not user_info.admin:
-        if db.have_any_known_admin(hash2str(s3_url)):
-            return json.dumps({'success':False,
-                                'admin': False,
-                                'needsRepair': False,
-                                'failedPerms': False,
-                                'message': 'You are not authorized to make a new installation or ' \
-                                            'repair an existing one. Please contact your ' \
-                                            'administrator'})
+    # Return data
+    return_data = { 'success':False,
+                    'admin': user_info.admin,
+                    'needsRepair': False,
+                    'failedPerms': False,
+                    'newInstance': False,
+                    'message': 'Success'
+                   }
 
     # Check if the S3 instance needs repairs and not a new install
     needs_repair, has_everything = S3Connection.needs_repair(s3_url, user_info.name,
-                                                                            get_password(token, db))
-    if needs_repait:
-        return json.dumps({'success':False,
-                            'admin': user_info.admin,
-                            'needsRepair': True,
-                            'failedPerms': False,
-                            'message': 'You may be authorized to perform a repair on the S3 ' \
-                                        'endpoint'})
-    elif has_everything:
+                                                                        get_password(token, db))
+    if needs_repair:
+        return_data['needsRepair'] = True
+        return_data['message'] = 'You can try to perform a repair on the S3 endpoint'
+        return json.dumps(return_data)
+    if has_everything:
         # The endpoint has everything needed (what are they up to?)
-        return json.dumps({'success':True,
-                            'admin': False,
-                            'newInstance': False,
-                            'message': 'The endpoint already is configured for SPARCd'})
+        return_data['success'] = True
+        return_data['admin'] = False
+        return_data['message'] = 'The endpoint already is configured for SPARCd'
+        return json.dumps(return_data)
 
     # Check if they can make a new install
     can_create, test_bucket = S3Connection.check_new_install_possible(s3_url, user_info.name,
                                                                         get_password(token, db))
     if not can_create:
-        return json.dumps({'success':False,
-                            'admin': user_info.admin,
-                            'needsRepair': False,
-                            'failedPerms': True,
-                            'message': 'Unable to install SPARCd at the S3 endpoint. Please ' \
-                                        'contact your S3 administrator about permissions'})
+        return_data['failedPerms'] = True
+        return_data['message'] = 'Unable to install SPARCd at the S3 endpoint. Please ' \
+                                        'contact your S3 administrator about permissions'
+        return json.dumps(return_data)
+
+    # Check that there aren't any administrators for this endpoint in the database
+    # If it's a new install, there shouldn't be an admin in the database (the endpoint is
+    # unknown so no one should be an admin)
+    if not user_info.admin:
+        if db.have_any_known_admin(hash2str(s3_url)):
+            return_data['admin'] = False        # always false or we wouldn't be here
+            return_data['message'] = 'You are not authorized to make a new installation or ' \
+                                            'repair an existing one. Please contact your ' \
+                                            'administrator'
+            return json.dumps(return_data)
 
     # TODO: When have messages to users and the test bucket isn't removed, inform the admin(s)
     if test_bucket is not None:
-        print(f'WARNING: unable to delete testing bucket {test_bucket}', flus=True)
+        print(f'WARNING: unable to delete testing bucket {test_bucket}', flush=True)
 
-    return json.dumps({'success': True, 'admin': user_info.admin, 'newInstance': True})
+    return_data['success'] = True
+    return_data['newInstance'] = True
+    return json.dumps(return_data)
+
+@app.route('/installNew', methods = ['GET'])
+@cross_origin(origins="http://localhost:3000")#, supports_credentials=True)
+def install_new():
+    """ Attempts to create a new SPARCd installation
+    Arguments: (GET)
+        t - the session token
+    Return:
+        Returns True success if the endpoint could be configured for SPARCd and
+        False if not.
+    Notes:
+         If the token is invalid, or a problem occurs, a 404 error is returned
+   """
+    db = SPARCdDatabase(DEFAULT_DB_PATH)
+    token = request.args.get('t')
+    print('NEW INSTALL', flush=True)
+
+    # Check the credentials
+    token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
+    if token_valid is None or user_info is None:
+        return "Not Found", 404
+    if not token_valid or not user_info:
+        return "Unauthorized", 401
+
+    # Perform the checks on the S3 instance to see that we can support a new installation
+    s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
+
+    # Check that we can create
+    sole_user = False
+    if not user_info.admin:
+        if not db.is_sole_user(hash2str(s3_url), user_info.name):
+            return json.dumps({'success': False, 'message': 'You are not authorized to create a new ' \
+                                                    'SPARCd configuration'})
+        sole_user = True
+
+    # Check if the S3 instance needs repairs and of is all set
+    needs_repair, has_everything = S3Connection.needs_repair(s3_url, user_info.name,
+                                                                        get_password(token, db))
+
+    if needs_repair or has_everything:
+        return json.dumps({'success': False, 'message': 'There is already an existing SPARCd ' \
+                                                        'configuration'})
+
+    # The user is apparently the sole user or an admin, and the S3 instance is not setup for SPARCd
+    if not S3Connection.create_sparcd(s3_url, user_info.name, get_password(token, db)):
+        return json.dumps({'success': False, 'message': 'Unable to configure new SPARCd instance'})
+
+    # Make this user the admin
+    if sole_user:
+        db.update_user(hash2str(s3_url), user_info.name, user_info.email, True)
+
+    return json.dumps({'success': True})
+
+@app.route('/installRepair', methods = ['GET'])
+@cross_origin(origins="http://localhost:3000")#, supports_credentials=True)
+def install_repair():
+    """ Attempts to repair an existing SPARCd installation
+    Arguments: (GET)
+        t - the session token
+    Return:
+        Returns True success if the endpoint could be repaired and False if not.
+    Notes:
+         If the token is invalid, or a problem occurs, a 404 error is returned
+   """
+    db = SPARCdDatabase(DEFAULT_DB_PATH)
+    token = request.args.get('t')
+    print('REPAIR INSTALL', flush=True)
+
+    # Check the credentials
+    token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
+    if token_valid is None or user_info is None:
+        return "Not Found", 404
+    if not token_valid or not user_info:
+        return "Unauthorized", 401
+
+    # Perform the checks on the S3 instance to see that we can support a new installation
+    s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
+
+    # Check that we can create
+    if not user_info.admin:
+        return json.dumps({'success': False, 'message': 'You are not authorized to repair the ' \
+                                                    'SPARCd configuration'})
+
+    # Check if the S3 instance needs repairs and of is all set
+    needs_repair, has_everything = S3Connection.needs_repair(s3_url, user_info.name,
+                                                                        get_password(token, db))
+
+    if not needs_repair or has_everything:
+        return json.dumps({'success': True, 'message': 'The SPARCd installation doesn\'t need repair'})
+
+    if not S3Connection.repair_sparcd(s3_url, user_info.name, get_password(token, db)):
+        return json.dumps({'success': False, 'message': 'Unable to repair this SPARCd instance'})
+
+    return json.dumps({'success': True})
+
