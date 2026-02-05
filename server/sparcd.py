@@ -262,7 +262,7 @@ def favicon():
 
 @app.route('/mapImage.png', methods = ['GET'])
 @cross_origin(origins="http://localhost:3000", supports_credentials=True)
-def favicon():
+def mapimage():
     """ Return the image """
     return send_from_directory(app.root_path,
                                'mapImage.png', mimetype='image/png')
@@ -270,7 +270,7 @@ def favicon():
 
 @app.route('/badimage.png', methods = ['GET'])
 @cross_origin(origins="http://localhost:3000", supports_credentials=True)
-def favicon():
+def badimage():
     """ Return the image """
     return send_from_directory(app.root_path,
                                'badimage.png', mimetype='image/png')
@@ -278,7 +278,7 @@ def favicon():
 
 @app.route('/sparcd.png', methods = ['GET'])
 @cross_origin(origins="http://localhost:3000", supports_credentials=True)
-def favicon():
+def sparcdpng():
     """ Return the image """
     return send_from_directory(app.root_path,
                                'sparcd.png', mimetype='image/png')
@@ -286,7 +286,7 @@ def favicon():
 
 @app.route('/wildcatResearch.png', methods = ['GET'])
 @cross_origin(origins="http://localhost:3000", supports_credentials=True)
-def favicon():
+def wildcatresearch():
     """ Return the image """
     return send_from_directory(app.root_path,
                                'wildcatResearch.png', mimetype='image/png')
@@ -294,7 +294,7 @@ def favicon():
 
 @app.route('/loading.gif', methods = ['GET'])
 @cross_origin(origins="http://localhost:3000", supports_credentials=True)
-def favicon():
+def loading():
     """ Return the image """
     return send_from_directory(app.root_path,
                                'loading.gif', mimetype='image/gif')
@@ -302,7 +302,7 @@ def favicon():
 
 @app.route('/sanimalBackground.JPG', methods = ['GET'])
 @cross_origin(origins="http://localhost:3000", supports_credentials=True)
-def favicon():
+def sanimalbackground():
     """ Return the image """
     return send_from_directory(app.root_path,
                                'sanimalBackground.JPG', mimetype='image/jpeg')
