@@ -22,7 +22,7 @@ SPARCD_PREFIX='sparcd-'
 # Our bucket prefix
 BUCKET_PREFIX = SPARCD_PREFIX
 # Prefix for settings buckets
-SETTINGS_BUCKET_PREFIX = BUCKET_PREFIX + 'settings'
+SETTINGS_BUCKET_PREFIX = BUCKET_PREFIX + 'settings-'
 # Prefix for legacy settings bucket
 SETTINGS_BUCKET_LEGACY = 'sparcd'
 
@@ -60,6 +60,9 @@ S3_UPLOAD_META_JSON_FILE_NAME = 'UploadMeta.json'
 
 # Array of configuration files
 CONFIGURATION_FILES_LIST = [LOCATIONS_JSON_FILE_NAME,SETTINGS_JSON_FILE_NAME,SPECIES_JSON_FILE_NAME]
+
+# Maximun number of times to attempt to create a bucket
+MAX_NEW_BUCKET_TRIES = 10
 
 def make_s3_path(parts: tuple) -> str:
     """ Makes the parts into an S3 path
@@ -389,6 +392,31 @@ def find_settings_bucket(minio: Minio) -> Optional[str]:
     for one_bucket in minio.list_buckets():
         if one_bucket.name.startswith(SETTINGS_BUCKET_PREFIX):
             settings_bucket = one_bucket.name
+
+    return settings_bucket
+
+def create_settings_bucket(minio: Minio) -> Optional[str]:
+    """ Attempts to create a settings bucket
+    Arguments:
+        minio: the S3 instance to create a settings bucket on
+    Return:
+        Returns the new bucket name when successful, else None
+    """
+    settings_bucket = None
+    for idx in range(0, MAX_NEW_BUCKET_TRIES):
+        settings_bucket = SETTINGS_BUCKET_PREFIX + str(uuid.uuid4())
+        try:
+            # Create the settings bucket if the name is OK
+            if not minio.bucket_exists(settings_bucket):
+                minio.make_bucket(settings_bucket)
+                break
+        except S3Error as ex:
+            print('ERROR: Unable to create possible settings bucket {settings_bucket}',
+                                                                                    flush=True)
+            print(f'     : exception code: {ex.code}', flush=True)
+            print(ex, flush=True)
+
+        settings_bucket = None
 
     return settings_bucket
 
@@ -1294,37 +1322,83 @@ class S3Connection:
         return success is True, created_bucket
 
     @staticmethod
-    def create_sparcd(url: str, user: str, password: str) -> bool:
+    def create_sparcd(url: str, user: str, password: str, settings_folder: str) -> bool:
         """ Creates the remote instance of SPARCd
         Arguments:
             url: the URL to the s3 instance
             user: the name of the user to use when connecting
             password: the user's password
+            settings_folder: the path of the folder to find the settings files in
         Return:
             True is returned if the instance was created and False otherwise
         """
         minio = Minio(url, access_key=user, secret_key=password)
 
-        # Check that there isn't a settings bucket
+        # Check that there isn't a settings bucket and create one if there isn't one
+        if find_settings_bucket(minio) is not None:
+            return False
 
-        # Create unique settings bucket
+        # Try hard to create a settings bucket
+        settings_bucket = create_settings_bucket(minio)
+        if settings_bucket is None:
+            print(f'Unable to create a settings bucket after {MAX_NEW_BUCKET_TRIES} tries',
+                                                                                        flush=True)
+            return False
 
         # Upload files
+        uploaded_count = 0
+        for one_file in CONFIGURATION_FILES_LIST:
+            source = os.path.join(settings_folder, one_file)
+            dest = make_s3_path(SETTINGS_FOLDER, one_file)
+            try:
+                put_s3_file(minio, settings_bucket, dest, source, content_type='application/json')
+                uploaded_count += 1
+            except S3Error as ex:
+                print('ERROR: Unable to upload to settings bucket {dest}', flush=True)
+                print(f'     : exception code: {ex.code}', flush=True)
+                print(ex, flush=True)
+
+        return upload_count == len(CONFIGURATION_FILES_LIST)
 
     @staticmethod
-    def repair_sparcd(url: str, user: str, password: str) -> bool:
+    def repair_sparcd(url: str, user: str, password: str, settings_folder: str) -> bool:
         """ Repairs the remote instance of SPARCd
         Arguments:
             url: the URL to the s3 instance
             user: the name of the user to use when connecting
             password: the user's password
+            settings_folder: the path of the folder to find the settings files in
         Return:
             True is returned if the instance was could be repaired and False otherwise
         """
         minio = Minio(url, access_key=user, secret_key=password)
 
         # Check if we need and new settings bucket and create one if we do
+        settings_bucket = find_settings_bucket(minio)
+        if settings_bucket is None:
+            settings_bucket = create_settings_bucket(minio)
+        if settings_bucket is None:
+            return False
 
         # Get the list of files we have
+        found_files = []
+        for one_obj in minio.list_objects(bucket, prefix=SETTINGS_FOLDER+'/'):
+            if not one_obj.is_dir:
+                file_name = os.path.basename(one_obj.object_name)
+                if file_name in CONFIGURATION_FILES_LIST:
+                    found_files.append(file_name)
 
         # Upload missing files
+        upload_count = 0
+        for one_file in list(set(CONFIGURATION_FILES_LIST) - set(found_files)):
+            source = os.path.join(settings_folder, one_file)
+            dest = make_s3_path(SETTINGS_FOLDER, one_file)
+            try:
+                put_s3_file(minio, settings_bucket, dest, source, content_type='application/json')
+                upload_count += 1
+            except S3Error as ex:
+                print('ERROR: Unable to upload missing file to settings bucket {dest}', flush=True)
+                print(f'     : exception code: {ex.code}', flush=True)
+                print(ex, flush=True)
+
+        return upload_count + len(found_files) == len(CONFIGURATION_FILES_LIST)

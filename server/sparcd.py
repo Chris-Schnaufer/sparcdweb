@@ -61,6 +61,8 @@ ENV_NAME_DB = 'SPARCD_DB'
 ENV_NAME_PASSCODE = 'SPARCD_CODE'
 # Environment variable name for session expiration timeout
 ENV_NAME_SESSION_EXPIRE = 'SPARCD_SESSION_TIMEOUT'
+# Environment variable name for default settings files
+ENV_DEFAULT_SETTINGS_PATH = 'SPARCD_DEFAULT_SETTINGS_PATH'
 # Default timeout in seconds
 SESSION_EXPIRE_DEFAULT_SEC = 10 * 60 * 60
 # Working database storage path
@@ -77,6 +79,11 @@ TIMEOUT_COLLECTIONS_SEC = 12 * 60 * 60
 TIMEOUT_UPLOADS_FILE_SEC = 15 * 60
 # Timeout for query results on disk
 QUERY_RESULTS_TIMEOUT_SEC = 24 * 60 * 60
+
+# Folder that has the template settings files used to setup a new SPARCd instance or repair an
+# existing one
+DEFAULT_SETTINGS_PATH = os.environ.get(ENV_DEFAULT_SETTINGS_PATH,
+                                                        os.path.join(os.getcwd(),"defaultSettings"))
 
 # Timeout for image browser cache
 IMAGE_BROWSER_CACHE_TIMEOUT_SEC = 10800
@@ -317,7 +324,8 @@ def favicon():
 #
 #    # Make sure we're only serving something that's in the same location that we are in and that
 #    # it exists
-#    if not fullpath or not os.path.exists(fullpath) or not fullpath.startswith(RESOURCE_START_PATH):
+#    if not fullpath or not os.path.exists(fullpath) or not \
+#                                                        fullpath.startswith(RESOURCE_START_PATH):
 #        return 'Resource not found', 404
 #
 #    return send_file(fullpath)
@@ -3395,8 +3403,9 @@ def install_new():
     sole_user = False
     if not user_info.admin:
         if not db.is_sole_user(hash2str(s3_url), user_info.name):
-            return json.dumps({'success': False, 'message': 'You are not authorized to create a new ' \
-                                                    'SPARCd configuration'})
+            return json.dumps({'success': False,
+                                'message': 'You are not authorized to create a new ' \
+                                            'SPARCd configuration'})
         sole_user = True
 
     # Check if the S3 instance needs repairs and of is all set
@@ -3408,10 +3417,11 @@ def install_new():
                                                         'configuration'})
 
     # The user is apparently the sole user or an admin, and the S3 instance is not setup for SPARCd
-    if not S3Connection.create_sparcd(s3_url, user_info.name, get_password(token, db)):
+    if not S3Connection.create_sparcd(s3_url, user_info.name, get_password(token, db),
+                                                                            DEFAULT_SETTINGS_PATH):
         return json.dumps({'success': False, 'message': 'Unable to configure new SPARCd instance'})
 
-    # Make this user the admin
+    # Make this user the admin if they're the only one in the DB
     if sole_user:
         db.update_user(hash2str(s3_url), user_info.name, user_info.email, True)
 
@@ -3452,10 +3462,12 @@ def install_repair():
                                                                         get_password(token, db))
 
     if not needs_repair or has_everything:
-        return json.dumps({'success': True, 'message': 'The SPARCd installation doesn\'t need repair'})
+        return json.dumps({'success': True, \
+                            'message': 'The SPARCd installation doesn\'t need repair'})
 
-    if not S3Connection.repair_sparcd(s3_url, user_info.name, get_password(token, db)):
+    # Make repairs
+    if not S3Connection.repair_sparcd(s3_url, user_info.name, get_password(token, db),
+                                                                            DEFAULT_SETTINGS_PATH):
         return json.dumps({'success': False, 'message': 'Unable to repair this SPARCd instance'})
 
     return json.dumps({'success': True})
-
