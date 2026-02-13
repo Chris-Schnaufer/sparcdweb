@@ -1520,8 +1520,8 @@ def sandbox_check_continue_upload():
 
             if temp_file_cs != comp_file_cs:
                 all_match = False
-                message = 'The current upload folder appears to be incorrect due to existing images ' \
-                            'not matching'
+                message = 'The current upload folder appears to be incorrect due to existing ' \
+                            'images not matching'
         except S3Error as ex:
             # If the file doesn't exist we have a big problem with the upload
             if ex.code == "NoSuchKey":
@@ -3373,6 +3373,70 @@ def ownercollection_update():
 
     return {'success':True, 'data': updated_collection, \
             'message': "Successfully updated the collection"}
+
+
+@app.route('/adminCheckIncomplete', methods = ['PUT'])
+@cross_origin(origins="http://localhost:3000")#, supports_credentials=True)
+def admin_check_incomplete():
+    """ Looks for incomplete updated in collections
+    Arguments: (GET)
+        t - the session token
+    Return:
+        Returns True if the collection changes were made
+    Notes:
+         If the token is invalid, or a problem occurs, a 404 error is returned
+   """
+    db = SPARCdDatabase(DEFAULT_DB_PATH)
+    token = request.args.get('t')
+    print('ADMIN CHECK INCOMPLETE UPLOADS', flush=True)
+
+    # Check the credentials
+    token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
+    if token_valid is None or user_info is None:
+        return "Not Found", 404
+    if not token_valid or not user_info:
+        return "Unauthorized", 401
+
+    # Make sure this user is an admin
+    if user_info.admin != 1:
+        return "Not Found", 404
+
+    # Check the parameters we've received
+    cur_colls = request.form.get('collections', None)
+    if cur_colls is None:
+        return "Not Found", 406
+
+    # Get the list of collections
+    try:
+        cur_colls = json.loads(cur_colls)
+    except json.JSONDecodeError as ex:
+        print('ERROR: Received invalid collections list to check for incomplete uploads',flush=True)
+        print(ex, flush=True)
+        return 'Resource not found', 404
+
+    # Check if we're all done
+    if len(cur_colls) <= 0:
+        return json.dumps({'success': True})
+
+    # Get the locations and species changes logged in the database
+    s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
+
+    incomplete = S3Connection.check_incomplete_uploads(s3_url, user_info.name,
+                                                            get_password(token, db), cur_colls)
+
+    if incomplete is None:
+        print('ERROR: unable to check for incomplete uploads in indicated collections', cur_colls,
+                                                                                        flush=True)
+        return json.dumps({'success': False})
+
+    # Nothing found
+    if len(incomplete) == 0:
+        return json.dumps({'success': True})
+
+    # Update the database with unknown incomplete uploads
+    db.sandbox_new_incomplete_uploads(hash2str(s3_url), incomplete)
+
+    return {'success': True}
 
 
 @app.route('/adminCompleteChanges', methods = ['PUT'])

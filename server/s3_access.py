@@ -29,6 +29,9 @@ SETTINGS_BUCKET_LEGACY = 'sparcd'
 # Folder under which settings can be found
 SETTINGS_FOLDER = 'Settings'
 
+# Folder under which collections can be found
+COLLECTIONS_FOLDER = 'Collections'
+
 
 # Configuration file name for collections
 COLLECTION_JSON_FILE_NAME = 'collection.json'
@@ -256,10 +259,10 @@ def get_upload_data_thread(minio: Minio, bucket: str, upload_paths: tuple, colle
     for one_path in upload_paths:
         # Upload information
         upload_info_path = make_s3_path((one_path, S3_UPLOAD_META_JSON_FILE_NAME))
-        coll_info_data = get_s3_file(minio, bucket, upload_info_path, temp_file[1])
-        if coll_info_data is not None:
+        upload_info_data = get_s3_file(minio, bucket, upload_info_path, temp_file[1])
+        if upload_info_data is not None:
             try:
-                coll_info = json.loads(coll_info_data)
+                upload_info = json.loads(upload_info_data)
             except json.JSONDecodeError:
                 print('get_upload_data_thread: Unable to load JSON information: ' \
                       f'{upload_info_path}')
@@ -277,7 +280,7 @@ def get_upload_data_thread(minio: Minio, bucket: str, upload_paths: tuple, colle
                 if csv_info and len(csv_info) >= 23:
                     upload_info.append({
                                  'path':one_path,
-                                 'info':coll_info,
+                                 'info':upload_info,
                                  'location':csv_info[1],
                                  'elevation':csv_info[12],
                                  'key':os.path.basename(one_path.rstrip('/\\')),
@@ -352,6 +355,78 @@ def get_s3_images(minio: Minio, bucket: str, upload_paths: tuple, need_url: bool
                                        })
 
     return images
+
+
+def check_incomplete_thread(minio: Minio, bucket: str) -> Optional[tuple]:
+    """ Looks for incomplete uploads
+    Arguments:
+        minio: the S3 client instance
+        bucket: the bucket to search
+    Return:
+        Returns the tuple of found incomplete uploads
+    """
+    coll_id = bucket[len(SPARCD_PREFIX):]
+    uploads_path = make_s3_path((COLLECTIONS_FOLDER, coll_id, S3_UPLOADS_PATH_PART))
+
+    incomplete_uploads = []
+
+    temp_file = tempfile.mkstemp(prefix=SPARCD_PREFIX)
+    os.close(temp_file[0])
+
+    try:
+        for one_obj in minio.list_objects(bucket, prefix=uploads_path):
+            if one_obj.is_dir and not one_obj.object_name == uploads_path:
+                uploaded_images = 0
+                upload_info = None
+
+                # Get the upload metadata
+                upload_info_path = make_s3_path((one_obj.object_name,S3_UPLOAD_META_JSON_FILE_NAME))
+                upload_info_data = get_s3_file(minio, bucket, upload_info_path, temp_file[1])
+                if upload_info_data is not None:
+                    try:
+                        upload_info = json.loads(upload_info_data)
+                    except json.JSONDecodeError:
+                        print('get_upload_data_thread: Unable to load JSON information: ' \
+                              f'{upload_info_path}')
+                        continue
+
+                # Prepare the folder path for counting
+                cur_folder = one_obj.object_name
+                if not cur_folder.endswith('/'):
+                    cur_folder += '/'
+                check_folders = [cur_folder]
+
+                # Loop throgh this sub folder counting images
+                while check_folders is not None and len(check_folders) > 0:
+                    new_folders = []
+
+                    for one_folder in check_folders:
+                        for one_sub_obj in minio.list_objects(bucket, prefix=one_folder):
+                            if one_sub_obj.is_dir and not one_sub_obj.object_name == one_folder:
+                                cur_sub_folder = one_sub_obj.object_name
+                                if not cur_sub_folder.endswith('/'):
+                                    cur_sub_folder += '/'
+                                new_folders.append(cur_sub_folder)
+                            else:
+                                uploaded_images += 1
+
+                    check_folders = new_folders
+
+                # Check the numbers
+                if not uploaded_images == int(upload_info.image_count):
+                    incomplete_uploads.append({'upload_user': upload_info['uploadUser'],
+                                                'expected': int(upload_info['imageCount']),
+                                                'actual': uploaded_images,
+                                                'bucket': bucket,
+                                                's3_path': one_obj.object_name,
+                                                'date': upload_info['uploadDate'],
+                                                })
+    finally:
+        if os.path.exists(temp_file[1]):
+            os.unlink(temp_file[1])
+
+    # Return the incompletes we ffound
+    return incomplete_uploads
 
 
 def get_common_name(csv_comment: str) -> Optional[str]:
@@ -1441,3 +1516,36 @@ class S3Connection:
                 print(ex, flush=True)
 
         return upload_count + len(found_files) == len(CONFIGURATION_FILES_LIST)
+
+    @staticmethod
+    def check_incomplete_uploads(url: str, user: str, password: str, \
+                                                                buckets: tuple) -> Optional[tuple]:
+        """ Checks for incomplete uploads in the requested buckets
+        Arguments:
+            url: the URL to the s3 instance
+            user: the name of the user to use when connecting
+            password: the user's password
+            buckets: tuple of buckets to check
+        Return:
+            Information on failed uploads is returned upon success with an empty tuple possible.
+            None is returned if a problem is found
+        """
+        minio = Minio(url, access_key=user, secret_key=password)
+
+        found_incomplete = []
+        if len(buckets) > 1:
+            # Check the buckets all at once
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                cur_futures = {executor.submit(check_incomplete_thread, minio, one_bucket):
+                                                            one_bucket for one_bucket in buckets}
+
+                for future in concurrent.futures.as_completed(cur_futures):
+                    cur_incomplete = future.result()
+                    if len(cur_incomplete) > 0:
+                        found_incomplete = found_incomplete + cur_incomplete
+
+        else:
+            # Check this single bucket
+            found_incomplete = check_incomplete_thread(minio, buckets[0])
+
+        return found_incomplete

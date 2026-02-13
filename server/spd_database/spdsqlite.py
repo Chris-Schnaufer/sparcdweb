@@ -662,21 +662,32 @@ class SPDSQLite:
         Arguments:
             s3_id: the id of the s3 instance to fetch for
         Returns:
-            A tuple containing the row tuples of the s3_path, bucket, the base upload path, and
-            location ID
+            A tuple containing the field indexes of the return data, the row tuples of the s3_path,
+            bucket, the base upload path, and location ID
         """
         if self._conn is None:
             raise RuntimeError('Attempting to get sandbox information from the database before ' \
                                                                                     'connecting')
+
+        # Indexes of return values
+        indexes = { 'user': 0,
+                    'path': 1,
+                    'bucket': 2,
+                    's3_path': 3,
+                    'location_id': 4,
+                    'recovered': 5
+                    }
+
         # Get the Sandbox information
         cursor = self._conn.cursor()
-        cursor.execute('SELECT path, bucket, s3_base_path, location_id FROM sandbox WHERE s3_id=?',
-                                                                                        (s3_id,))
+        cursor.execute('SELECT name, path, bucket, s3_base_path, location_id, recovered '\
+                                                                    'FROM sandbox WHERE s3_id=?',
+                        (s3_id,))
         res = cursor.fetchall()
 
         cursor.close()
 
-        return res
+        return indexes, res
 
     def get_uploads(self, s3_id: str, bucket: str, timeout_sec: int) -> Optional[tuple]:
         """ Returns the uploads for this collection from the database
@@ -876,6 +887,62 @@ class SPDSQLite:
         cursor.close()
 
         return res
+
+    def sandbox_exists(self, s3_id: str, bucket: str, username: str, s3_path: str) -> bool:
+        """ Checks if the sandbox entry exists
+        Arguments:
+            s3_id: the ID of the s3 instance
+            bucket: the bucket to match
+            username: the user that uploaded images
+            s3_path: the path to the upload folder
+        Return:
+            Returns True if an active upload matches the parameter. Fals if the upload is
+            not found
+        """
+        if self._conn is None:
+            raise RuntimeError('Attempting to check if sandbox entry in the database before ' \
+                                                                                    'connecting')
+
+        # Find the upload
+        cursor = self._conn.cursor()
+        cursor.execute('SELECT count(1) FROM sandbox WHERE s3_id=? AND bucket=? AND name=? AND ' \
+                                                            's3_base_path=? AND path IS NOT NULL',
+                        (s3_id, bucket, username, s3_path))
+
+        res = cursor.fetchone()
+        cursor.close()
+
+        if not res or len(res) <= 0:
+            return 0
+
+        return int(res[0]) > 0
+
+    def sandbox_add_recovered(self, s3_id: str, bucket: str, username: str, s3_path: str, \
+                                                                timestamp: datetime) -> bool:
+        """ Adds a recovered sandbox entry to the database
+        Arguments:
+            s3_id: the ID of the s3 instance
+            bucket: the bucket to match
+            username: the user that uploaded images
+            s3_path: the path to the upload folder
+            timestamp: the timestamp of the upload
+        Return:
+            Returns True if an active upload matches the parameter. Fals if the upload is
+            not found
+        """
+        if self._conn is None:
+            raise RuntimeError('Attempting to add a recovered sandbox entry to the database ' \
+                                                                                'before connecting')
+
+        # Add the upload
+        cursor = self._conn.cursor()
+        cursor.execute('INSERT INTO sandbox(s3_id, bucket, name, s3_base_path, timestamp, ' \
+                                    'upload_id, recovered) ' \
+                            'VALUES(?, ?, ?, ?, time(?), ?, 1)',
+                        (s3_id, bucket, username, s3_path, timestamp.isoformat(), uuid.uuid4().hex))
+
+        self._conn.commit()
+        cursor.close()
 
     def sandbox_get_upload(self, s3_id: str, username: str, path: str) -> Optional[tuple]:
         """ Gets the upload associated with the url , user, and upload path

@@ -316,7 +316,7 @@ def normalize_upload(upload_entry: dict) -> dict:
     Return:
         The normalized upload
     """
-    return {'name': upload_entry['info']['uploadUser'] + ' on ' + \
+    return_entry = {'name': upload_entry['info']['uploadUser'] + ' on ' + \
                                             format_upload_date(upload_entry['info']['uploadDate']),
             'description': upload_entry['info']['description'],
             'imagesCount': upload_entry['info']['imageCount'],
@@ -327,6 +327,13 @@ def normalize_upload(upload_entry: dict) -> dict:
             'date': upload_entry['info']['uploadDate'],
             'folders': upload_entry['uploaded_folders']
           }
+    return_entry.update({'complete': upload_entry['complete']} if \
+                                                                'complete' in upload_entry else {})
+    return_entry.update({'path': upload_entry['path']} if \
+                                                                    'path' in upload_entry else {})
+    return_entry.update({'uploadUser': upload_entry['info']['uploadUser']})
+
+    return return_entry
 
 
 def normalize_collection(coll: dict) -> dict:
@@ -437,13 +444,15 @@ def get_sandbox_collections(url: str, user: str, password: str, items: tuple, \
         # Check if we need to normalize the upload now
         if s3_upload is True and coll_uploads[bucket]['s3_collection'] is False:
             cur_upload = normalize_upload(cur_upload)
-            if 'complete' in one_item:
-                cur_upload['uploadCompleted'] = one_item['complete']
-            coll_uploads[bucket]['uploads'].append(cur_upload)
-        else:
-            if 'complete' in one_item:
-                cur_upload['uploadCompleted'] = one_item['complete']
-            coll_uploads[bucket]['uploads'].append(cur_upload)
+        if 'complete' in one_item:
+            cur_upload['uploadCompleted'] = one_item['complete']
+        if 'user' in one_item:
+            cur_upload['uploadUser'] = one_item['user']
+        if 'path' in one_item:
+            cur_upload['path'] = one_item['path']
+        print('HACK: SANDBOXADD:',cur_upload.keys(),flush=True)
+        print('HACK:           :',one_item.keys(),flush=True)
+        coll_uploads[bucket]['uploads'].append(cur_upload)
 
         if add_collection is True:
             return_info.append(found)

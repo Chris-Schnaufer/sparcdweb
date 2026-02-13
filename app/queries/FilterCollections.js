@@ -76,24 +76,24 @@ export default function FilterCollections({data, parentId, onClose, onChange}) {
    * Handles selecting all collections to the filter
    * @function
    */
-  function handleSelectAll() {
+  const handleSelectAll = React.useCallback(() => {
     const curCollections = displayedCollections.map((item) => item.bucket);
     const newCollections = curCollections.filter((item) => selectedCollections.findIndex((selItem) => selItem === item) < 0);
     const updatedSelections = [...selectedCollections, ...newCollections];
     setSelectedCollections(updatedSelections);
     onChange(updatedSelections);
     handleClearSearch();
-  }
+  }, [displayedCollections, handleClearSearch, selectedCollections, setSelectedCollections])
 
   /**
    * Clears all selected collections
    * @function
    */
-  function handleSelectNone() {
+  const handleSelectNone = React.useCallback(() => {
     setSelectedCollections([]);
     onChange([]);
     handleClearSearch();
-  }
+  }, [handleClearSearch, setSelectedCollections]);
 
   /**
    * Handles when the user selects or deselects a collection
@@ -101,7 +101,7 @@ export default function FilterCollections({data, parentId, onClose, onChange}) {
    * @param {object} event The triggering event object
    * @param {string} collectionName The name of the collection to add or remove
    */
-  function handleCheckboxChange(event, collectionName) {
+  const handleCheckboxChange = React.useCallback((event, collectionName) => {
 
     if (event.target.checked) {
       const collectionIdx = selectedCollections.findIndex((item) => collectionName === item);
@@ -122,14 +122,14 @@ export default function FilterCollections({data, parentId, onClose, onChange}) {
         setSelectionRedraw(selectionRedraw + 1);
       }
     }
-  }
+  }, [selectedCollections, setSelectedCollections, setSelectionRedraw]);
 
   /**
    * Handles the user changing the search criteria
    * @function
    * @param {object} event The triggering event
    */
-  function handleSearchChange(event) {
+  const handleSearchChange = useCallback((event) => {
     if (event.target.value) {
       const ucSearch = event.target.value.toUpperCase();
       setDisplayedCollections(collectionItems.filter((item) => item.bucket.toUpperCase().includes(ucSearch) ||
@@ -137,19 +137,19 @@ export default function FilterCollections({data, parentId, onClose, onChange}) {
     } else {
       setDisplayedCollections(collectionItems);
     }
-  }
+  }, [collectionItems, setDisplayedCollections]);
 
   /**
    * Handles resetting the search field
    * @function
    */
-  function handleClearSearch() {
+  const handleClearSearch = React.useCallback(() => {
     const searchEl = document.getElementById('file-collections-search');
     if (searchEl) {
       searchEl.value = '';
       setDisplayedCollections(collectionItems);
     }
-  }
+  }, [setDisplayedCollections]);
 
   // Return the collection filter UI
   return (

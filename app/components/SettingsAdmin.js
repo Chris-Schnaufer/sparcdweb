@@ -20,6 +20,7 @@ import { useTheme } from '@mui/material/styles';
 
 import PropTypes from 'prop-types';
 
+import CheckIncompleteUploads from './CheckIncompleteUploads';
 import EditCollection from './EditCollection';
 import EditLocation from './EditLocation';
 import EditSpecies from './EditSpecies';
@@ -63,6 +64,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
   const uiSizes = React.useContext(SizeContext);  // UI Dimensions
   const panelsWrapperRef = React.useRef(null);  // Used for sizeing
   const [activeTab, setActiveTab] = React.useState(0);
+  const [checkIncompleteUploads, setCheckIncompleteUploads] = React.useState(false);  // Indicated desire to check for incomplete uploads
   const [detailsHeight, setDetailsHeight] = React.useState(500); // Height for displaying details
   const [editingState, setEditingState] = React.useState({type:EditingStates.None, data:null})
   const [masterSpecies, setMasterSpecies] = React.useState(null); // Contains information on species
@@ -359,7 +361,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
             }
           })
         .then((respData) => {
-            // Set the species data
+            // Set the collection data
             if (respData.success) {
               setEditingState({...editingState, data:{...editingState.data,...respData.data}});
               collectionInfo.push(respData.data);
@@ -459,7 +461,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
    * @param {function} onSuccess The callable upon success
    * @param {function} onError The callable upon an issue ocurring
    */
-  function updateSpecies(newInfo, onSuccess, onError) {
+  const updateSpecies = React.useCallback((newInfo, onSuccess, onError) => {
     const speciesUpdateUrl = serverURL + '/adminSpeciesUpdate?t=' + encodeURIComponent(settingsToken);
 
     const formData = new FormData();
@@ -532,7 +534,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
       console.log('Admin Update Species Unknown Error: ',err);
       addMessage(Level.Warning, 'An unknown error ocurred when attempting to update species information');
     }
-  }
+  }, [addMessage, editingState, masterSpecies, serverURL, setMasterSpecies, setSpeciesModified, settingsToken,]);
 
   /**
    * Handles updating the location information
@@ -541,7 +543,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
    * @param {function} onSuccess The callable upon success
    * @param {function} onError The callable upon an issue ocurring
    */
-  function updateLocation(newInfo, onSuccess, onError) {
+  const updateLocation = React.useCallback((newInfo, onSuccess, onError) => {
     const locationsUpdateUrl = serverURL + '/adminLocationUpdate?t=' + encodeURIComponent(settingsToken);
 
     const formData = new FormData();
@@ -588,6 +590,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
                                                                   ));
 
               if (curLocation && curLocation.length > 0) {
+                // Update old location
                 curLocation[0]['nameProperty'] = respData.data.nameProperty;
                 curLocation[0]['idProperty'] = respData.data.idProperty;
                 curLocation[0]['activeProperty'] = respData.data.activeProperty;
@@ -603,9 +606,10 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
                   onSuccess();
                 }
               } else if (!oldEditingState.data) {
+                // We have a new location
                 let newLocationItems = locationItems;
                 newLocationItems.push(respData.data);
-                setLocationIitems(newLocationItems);
+                locationItems.push(curLocation);
                 setLocationsModified(true);
                 if (typeof(onSuccess) === 'function') {
                   onSuccess();
@@ -628,7 +632,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
       console.log('Admin Update Location Unknown Error: ',err);
       addMessage(Level.Warning, 'An unknown error ocurred when attempting to update location information');
     }
-  }
+  }, [addMessage, editingState, locationItems, serverURL, setLocationsModified, settingsToken]);
 
   /**
    * Handles the commit of any species or location changes
@@ -831,21 +835,21 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
    * @function
    * @param {object} event The change event for searching
    */
-  function searchUsers(event) {
+  const searchUsers = React.useCallback((event) => {
     if (event.target.value && userInfo) {
       const ucSearch = event.target.value.toUpperCase();
       setSelectedUsers(userInfo.filter((item) => item.name.toUpperCase().includes(ucSearch) || item.email.toUpperCase().includes(ucSearch) ));
     } else {
       setSelectedUsers(userInfo || []);
     }
-  }
+  }, [setSelectedUsers, userInfo]);
 
   /**
    * Handles the collection search button press
    * @function
    * @param {object} event The change event for searching
    */
-  function searchCollections(event) {
+  const searchCollections = React.useCallback((event) => {
     if (event.target.value && !loadingCollections) {
       const ucSearch = event.target.value.toUpperCase();
       setSelectedCollections(collectionInfo.filter((item) => item.name.toUpperCase().includes(ucSearch) || item.id.toUpperCase().includes(ucSearch) ||
@@ -853,35 +857,43 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
     } else {
       setSelectedCollections(loadingCollections ? [] : collectionInfo);
     }
-  }
+  }, [collectionInfo, setSelectedCollections]);
 
   /**
    * Handles the species search button press
    * @function
    * @param {object} event The change event for searching
    */
-  function searchSpecies(event) {
+  const searchSpecies = React.useCallback((event) => {
     if (event.target.value && masterSpecies) {
       const ucSearch = event.target.value.toUpperCase();
       setSelectedSpecies(masterSpecies.filter((item) => item.name.toUpperCase().includes(ucSearch) || item.scientificName.toUpperCase().includes(ucSearch) ));
     } else {
       setSelectedSpecies(masterSpecies || []);
     }
-  }
+  }, [masterSpecies, setSelectedSpecies]);
 
   /**
    * Handles the location search button press
    * @function
    * @param {object} event The change event for searching
    */
-  function searchLocations(event) {
+  const searchLocations = React.useCallback((event) => {
     if (event.target.value && !loadingLocations) {
       const ucSearch = event.target.value.toUpperCase();
       setSelectedLocations(locationItems.filter((item) => item.nameProperty.toUpperCase().includes(ucSearch) || item.idProperty.toUpperCase().includes(ucSearch) ));
     } else {
       setSelectedLocations(loadingLocations ? [] : locationItems);
     }
-  }
+  }, [locationItems, setSelectedLocations]);
+
+  /**
+   * Handles checking for incomplete uploads that are not known to the database
+   * @function
+   */
+  const handleCheckIncompleteUploads = React.useCallback(() => {
+    setCheckIncompleteUploads(true);
+  }, []);
 
   /**
    * Sorts user records by the specified column
@@ -889,7 +901,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
    * @param {string} sortColumn The name of the column to sort on
    * @param {object} direction The direction to sort in (see SortDirectio)
    */
-  const SortUsers = React.useCallback((sortColumn, direction) => {
+  const sortUsers = React.useCallback((sortColumn, direction) => {
     const curSortInfo = selectedUsers || [];
     switch(sortColumn) {
       case 'name':
@@ -913,7 +925,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
    * @param {string} sortColumn The name of the column to sort on
    * @param {object} direction The direction to sort in (see SortDirectio)
    */
-  const SortCollections = React.useCallback((sortColumn, direction) => {
+  const sortCollections = React.useCallback((sortColumn, direction) => {
     const curSortInfo = selectedCollections || [];
     switch(sortColumn) {
       case 'name':
@@ -934,7 +946,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
    * @param {string} sortColumn The name of the column to sort on
    * @param {object} direction The direction to sort in (see SortDirectio)
    */
-  const SortSpecies = React.useCallback((sortColumn, direction) => {
+  const sortSpecies = React.useCallback((sortColumn, direction) => {
     const curSortInfo = selectedSpecies || [];
     switch(sortColumn) {
       case 'name':
@@ -960,7 +972,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
    * @param {string} sortColumn The name of the column to sort on
    * @param {object} direction The direction to sort in (see SortDirectio)
    */
-  const SortLocations = React.useCallback((sortColumn, direction) => {
+  const sortLocations = React.useCallback((sortColumn, direction) => {
     const curSortInfo = selectedLocations || [];
     switch(sortColumn) {
       case 'name':
@@ -989,7 +1001,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
    * @param {function} {sortCb} Optional column to sort by
    * @return {object} The UI object to render
    */
-  const GenerateSettingHeader = React.useCallback((selectId, sorted, sortDirection, size, title, titleStyle, sortCb) => {
+  function generateSettingHeader(selectId, sorted, sortDirection, size, title, titleStyle, sortCb) {
     titleStyle = titleStyle || {};
 
     return (
@@ -1015,7 +1027,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
             {!sorted && <ArrowDropDownOutlinedIcon sx={{visibility:"hidden"}} />}
           </Grid>
     );
-  }, [setSortColumn, setSortDirection, sortColumn, sortDirection]);
+  }
 
   /**
    * Returns the UI for editing users. Starts the user information fetch if we don't have it already
@@ -1044,11 +1056,11 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
             sx={{width:'100%', padding:'0px 5px 0 5px'}} >
         <Grid id="admin-settings-collection-header" container direction="row" justifyContent="space-between" alignItems="start"
               sx={{width:'100%', backgroundColor:'lightgrey', borderBottom:'1px solid black'}} >
-          { GenerateSettingHeader(1, sortColumn === 1, sortDirection, 2, 'Name', {marginRight:"auto"}, (dir)=>SortUsers('name', dir) )}
-          { GenerateSettingHeader(2, sortColumn === 2, sortDirection, 3, 'Email', {marginRight:"auto"}, (dir)=>SortUsers('email', dir) )}
-          { GenerateSettingHeader(3, false,            sortDirection, 5, 'Collections', {marginRight:"auto"})}
-          { GenerateSettingHeader(4, sortColumn === 4, sortDirection, 1, 'Admin', {marginLeft:"auto"}, (dir)=>SortUsers('admin', dir) )}
-          { GenerateSettingHeader(5, sortColumn === 5, sortDirection, 1, 'Auto', {marginLeft:"auto", paddingRight:"5px"}, (dir)=>SortUsers('auto', dir) )}
+          { generateSettingHeader(1, sortColumn === 1, sortDirection, 2, 'Name', {marginRight:"auto"}, (dir)=>sortUsers('name', dir) )}
+          { generateSettingHeader(2, sortColumn === 2, sortDirection, 3, 'Email', {marginRight:"auto"}, (dir)=>sortUsers('email', dir) )}
+          { generateSettingHeader(3, false,            sortDirection, 5, 'Collections', {marginRight:"auto"})}
+          { generateSettingHeader(4, sortColumn === 4, sortDirection, 1, 'Admin', {marginLeft:"auto"}, (dir)=>sortUsers('admin', dir) )}
+          { generateSettingHeader(5, sortColumn === 5, sortDirection, 1, 'Auto', {marginLeft:"auto", paddingRight:"5px"}, (dir)=>sortUsers('auto', dir) )}
         </Grid>
         <Grid id='admin-settings-details' sx={{overflowX:'scroll',width:'100%', maxHeight:detailsHeight+'px' }}>
         { curUserInfo.map((item,idx) => 
@@ -1119,9 +1131,9 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
             sx={{width:'100%', padding:'0px 5px 0 5px'}} >
         <Grid id="admin-settings-collection-details-header" container direction="row" justifyContent="space-between" alignItems="start"
               sx={{width:'100%', backgroundColor:'lightgrey', borderBottom:'1px solid black'}} >
-          { GenerateSettingHeader(1, sortColumn === 1, sortDirection, 5, 'Name', {marginRight:"auto"}, (dir)=>SortCollections('name', dir) )}
-          { GenerateSettingHeader(2, sortColumn === 2, sortDirection, 4, 'ID', {marginRight:"auto"}, (dir)=>SortCollections('id', dir) )}
-          { GenerateSettingHeader(3, sortColumn === 3, sortDirection, 3, 'email', {marginLeft:"auto", paddingRight:"5px"}, (dir)=>SortCollections('email', dir) )}
+          { generateSettingHeader(1, sortColumn === 1, sortDirection, 5, 'Name', {marginRight:"auto"}, (dir)=>sortCollections('name', dir) )}
+          { generateSettingHeader(2, sortColumn === 2, sortDirection, 4, 'ID', {marginRight:"auto"}, (dir)=>sortCollections('id', dir) )}
+          { generateSettingHeader(3, sortColumn === 3, sortDirection, 3, 'email', {marginLeft:"auto", paddingRight:"5px"}, (dir)=>sortCollections('email', dir) )}
         </Grid>
         <Grid id='admin-settings-details' sx={{overflowX:'scroll',width:'100%', maxHeight:detailsHeight+'px' }}>
         { selectedCollections.map((item, idx) => 
@@ -1176,9 +1188,9 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
             sx={{width:'100%', padding:'0px 5px 0 5px'}} >
         <Grid id="admin-settings-species-header" container direction="row" justifyContent="space-between" alignItems="start"
               sx={{width:'100%', backgroundColor:'lightgrey', borderBottom:'1px solid black'}} >
-          { GenerateSettingHeader(1, sortColumn === 1, sortDirection, 5, 'Name', {marginRight:"auto"}, (dir)=>SortSpecies('name', dir) )}
-          { GenerateSettingHeader(2, sortColumn === 2, sortDirection, 5, 'Scientific Name', {marginRight:"auto"}, (dir)=>SortSpecies('sciName', dir) )}
-          { GenerateSettingHeader(3, sortColumn === 3, sortDirection, 2, 'Key Binding', {marginLeft:"auto", paddingRight:"5px"}, (dir)=>SortSpecies('key', dir) )}
+          { generateSettingHeader(1, sortColumn === 1, sortDirection, 5, 'Name', {marginRight:"auto"}, (dir)=>sortSpecies('name', dir) )}
+          { generateSettingHeader(2, sortColumn === 2, sortDirection, 5, 'Scientific Name', {marginRight:"auto"}, (dir)=>sortSpecies('sciName', dir) )}
+          { generateSettingHeader(3, sortColumn === 3, sortDirection, 2, 'Key Binding', {marginLeft:"auto", paddingRight:"5px"}, (dir)=>sortSpecies('key', dir) )}
         </Grid>
         <Grid id='admin-settings-details' sx={{overflowX:'scroll',width:'100%', maxHeight:detailsHeight+'px' }}>
         { curSpecies.map((item, idx) => 
@@ -1227,10 +1239,10 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
             sx={{width:'100%', padding:'0px 5px 0 5px'}} >
         <Grid id="admin-settings-species-header" container direction="row" justifyContent="space-between" alignItems="start"
               sx={{width:'100%', backgroundColor:'lightgrey', borderBottom:'1px solid black'}} >
-          { GenerateSettingHeader(1, sortColumn === 1, sortDirection, 5, 'Name', {marginRight:"auto"}, (dir)=>SortLocations('name', dir) )}
-          { GenerateSettingHeader(2, sortColumn === 2, sortDirection, 3, 'ID', {marginRight:"auto"}, (dir)=>SortLocations('id', dir) )}
-          { GenerateSettingHeader(3, sortColumn === 3, sortDirection, 2, 'Active', {marginRight:"auto"}, (dir)=>SortLocations('active', dir) )}
-          { GenerateSettingHeader(4, false,            sortDirection, 2, 'Location', {marginLeft:"auto", paddingRight:"5px"} )}
+          { generateSettingHeader(1, sortColumn === 1, sortDirection, 5, 'Name', {marginRight:"auto"}, (dir)=>sortLocations('name', dir) )}
+          { generateSettingHeader(2, sortColumn === 2, sortDirection, 3, 'ID', {marginRight:"auto"}, (dir)=>sortLocations('id', dir) )}
+          { generateSettingHeader(3, sortColumn === 3, sortDirection, 2, 'Active', {marginRight:"auto"}, (dir)=>sortLocations('active', dir) )}
+          { generateSettingHeader(4, false,            sortDirection, 2, 'Location', {marginLeft:"auto", paddingRight:"5px"} )}
         </Grid>
         <Grid id='admin-settings-details' sx={{overflowX:'scroll',width:'100%', maxHeight:detailsHeight+'px' }}>
         { selectedLocations.map((item, idx) => {
@@ -1336,7 +1348,12 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
   // Setup the tab and page generation
   const adminTabs = [
     {name:'Users', uiFunc:() => generateUsers(handleUserEdit), newName:null, newFunc:null, searchFunc:searchUsers},
-    {name:'Collections', uiFunc:() => generateCollections(handleCollectionEdit), newName:'New Collection', newFunc:handleCollectionEdit, searchFunc:searchCollections},
+    {name:'Collections', uiFunc:() => generateCollections(handleCollectionEdit),
+                         buttons:[
+                              {name:'New Collection', func:handleCollectionEdit},
+                              {name:'Check Incomplete Uploads', func:handleCheckIncompleteUploads},
+                          ],
+                         searchFunc:searchCollections},
     {name:'Species', uiFunc:() => generateSpecies(handleSpeciesEdit), newName:'Add Species', newFunc:handleSpeciesEdit, searchFunc:searchSpecies},
     {name:'Locations', uiFunc:() => generateLocations(handleLocationEdit), newName:'Add Location', newFunc:handleLocationEdit, searchFunc:searchLocations},
   ];
@@ -1415,9 +1432,21 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
               <Grid id='admin-settings-footer' container direction="row" justifyContent="space-between" alignItems="center" 
                     sx={{position:'sticky',bottom:'0px',backgroundColor:'#F0F0F0', borderTop:'1px solid black', boxShadow:'lightgrey 0px -3px 3px',
                          padding:'5px 20px 5px 20px', width:'100%'}}>
-                <Grid>
-                  {activeTabInfo.newName && activeTabInfo.newFunc && <Button id="admin-settings-add-new" size="small" onClick={activeTabInfo.newFunc}>{activeTabInfo.newName}</Button>}
-                </Grid>
+                  {activeTabInfo.newName && activeTabInfo.newFunc && 
+                    <Grid>
+                      <Button id="admin-settings-add-new" size="small" onClick={activeTabInfo.newFunc}>{activeTabInfo.newName}</Button>
+                    </Grid>
+                  }
+                  {activeTabInfo.buttons &&
+                    <React.Fragment>
+                      {activeTabInfo.buttons.map((one_btn) => 
+                        <Grid key={"admin-settings-button-"+one_btn.name} >
+                          <Button id={"admin-settings-button-"+one_btn.name} size="small" onClick={one_btn.func}>{one_btn.name}</Button>
+                        </Grid>
+                      )}
+                    </React.Fragment>
+                  }
+                
                 <Grid>
                   <TextField id="search-admin" label={'Search'} placehoder={'Search'} size="small" variant="outlined"
                             onChange={activeTabInfo.searchFunc}
@@ -1441,6 +1470,17 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
           </Grid>
         </Grid>
         { editingState.type !== EditingStates.None && generateEditingUI() }
+        { checkIncompleteUploads === true && 
+            <Grid id="admin-settings-check-uploads" container direction="row" alignItems="center" justifyContent="center" 
+                  sx={{...theme.palette.screen_overlay, backgroundColor:'rgb(0,0,0,0.5)', zIndex:11111}}
+            >
+              <div style={{padding:'25px 10px'}}>
+                <Grid container direction="column" alignItems="center" justifyContent="center">
+                  <CheckIncompleteUploads onCancel={() => setCheckIncompleteUploads(false)} />
+                  </Grid>
+              </div>
+            </Grid>
+      }
       </Grid>
   );
 }

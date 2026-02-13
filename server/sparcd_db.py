@@ -1,6 +1,7 @@
 """This script contains the database interface for the SPARCd Web app
 """
 
+import datetime
 import json
 import logging
 import os
@@ -183,15 +184,19 @@ class SPARCdDatabase:
         Returns:
             A tuple containing the known sandbox items
         """
-        res = self._db.get_sandbox(s3_id)
+        indexes, res = self._db.get_sandbox(s3_id)
 
         if not res or len(res) < 1:
             return tuple()
 
-        return [{'complete': not row[0] or row[0] == '',
-                 'bucket': row[1],
-                 's3_path': row[2],
-                 'location_id': row[3]
+        return [{'user': row[indexes['user']],
+                 'path': row[indexes['path']],
+                 'complete': not row[indexes['path']] or row[indexes['path']] == '' or \
+                                                                    row[indexes['recovered']] != 0,
+                 'bucket': row[indexes['bucket']],
+                 's3_path': row[indexes['s3_path']],
+                 'location_id': row[indexes['location_id']],
+                 'recovered': row[indexes['recovered']],
                } for row in res]
 
     def get_uploads(self, s3_id: str, bucket: str, timeout_sec: int) -> Optional[tuple]:
@@ -319,6 +324,25 @@ class SPARCdDatabase:
         return self._db.sandbox_new_upload(s3_id, username, path, files, s3_bucket, s3_path,
                                             location_id, location_name, location_lat, location_lon,
                                             location_ele)
+
+    def sandbox_new_incomplete_uploads(self, s3_id: str, incomplete: tuple) -> None:
+        """ Adds new incomplete entries to the database
+        Arguments:
+            s3_id: the ID of the s3 instance
+            incomplete: the known information on the incomplete uploads
+        """
+        for one_item in incomplete:
+            if not self._db.sandbox_exists(s3_id, one_item['bucket'], one_item['upload_user'],
+                                                                            one_item['s3_path']):
+                up_dt = datetime.datetime(year=int(one_item['date']['date']['year']),
+                                      month=int(one_item['date']['date']['month']),
+                                      day=int(one_item['date']['date']['day']),
+                                      hour=int(one_item['date']['time']['hour']),
+                                      minute=int(one_item['date']['time']['minute']),
+                                      second=int(one_item['date']['time']['second']),
+                                    )
+                self._db.sandbox_add_recovered(s3_id, one_item['bucket'], one_item['upload_user'],
+                                                        one_item['s3_path'], up_dt)
 
     def sandbox_get_s3_info(self, username: str, upload_id: str) -> tuple:
         """ Returns the bucket and path associated with the sandbox

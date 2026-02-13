@@ -27,7 +27,8 @@ import UserActions from './components/userActions';
 import { LoginCheck, LoginValidContext, DefaultLoginValid } from './checkLogin';
 import { AddMessageContext, BaseURLContext, CollectionsInfoContext, DisableIdleCheckFuncContext, TokenExpiredFuncContext, 
          LocationsInfoContext, MobileDeviceContext, NarrowWindowContext, SandboxInfoContext, SizeContext, SpeciesInfoContext, 
-         SpeciesOtherNamesContext, TokenContext, UploadEditContext, UserNameContext, UserSettingsContext } from './serverInfo';
+         SpeciesOtherNamesContext, TokenContext, UploadEditContext, UserNameContext,
+         UserSettingsContext } from './serverInfo';
 import * as utils from './utils';
 
 // This is declared here so that it doesn't raise an error on server-side compile
@@ -321,31 +322,30 @@ export default function Home() {
 
     setLoginValid(validCheck);
     if (validCheck.valid) {
-      // TODO: UI indication while logging in (throbber?)
-
       // Try to log user in
-      loginUser(url, user, password, (newToken, newInstance, repairServer) => {
-        // If log in successful then...
-        if (remember === true) {
-          loginStore.saveLoginInfo(url, user, remember);
-        } else {
-          loginStore.clearLoginInfo();
-        }
-        // Load collections if it's not a new instance
-        if (!newInstance && !repairServer) {
-          window.setTimeout(() => loginAfterActions(newToken), 500);
-        } else {
-          // Indicate we have a new instance or we need to repair
-          setCreateNewInstance(newInstance);
-          setRepairInstance(repairServer);
-          if (newInstance || repairServer) {
-            idleTimeoutSecRef.current = IDLE_NEW_INSTALL_TIMEOUT_SEC;
+      loginUser(url, user, password,
+        (newToken, newInstance, repairServer) => {  // Successful login
+          if (remember === true) {
+            loginStore.saveLoginInfo(url, user, remember);
+          } else {
+            loginStore.clearLoginInfo();
           }
+          // Load collections if it's not a new instance
+          if (!newInstance && !repairServer) {
+            window.setTimeout(() => loginAfterActions(newToken), 500);
+          } else {
+            // Indicate we have a new instance or we need to repair
+            setCreateNewInstance(newInstance);
+            setRepairInstance(repairServer);
+            if (newInstance || repairServer) {
+              idleTimeoutSecRef.current = IDLE_NEW_INSTALL_TIMEOUT_SEC;
+            }
+          }
+        },
+        () => { // Failed to log in
+          addMessage(Level.Warn, 'Unable to log in. Please check your username and password before trying again', 'Login Failure');
         }
-      }, () => {
-        // If log in fails
-        addMessage(Level.Warn, 'Unable to log in. Please check your username and password before trying again', 'Login Failure');
-      });
+      );
     }
   }, [addMessage, Level, loginAfterActions, LoginCheck, loginStore, loginUser, setCreateNewInstance, setDbRemember, setDbUser, setDbURL,
       setLoginValid, setRepairInstance]);
@@ -1387,10 +1387,8 @@ export default function Home() {
                 <LocationsInfoContext.Provider value={locationInfo}>
                 <SpeciesInfoContext.Provider value={speciesInfo}>
                 <AddMessageContext.Provider value={addMessage}>
-                <UserNameContext.Provider value={userSettings.name}>
                   <SettingsAdmin loadingCollections={loadingCollections} loadingLocations={loadingLocations}
                                   onConfirmPassword={confirmAdminPassword} onClose={() => setDisplayAdminSettings(false)}/>
-                </UserNameContext.Provider>
                 </AddMessageContext.Provider>
                 </SpeciesInfoContext.Provider>
                 </LocationsInfoContext.Provider>

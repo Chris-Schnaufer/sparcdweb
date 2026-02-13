@@ -24,7 +24,7 @@ import { useTheme } from '@mui/material/styles';
 
 import { Level } from './Messages';
 import { AddMessageContext, CollectionsInfoContext, TokenExpiredFuncContext, geographicCoordinates, 
-         TokenContext, UserNameContext } from '../serverInfo';
+         TokenContext, UserAdminContext, UserNameContext } from '../serverInfo';
 import * as utils from '../utils';
 
 // Default settings if we never received them

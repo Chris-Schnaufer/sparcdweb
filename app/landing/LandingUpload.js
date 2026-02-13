@@ -7,6 +7,7 @@ import Box from '@mui/material/Box';
 import FormControl from '@mui/material/FormControl';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Grid from '@mui/material/Grid';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
 import PriorityHighOutlinedIcon from '@mui/icons-material/PriorityHighOutlined';
 import Radio from '@mui/material/Radio';
 import RadioGroup from '@mui/material/RadioGroup';
@@ -16,7 +17,7 @@ import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 
 import { BaseURLContext, CollectionsInfoContext, TokenExpiredFuncContext, MobileDeviceContext, 
-         SandboxInfoContext, TokenContext } from '../serverInfo';
+         SandboxInfoContext, TokenContext, UserNameContext } from '../serverInfo';
 
 /**
  * Returns the UI for uploads on the Landing page
@@ -32,6 +33,7 @@ export default function LandingUpload({loadingSandbox, onChange}) {
   const setTokenExpired = React.useContext(TokenExpiredFuncContext);
   const serverURL = React.useContext(BaseURLContext);
   const uploadToken = React.useContext(TokenContext);
+  const userName = React.useContext(UserNameContext);
   const [numPrevUploads, setNumPrevUploads] = React.useState(null);
 
   const sandboxItems = curSandboxInfo;
@@ -129,12 +131,27 @@ export default function LandingUpload({loadingSandbox, onChange}) {
                   return (
                     up_obj.uploadCompleted === false &&
                       <Grid key={obj.bucket+up_obj.name} container direction="row" alignItems="center" justifyContent="start"  sx={{width:'100%'}} >
+                        <Tooltip title="Incomplete upload" placement="left">
+                          <PriorityHighOutlinedIcon size="small" sx={{color:"sandybrown"}} />
+                        </Tooltip>
                         <Typography variant="body" >
                           {up_obj.name}
                         </Typography>
-                        <Tooltip title="Incomplete upload" placement="left">
-                          <PriorityHighOutlinedIcon size="small" sx={{color:"sandybrown", marginLeft:'auto'}} />
+                        <Tooltip placement="left"
+                                  title={
+                                    <React.Fragment>
+                                      <p>Folder: {up_obj.path}</p>
+                                      <p>User: {up_obj.upload_user}</p>
+                                      <p>Images: {up_obj.imagesCount}</p>
+                                    </React.Fragment>
+                                  }
+                        >
+                          <InfoOutlinedIcon size="small" sx={{color:"black", paddingTop:"3px", marginLeft:'auto'}} />
                         </Tooltip>
+                        { obj.upload_user === userName && 
+                          <React.Fragment>
+                          </React.Fragment>
+                        }
                       </Grid>
                   );
                 })
@@ -148,6 +165,12 @@ export default function LandingUpload({loadingSandbox, onChange}) {
                 No incomplete uploads found
               </Typography>
       }
+      <Grid id="sandbox-upload-info-wrapper" container direction="row" alignItems="center" justifyContent="space-around"
+            sx={{paddingTop:'10px'}}>
+        <Typography variant="body2" >
+          If you think you have an incomplete upload that's not shown, contact your administrator
+        </Typography>
+      </Grid>
       <Grid id="sandbox-upload-info-wrapper" container direction="row" alignItems="center" justifyContent="space-around"
             sx={{paddingTop:'30px'}}>
         { numPrevUploads && numPrevUploads.map((item, idx) => {

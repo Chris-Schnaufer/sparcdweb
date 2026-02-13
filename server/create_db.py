@@ -149,7 +149,8 @@ def build_database(path: str, admin_info: tuple=None) -> None:
                 'location_name TEXT NOT NULL, ' \
                 'location_lat REAL NOT NULL, ' \
                 'location_lon READ NOT NULL, ' \
-                'location_ele REAL NOT NULL, '
+                'location_ele REAL NOT NULL, ' \
+                'recovered INT DEFAULT 0, ' \
                 'timestamp INTEGER, ' \
                 'upload_id TEXT DEFAULT NULL)',
              'CREATE TABLE sandbox_files(id INTEGER PRIMARY KEY ASC, ' \
