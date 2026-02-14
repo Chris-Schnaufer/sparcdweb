@@ -1057,6 +1057,79 @@ class SPDSQLite:
 
         return upload_id
 
+    def sandbox_upload_recovery_update(self, s3_id: str, username: str, bucket: str, \
+                                    upload_key: str, source_path: str, all_files: tuple, \
+                                    location_id: str, location_name: str, location_lat: float, \
+                                    location_lon: float, location_ele: float) -> Optional[str]:
+        """ Updates the database with an upload recovery information
+        Arguments:
+            s3_id: the ID of the S3 instance
+            username: the name of the user associated with this upload recovery
+            bucket: the bucket of the upload
+            upload_key: the key of the upload
+            source_path: the path that the images are being uploaded from
+            all_files: the list of file names
+            location_id: the ID of the location associated with the upload
+            location_name: the name of the location
+            location_lat: the latitude of the location
+            location_lon: the longitude of the location
+            location_ele: the elevation of the location
+        Return:
+            Returns the upload ID upon success and None if not
+        """
+        # pylint: disable=too-many-arguments,too-many-positional-arguments
+        if self._conn is None:
+            raise RuntimeError('Attempting to add a new sandbox upload to the database before ' \
+                                                                                    'connecting')
+
+        # Make sure we have a recovery upload
+        cursor = self._conn.cursor()
+        cursor.execute('SELECT count(1) FROM SANDBOX WHERE name=? AND s3_id=? AND ' \
+                                                        'bucket=? AND s3_base_path like ? AND ' \
+                                                        '(recovered=1 OR path="" OR path is NULL)',
+                        (username, s3_id, bucket, '%'+upload_key+'%'))
+        res = cursor.fetchone()
+        cursor.close()
+        #HACK
+        print('HACK: DBCHECK:','SELECT count(1) FROM SANDBOX WHERE name=? AND s3_id=? AND ' \
+                                                        'bucket=? AND s3_base_path like ? AND ' \
+                                                        '(recovered=1 OR path="" OR path is NULL)', flush=True)
+        print('HACK:', username, s3_id, bucket, '%'+upload_key+'%',flush=True)
+        #HACK
+
+        if not res or len(res) <= 0:
+            print('HACK: NO RES', flush=True)
+            return None
+
+        if int(res[0]) == 0:
+            print('HACK: RES = 0', flush=True)
+            return None
+
+        # Update the upload
+        upload_id = uuid.uuid4().hex
+        cursor = self._conn.cursor()
+        cursor.execute('UPDATE sandbox SET path=?, location_id=?, location_name=?, location_lat=?, '\
+                            'location_lon=?, location_ele=?, recovered=0, upload_id=?', 
+                        (source_path, location_id, location_name, location_lat, location_lon, \
+                            location_ele, upload_id))
+
+        sandbox_id = cursor.lastrowid
+
+        # Remove the existing files we have
+        cursor.execute('DELETE FROM sandbox_files WHERE sandbox_id=?', (sandbox_id,))
+
+        # Add in the files
+        for one_file in all_files:
+            cursor.execute('INSERT INTO sandbox_files(sandbox_id, filename, source_path, ' \
+                                                                                    'timestamp) ' \
+                                    'VALUES(?,?,?,strftime("%s", "now"))',
+                            (sandbox_id, one_file, one_file))
+
+        self._conn.commit()
+        cursor.close()
+
+        return upload_id
+
     def sandbox_get_s3_info(self, username: str, upload_id: str) -> tuple:
         """ Returns the bucket and path associated with the sandbox
         Arguments:

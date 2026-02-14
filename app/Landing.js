@@ -46,6 +46,7 @@ export default function Landing({loadingCollections, loadingSandbox, onUserActio
   const uiSizes = React.useContext(SizeContext);
   const [haveNewUpload, setHaveNewUpload] = React.useState(uploadTypes.uploadNone);
   const [mapImageSize, setMapImageSize] = React.useState({width:722,height:396})
+  const [recoveryInfo, setRecoveryInfo] = React.useState(null); // Used when recovering an upload
   const [selUploadInfo, setSelUploadInfo] = React.useState(null);
   const [selCollectionInfo, setSelCollectionInfo] = React.useState(null);
 
@@ -149,13 +150,13 @@ export default function Landing({loadingCollections, loadingSandbox, onUserActio
       </Box>
       { haveNewUpload !== uploadTypes.uploadNone && 
               <FolderUpload loadingCollections={loadingCollections} onCompleted={() => {newUploadCancel();onSandboxRefresh();}} onCancel={() => newUploadCancel()}
-                            type={haveNewUpload}
+                            type={haveNewUpload} recovery={recoveryInfo}
               />
       }
       { selUploadInfo !== null && 
           <UploadRepair collectionInfo={selUploadInfo.collectionInfo} uploadInfo={selUploadInfo.uploadInfo}
-                        onUploadImages={() => setHaveNewUpload(uploadTypes.uploadImages)}
-                        onUploadMovies={() => setHaveNewUpload(uploadTypes.uploadMovies)}
+                        onUploadImages={() => {setRecoveryInfo({coll_info:selUploadInfo.collectionInfo,upload_info:selUploadInfo.uploadInfo});setHaveNewUpload(uploadTypes.uploadImages);} }
+                        onUploadMovies={() => {setRecoveryInfo({coll_info:selUploadInfo.collectionInfo,upload_info:selUploadInfo.uploadInfo});setHaveNewUpload(uploadTypes.uploadMovies);} }
                         onClose={() => {setSelUploadInfo(null);onSandboxRefresh();}} />
       }
     </React.Fragment>

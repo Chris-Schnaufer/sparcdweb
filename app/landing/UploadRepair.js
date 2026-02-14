@@ -127,7 +127,7 @@ export default function UploadRepair({collectionInfo, uploadInfo, onUploadImages
           <Button size="small" onClick={() => {handleSelUploadContinue('movies')} } >
             Upload movies
           </Button>
-          <Button size="small" onClick={() => {setSelUploadInfo(null)} } >
+          <Button size="small" onClick={onClose} >
             Cancel
           </Button>
         </CardActions>

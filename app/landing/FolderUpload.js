@@ -82,11 +82,12 @@ function haveLowMemory() {
  * @function
  * @param {boolean} loadingCollections Flag indicating collections are being loaded and not available
  * @param {string} type One of the known upload types ('images', 'movies')
+ * @param {object} {recovery} Recovery information when recovering a failed upload
  * @param {function} onCompleted The function to call when an upload is completed
  * @param {function} onCancel The function to call when the user cancels the upload
  * @returns {object} The rendered UI
  */
-export default function FolderUpload({loadingCollections, type, onCompleted, onCancel}) {
+export default function FolderUpload({loadingCollections, type, recovery, onCompleted, onCancel}) {
   const theme = useTheme();
   const addMessage = React.useContext(AddMessageContext); // Function adds messages for display
   const collectionInfo = React.useContext(CollectionsInfoContext);
@@ -142,8 +143,6 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
    * @function
    * @param {string} path The path of the upload
    * @param {array} files The list of files to upload
-   * @returns {array} An array of files that have not been uploaded (if a continuation) or a false truthiness value 
-   *          for a new upload
    */
   const checkPreviousUpload = React.useCallback((path, files) => {
     const sandboxPrevUrl = serverURL + '/sandboxPrev?t=' + encodeURIComponent(uploadToken);
@@ -190,11 +189,101 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
         .catch(function(err) {
           console.log('Previous Upload Error: ',err);
           addMessage(Level.Error, 'A problem ocurred while preparing for upload');
+          setUploadState(uploadingState.error);
+
       });
     } catch (error) {
       console.log('Prev Upload Unknown Error: ',err);
       addMessage(Level.Error, 'An unknown problem ocurred while preparing for upload');
+      setUploadState(uploadingState.error);
     }
+  }, [addMessage, serverURL, setContinueUploadInfo, setNewUpload, setNewUploadFiles, setWorkingUploadFiles, setUploadPath, uploadToken]);
+
+  /**
+   * Updates a recovery attempt with the new information
+   * @function
+   * @param {string} coll_id The recovery collection ID
+   * @param {string} loc_id The location ID of the upload
+   * @param {string} upload_key The recovery upload key
+   * @param {string} path The path of the upload
+   * @param {array} files The list of files to upload
+   */
+  const updateUploadRecovery = React.useCallback((coll_id, loc_id, upload_key, path, files) => {
+
+    setUploadingFileCounts({total:files.length, uploaded:0});
+    setDisableDetails(true);
+
+    window.setTimeout(() => {
+      const sandboxRecoveryUrl = serverURL + '/sandboxRecoveryUpdate?t=' + encodeURIComponent(uploadToken);
+      const formData = new FormData();
+
+      formData.append('id', coll_id);
+      formData.append('key', upload_key);
+      formData.append('loc', loc_id);
+      formData.append('path', path);
+
+      // Break the upload into pieces if it's too large
+      if (files.length < 5000) {
+        formData.append('files', JSON.stringify(files.map((item) => item.webkitRelativePath)));
+      } else {
+        formData.append('files', JSON.stringify(files.slice(0,5000).map((item) => item.webkitRelativePath)));
+        let index = 1;
+        let start = 5000;
+        while (start < files.length) {
+          let end = Math.min(start + 5000, files.length);
+          formData.append('files'+index, JSON.stringify(files.slice(start,end).map((item) => item.webkitRelativePath)));
+          start += 5000;
+          index += 1;
+        };
+      }
+
+      try {
+        const resp = fetch(sandboxRecoveryUrl, {
+          method: 'POST',
+          body: formData
+        }).then(async (resp) => {
+              if (resp.ok) {
+                return resp.json();
+              } else {
+                if (resp.status === 401) {
+                  // User needs to log in again
+                  setTokenExpired();
+                }
+                throw new Error(`Failed to check upload: ${resp.status}`, {cause:resp});
+              }
+            })
+          .then((respData) => {
+              // Process the results
+              if (respData.success) {
+                setUploadPath(path);
+
+                // Acknowledge that upload should continue or be restarted or as a new one
+                setWorkingUploadFiles(files);
+                setContinueUploadInfo({files: files,
+                                       loadedFiles: [],
+                                       elapsedSec: 0,
+                                       allFiles: files,
+                                       id:respData.id})
+              } else {
+                console.log('Didn\'t find recovery upload');
+                addMessage(Level.Warning, respData.message);
+                setUploadState(uploadingState.none);
+                cancelUpload();
+              }
+          })
+          .catch(function(err) {
+            console.log('Previous Upload Error: ',err);
+            addMessage(Level.Error, 'A problem ocurred while preparing for upload');
+            setUploadState(uploadingState.error);
+            cancelUpload();
+        });
+      } catch (error) {
+        console.log('Prev Upload Unknown Error: ',err);
+        addMessage(Level.Error, 'An unknown problem ocurred while preparing for upload');
+        setUploadState(uploadingState.error);
+        cancelUpload();
+      }
+    } , 100);
   }, [addMessage, serverURL, setContinueUploadInfo, setNewUpload, setNewUploadFiles, setWorkingUploadFiles, setUploadPath, uploadToken]);
 
   /**
@@ -717,8 +806,12 @@ export default function FolderUpload({loadingCollections, type, onCompleted, onC
     }
     relativePath = relativePath.substr(0, relativePath.length - allowedFiles[0].name.length - 1);
 
-    checkPreviousUpload(relativePath, allowedFiles);
-  }, [addMessage, checkPreviousUpload]);
+    if (!recovery) {
+      checkPreviousUpload(relativePath, allowedFiles);
+    } else {
+      updateUploadRecovery(recovery.coll_info.id, recovery.upload_info.location, recovery.upload_info.key, relativePath, allowedFiles)
+    }
+  }, [addMessage, checkPreviousUpload, updateUploadRecovery]);
 
   /**
    * Handles the user changing the selected folder to upload

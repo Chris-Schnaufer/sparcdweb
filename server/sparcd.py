@@ -1461,6 +1461,95 @@ def sandbox_prev():
                         'id': upload_id})
 
 
+@app.route('/sandboxRecoveryUpdate', methods = ['POST'])
+@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+def sandbox_recovery_update():
+    """ Updates the sandbox information in the database upon upload recovery
+    Arguments: (GET)
+        t - the session token
+    Return:
+        Returns successfully if the information could be updated
+    Notes:
+         If the token is invalid, or a problem occurs, a 404 error is returned
+   """
+    db = SPARCdDatabase(DEFAULT_DB_PATH)
+    token = request.args.get('t')
+    print('SANDBOX RECOVERY UPDATE', flush=True)
+
+    # Check the credentials
+    token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
+    if token_valid is None or user_info is None:
+        return "Not Found", 404
+    if not token_valid or not user_info:
+        return "Unauthorized", 401
+
+    # Check the rest of the request parameters
+    coll_id = request.form.get('id', None)
+    upload_key = request.form.get('key', None)
+    loc_id = request.form.get('loc', None)
+    source_path = request.form.get('path', None)
+    all_files = request.form.get('files', None)
+
+    if not all(item for item in [token, source_path, upload_key, coll_id, all_files]):
+        return "Not Found", 406
+
+    s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
+
+    # Get the collection we need
+    all_colls = sdc.load_collections(db, hash2str(s3_url), user_info.admin == 1, s3_url,
+                                                            user_info.name, get_password(token, db))
+    if not all_colls:
+        print('Unable to load collections for updating an upload recovery', flush=True)
+        return "Not Found", 404
+
+    coll = [one_coll for one_coll in all_colls if one_coll["id"] == coll_id]
+    if not coll:
+        print('Unable to find the collection needed to update an upload recovery ' \
+                                                            f'{coll_id} {upload_key}', flush=True)
+        return "Not Found", 404
+    coll = coll[0]
+
+    # Find the upload in the collection
+    upload = [one_up for one_up in coll['uploads'] if one_up["key"] == upload_key]
+    if not upload:
+        print(f'Unable to find the recovery upload in the collections {coll_id} {upload_key}',
+                                                                                        flush=True)
+        return "Not Found", 404
+    upload = upload[0]
+
+    # Find the location
+    cur_locations = sdu.load_locations(s3_url, user_info.name, lambda: get_password(token, db),
+                                        hash2str(s3_url))
+    our_location = sdu.get_location_info(loc_id, cur_locations)
+    if not our_location:
+        print(f'Unable to find the location for upload recovery {coll_id} {upload_key} {loc_id}',
+                                                                                        flush=True)
+        return "Not Found", 404
+
+    # Make sure this user has permissions to do this
+    if not user_info.admin == 1 and user_info.name == upload['uploadUser']:
+        return "Not Found", 404
+
+    # Update the upload in the database
+    upload_id = db.sandbox_upload_recovery_update(hash2str(s3_url),
+                                                user_info.name,
+                                                coll['bucket'],
+                                                upload['key'],
+                                                source_path,
+                                                all_files,
+                                                our_location['idProperty'],
+                                                our_location['nameProperty'],
+                                                our_location['latProperty'],
+                                                our_location['lngProperty'],
+                                                our_location['elevationProperty'])
+    if upload_id is None:
+        return json.dumps({'success': False,
+                            'message': 'Unable to update the upload to receive the files'})
+
+    return json.dumps({'success': True, 'id': upload_id,
+                        'message': 'Successfully updated for the file upload'})
+
+
 @app.route('/sandboxCheckContinueUpload', methods = ['POST'])
 @cross_origin(origins="http://localhost:3000", supports_credentials=True)
 def sandbox_check_continue_upload():
@@ -3746,7 +3835,7 @@ def set_upload_complete():
     s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
 
     # Get the collection we need
-    all_colls = sdc.load_collections(db, hash2str(s3_url), user_info.admin == 1, s3_url, 
+    all_colls = sdc.load_collections(db, hash2str(s3_url), user_info.admin == 1, s3_url,
                                                             user_info.name, get_password(token, db))
     if not all_colls:
         return json.dumps({'success': False,
@@ -3763,7 +3852,7 @@ def set_upload_complete():
     upload = [one_up for one_up in coll['uploads'] if one_up["key"] == up_key]
     if not upload:
         return json.dumps({'success': False,
-                            'message': 'Unable to find the upload in the collection'})
+                            'message': 'Unable to find the incomplete upload in the collections'})
     upload = upload[0]
 
     # Make sure this user has permissions to do this
