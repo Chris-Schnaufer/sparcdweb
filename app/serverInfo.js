@@ -19,7 +19,7 @@ export const DisableIdleCheckFuncContext = createContext(null); // Function acce
 /** React context for Collections information */
 export const CollectionsInfoContext = createContext(null);
 /** React context for a function to call when a token has exxired */
-export const ExpiredTokenFuncContext = createContext(null);
+export const TokenExpiredFuncContext = createContext(null);
 /** React context for locations information */
 export const LocationsInfoContext = createContext(null);
 /** React context for running on a mobile device */
@@ -38,6 +38,8 @@ export const TokenContext = createContext(null);
 export const SpeciesOtherNamesContext = createContext(null);
 /** React context for the current upload edit */
 export const UploadEditContext = createContext(null);
+/** React context for user being an admin (or not) */
+export const UserAdminContext = createContext(null);
 /** React context for user name */
 export const UserNameContext = createContext(null);
 /** React context for user settings */

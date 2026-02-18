@@ -14,7 +14,7 @@ import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 
-import { AddMessageContext, ExpiredTokenFuncContext, LocationsInfoContext, NarrowWindowContext, SizeContext, 
+import { AddMessageContext, TokenExpiredFuncContext, LocationsInfoContext, NarrowWindowContext, SizeContext, 
           SpeciesInfoContext, TokenContext, UploadEditContext, UserSettingsContext } from './serverInfo';
 import ImageEdit from './ImageEdit';
 import ImageTile from './components/ImageTile';
@@ -48,7 +48,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
   const editToken = React.useContext(TokenContext);  // Login token
   const locationItems = React.useContext(LocationsInfoContext);
   const narrowWindow = React.useContext(NarrowWindowContext);
-  const setExpiredToken = React.useContext(ExpiredTokenFuncContext);
+  const setTokenExpired = React.useContext(TokenExpiredFuncContext);
   const speciesItems = React.useContext(SpeciesInfoContext);
   const uiSizes = React.useContext(SizeContext);
   const userSettings = React.useContext(UserSettingsContext);  // User display settings
@@ -168,7 +168,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
             } else {
               if (resp.status === 401) {
                 // User needs to log in again
-                setExpiredToken();
+                setTokenExpired();
               }
               throw new Error(`Failed to update image species: ${resp.status}`, {cause:resp});
             }
@@ -183,7 +183,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
       });
     } catch (err) {
       console.log('Update Species Count Unknown Error: ',err);
-      addMessage(Level.Error, 'An unkown problem ocurred while updating the image species');
+      addMessage(Level.Error, 'An unknown problem ocurred while updating the image species');
     }
   }, [addMessage, curUpload, editToken, serverURL, speciesItems, setCurImageModified]);
 
@@ -360,9 +360,10 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
   // Measurements when resizing the window
   React.useLayoutEffect(() => {
       function onResize () {
+        let leftWidth = 0;
         // Calculate the top sidebar and add in the species sidebar if it's on top as well
         if (sidebarTopRef && sidebarTopRef.current) {
-          topHeight = sidebarTopRef.current.offsetHeight;
+          let topHeight = sidebarTopRef.current.offsetHeight;
           setSidebarHeightTop(topHeight);
         }
 
@@ -387,7 +388,8 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
       return () => {
           window.removeEventListener("resize", onResize);
       }
-  }, [narrowWindow, uiSizes]);
+  }, [narrowWindow, setSidebarHeightSpecies, setSidebarHeightTop, setSidebarWidthLeft, setWorkspaceWidth, sidebarSpeciesRef,
+      sidebarTopRef, uiSizes]);
 
   /**
    * Handles user kep presses
@@ -460,7 +462,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
             } else {
               if (resp.status === 401) {
                 // User needs to log in again
-                setExpiredToken();
+                setTokenExpired();
               }
               throw new Error(`Failed to check for update server changes: ${resp.status}`, {cause:resp});
             }
@@ -476,7 +478,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
         });
       } catch (error) {
         console.log('Check Changes Unknown Error: ', err);
-        addMessage(Level.Error, 'An unkown problem ocurred checking for server upload changes');
+        addMessage(Level.Error, 'An unknown problem ocurred checking for server upload changes');
       }
     }
   }, [addMessage, changesMade, checkedServerChanges, curUpload, editToken, serverURL, setChangesMade, setCheckedServerChanges]);
@@ -556,7 +558,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
               } else {
                 if (resp.status === 401) {
                   // User needs to log in again
-                  setExpiredToken();
+                  setTokenExpired();
                 }
                 throw new Error(`Failed to upload location: ${resp.status}`, {cause:resp});
               }
@@ -573,7 +575,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
         });
       } catch (error) {
         console.log('Update Location Unknown Error: ',err);
-        addMessage(Level.Error, 'An unkown problem ocurred while updating the collection location');
+        addMessage(Level.Error, 'An unknown problem ocurred while updating the collection location');
         setPendingMessage(null);
       }
     }
@@ -669,7 +671,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
             } else {
               if (resp.status === 401) {
                 // User needs to log in again
-                setExpiredToken();
+                setTokenExpired();
               }
               throw new Error(`Failed to update species keybind: ${resp.status}`, {cause:resp});
             }
@@ -683,7 +685,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
       });
     } catch (error) {
       console.log('Update Location Unknown Error: ',err);
-      addMessage(Level.Error, 'An unkown problem ocurred while updating the keybinding');
+      addMessage(Level.Error, 'An unknown problem ocurred while updating the keybinding');
     }
 
     speciesItems[newKeySpeciesIdx].keyBinding = newKey;
@@ -753,7 +755,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
             } else {
               if (resp.status === 401) {
                 // User needs to log in again
-                setExpiredToken();
+                setTokenExpired();
               }
               throw new Error(`Failed to finish all image editing changes: ${resp.status}`, {cause:resp});
             }
@@ -792,7 +794,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
     } catch (err) {
       setPendingMessage(null);
       console.log('Finish Images Edit Commit Unknown Error: ',err);
-      addMessage(Level.Error, 'An unkown problem ocurred while finishing the edited image changes');
+      addMessage(Level.Error, 'An unknown problem ocurred while finishing the edited image changes');
     }
   }, [addMessage, editToken, serverURL]);
 
@@ -851,7 +853,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
             } else {
               if (resp.status === 401) {
                 // User needs to log in again
-                setExpiredToken();
+                setTokenExpired();
               }
               throw new Error(`Failed to update image with editing changes: ${resp.status}`, {cause:resp});
             }
@@ -888,7 +890,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
       });
     } catch (err) {
       console.log('Update Image Edit Commit Complete Error: ',err);
-      failureFunc('An unkown problem ocurred while updating the stored image with these changes');
+      failureFunc('An unknown problem ocurred while updating the stored image with these changes');
     }
   }, [addMessage, editToken, lastSpeciesRequestId, serverURL]);
 
@@ -921,7 +923,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
               } else {
                 if (resp.status === 401) {
                   // User needs to log in again
-                  setExpiredToken();
+                  setTokenExpired();
                 }
                 throw new Error(`Failed to get location information: ${resp.status}`, {cause:resp});
               }
@@ -1043,22 +1045,21 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
                       onZoom={(event, speciesItem) => {setSpeciesZoomName(speciesItem.name);setSpeciesKeybindName(null);event.preventDefault();}}
       />
       <Stack id="upload-edit-details" direction={{xs:"column"}} >
-        <Grid id='top-sidebar' ref={sidebarTopRef} container direction='row' alignItems='center' justifyContent='center' rows='1'
+        <Grid id='upload-edit-top-sidebar' ref={sidebarTopRef} container direction='row' alignItems='center' justifyContent='space-between' rows='1'
             style={{ ...theme.palette.top_sidebar, minWidth:(workspaceWidth-workplaceStartX)+'px', maxWidth:(workspaceWidth-workplaceStartX)+'px',
                      position:'sticky', verticalAlignment:'middle', visibility:topbarVisiblity }} >
-          <Grid>
             <Typography variant="body" sx={{ paddingLeft: '10px'}}>
               {curUpload.name}
             </Typography>
-          </Grid>
-          <Grid sx={{marginLeft:'auto'}}>
+            <Typography variant="body2">
+              {(curUpload.images && curUpload.images.length ? curUpload.images.length : 0) + " Images available"}
+            </Typography>
             <Typography variant="body" sx={{ paddingLeft: '10px', fontSize:'larger'}}>
               {curUploadLocation && curUploadLocation.nameProperty ? curUploadLocation.nameProperty : '<location>'}
+              <IconButton aria-label="edit" size="small" color={'lightgrey'} onClick={handleEditLocation}>
+                <BorderColorOutlinedIcon sx={{fontSize:'smaller'}}/>
+              </IconButton>
             </Typography>
-            <IconButton aria-label="edit" size="small" color={'lightgrey'} onClick={handleEditLocation}>
-              <BorderColorOutlinedIcon sx={{fontSize:'smaller'}}/>
-            </IconButton>
-          </Grid>
         </Grid>
         { curEditState == editingStates.listImages || curEditState == editingStates.editImage ? 
             <Box id="image-edit-wrapper-box"

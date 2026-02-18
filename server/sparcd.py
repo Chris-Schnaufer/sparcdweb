@@ -23,7 +23,7 @@ import requests
 from flask import Flask, make_response, render_template, request, Response, send_file, \
                   send_from_directory, url_for
 from flask_cors import cross_origin
-from minio import Minio
+from minio import Minio, S3Error
 from minio.error import MinioException
 from moviepy import VideoFileClip
 
@@ -61,6 +61,8 @@ ENV_NAME_DB = 'SPARCD_DB'
 ENV_NAME_PASSCODE = 'SPARCD_CODE'
 # Environment variable name for session expiration timeout
 ENV_NAME_SESSION_EXPIRE = 'SPARCD_SESSION_TIMEOUT'
+# Environment variable name for default settings files
+ENV_DEFAULT_SETTINGS_PATH = 'SPARCD_DEFAULT_SETTINGS_PATH'
 # Default timeout in seconds
 SESSION_EXPIRE_DEFAULT_SEC = 10 * 60 * 60
 # Working database storage path
@@ -77,6 +79,11 @@ TIMEOUT_COLLECTIONS_SEC = 12 * 60 * 60
 TIMEOUT_UPLOADS_FILE_SEC = 15 * 60
 # Timeout for query results on disk
 QUERY_RESULTS_TIMEOUT_SEC = 24 * 60 * 60
+
+# Folder that has the template settings files used to setup a new SPARCd instance or repair an
+# existing one
+DEFAULT_SETTINGS_PATH = os.environ.get(ENV_DEFAULT_SETTINGS_PATH,
+                                                        os.path.join(os.getcwd(),"defaultSettings"))
 
 # Timeout for image browser cache
 IMAGE_BROWSER_CACHE_TIMEOUT_SEC = 10800
@@ -146,6 +153,16 @@ del _db
 _db = None
 print(f'Using database at {DEFAULT_DB_PATH}', flush=True)
 print(f'Temporary folder at {tempfile.gettempdir()}', flush=True)
+
+
+def hash2str(text: str) -> str:
+    """ Returns the hash of the passed in string
+    Arguments:
+        text: the string to hash
+    Return:
+        The hash value as a string
+    """
+    return hashlib.md5(text.encode('utf-8')).hexdigest()
 
 
 def load_species_stats(db: SPARCdDatabase, is_admin: bool, s3_url: str, user_name: str, \
@@ -221,16 +238,6 @@ def get_password(token: str, db: SPARCdDatabase) -> Optional[str]:
     return crypt.do_decrypt(WORKING_PASSCODE, db.get_password(token))
 
 
-def hash2str(text: str) -> str:
-    """ Returns the hash of the passed in string
-    Arguments:
-        text: the string to hash
-    Return:
-        The hash value as a string
-    """
-    return hashlib.md5(text.encode('utf-8')).hexdigest()
-
-
 @app.route('/', methods = ['GET'])
 @cross_origin(origins="http://localhost:3000", supports_credentials=True)
 def index():
@@ -253,25 +260,75 @@ def favicon():
                                'favicon.ico', mimetype='image/vnd.microsoft.icon')
 
 
-@app.route('/<string:filename>', methods = ['GET'])
+@app.route('/mapImage.png', methods = ['GET'])
 @cross_origin(origins="http://localhost:3000", supports_credentials=True)
-def sendfile(filename: str):
-    """Return root files"""
-    print("RETURN FILENAME:",filename,flush=True)
+def mapimage():
+    """ Return the image """
+    return send_from_directory(app.root_path,
+                               'mapImage.png', mimetype='image/png')
 
-    # Check that the file is allowed
-    if not os.path.splitext(filename)[1].lower() in REQEST_ALLOWED_FILE_EXTENSIONS:
-        return 'Resource not found', 404
 
-    fullpath = os.path.realpath(os.path.join(RESOURCE_START_PATH, filename.lstrip('/')))
-    print("HACK:   FILE PATH:", fullpath,flush=True)
+@app.route('/badimage.png', methods = ['GET'])
+@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+def badimage():
+    """ Return the image """
+    return send_from_directory(app.root_path,
+                               'badimage.png', mimetype='image/png')
 
-    # Make sure we're only serving something that's in the same location that we are in and that
-    # it exists
-    if not fullpath or not os.path.exists(fullpath) or not fullpath.startswith(RESOURCE_START_PATH):
-        return 'Resource not found', 404
 
-    return send_file(fullpath)
+@app.route('/sparcd.png', methods = ['GET'])
+@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+def sparcdpng():
+    """ Return the image """
+    return send_from_directory(app.root_path,
+                               'sparcd.png', mimetype='image/png')
+
+
+@app.route('/wildcatResearch.png', methods = ['GET'])
+@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+def wildcatresearch():
+    """ Return the image """
+    return send_from_directory(app.root_path,
+                               'wildcatResearch.png', mimetype='image/png')
+
+
+@app.route('/loading.gif', methods = ['GET'])
+@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+def loading():
+    """ Return the image """
+    return send_from_directory(app.root_path,
+                               'loading.gif', mimetype='image/gif')
+
+
+@app.route('/sanimalBackground.JPG', methods = ['GET'])
+@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+def sanimalbackground():
+    """ Return the image """
+    return send_from_directory(app.root_path,
+                               'sanimalBackground.JPG', mimetype='image/jpeg')
+
+
+## Disable this, only serve files like this explicitly
+#@app.route('/<string:filename>', methods = ['GET'])
+#@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+#def sendfile(filename: str):
+#    """Return root files"""
+#    print("RETURN FILENAME:",filename,flush=True)
+#
+#    # Check that the file is allowed
+#    if not os.path.splitext(filename)[1].lower() in REQEST_ALLOWED_FILE_EXTENSIONS:
+#        return 'Resource not found', 404
+#
+#    fullpath = os.path.realpath(os.path.join(RESOURCE_START_PATH, filename.lstrip('/')))
+#    print("HACK:   FILE PATH:", fullpath,flush=True)
+#
+#    # Make sure we're only serving something that's in the same location that we are in and that
+#    # it exists
+#    if not fullpath or not os.path.exists(fullpath) or not \
+#                                                        fullpath.startswith(RESOURCE_START_PATH):
+#        return 'Resource not found', 404
+#
+#    return send_file(fullpath)
 
 
 @app.route('/_next/static/<path:path_fagment>', methods = ['GET'])
@@ -286,7 +343,6 @@ def sendnextfile(path_fagment: str):
 
     fullpath = os.path.realpath(os.path.join(RESOURCE_START_PATH, '_next', 'static',\
                                                                         path_fagment.lstrip('/')))
-    print("HACK:   FILE PATH:", fullpath,flush=True)
 
     # Make sure we're only serving something that's in the same location that we are in and that
     # it exists
@@ -409,10 +465,12 @@ def login_token():
         if token_valid:
             # Everything checks out
             return json.dumps(
-                {  'value':token,
-                   'name':login_info.name,
+                {  'success': True,
+                   'value': token,
+                   'name': login_info.name,
                    'settings': \
-                        sdu.secure_user_settings(login_info.settings|{'email':login_info.email})
+                        sdu.secure_user_settings(login_info.settings|{'email':login_info.email}),
+                    'newInstance': False,
                })
 
         # Delete the old token from the database
@@ -425,12 +483,18 @@ def login_token():
 
     # Log onto S3 to make sure the information is correct
     s3_url = s3u.web_to_s3_url(url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
+    s3_hash = hash2str(s3_url)
     try:
         minio = Minio(s3_url, access_key=user, secret_key=password)
         _ = minio.list_buckets()
     except MinioException as ex:
+        print(f'WARNING: Failed login attempt: {url} {user}',flush=True)
         print('S3 exception caught:', ex, flush=True)
         return "Not Found", 404
+
+    # Get whether the endpoint is setup for SPARCd and if it needs repairs
+    needs_repair, _ = S3Connection.needs_repair(s3_url, user, password)
+    new_instance = not s3u.sparcd_config_exists(minio)
 
     # Save information into the database - also cleans up old tokens if there's too many
     new_key = uuid.uuid4().hex
@@ -438,14 +502,18 @@ def login_token():
     db.add_token(token=new_key, user=user, password=crypt.do_encrypt(WORKING_PASSCODE, password),
                     client_ip=client_ip, user_agent=user_agent_hash,
                     s3_url=crypt.do_encrypt(WORKING_PASSCODE, s3_url),
+                    s3_id=s3_hash,
                     token_timeout_sec=SESSION_EXPIRE_SECONDS)
-    user_info = db.get_user(user)
+    user_info = db.get_user(s3_hash, user)
     if not user_info:
         # Get the species
         cur_species = s3u.load_sparcd_config(SPECIES_JSON_FILE_NAME,
-                                                hash2str(s3_url)+'-'+TEMP_SPECIES_FILE_NAME,
+                                                s3_hash+'-'+TEMP_SPECIES_FILE_NAME,
                                                 s3_url, user, lambda: password)
-        user_info = db.auto_add_user(user, species=json.dumps(cur_species))
+        if cur_species is None:
+            cur_species = []
+
+        user_info = db.auto_add_user(s3_hash, user, species=json.dumps(cur_species))
 
     # Add in the email if we have user settings
     if user_info.settings:
@@ -458,8 +526,9 @@ def login_token():
 
     user_info.settings = sdu.secure_user_settings(user_info.settings)
 
-    return json.dumps({'value':new_key, 'name':user_info.name,
-                       'settings':user_info.settings})
+    return json.dumps({'success':True, 'value':new_key, 'name':user_info.name,
+                       'settings':user_info.settings, 'newInstance':new_instance,
+                       'needsRepair':needs_repair})
 
 
 @app.route('/collections', methods = ['GET'])
@@ -527,6 +596,9 @@ def sandbox():
 
     # Get the sandbox information from the database
     sandbox_items = db.get_sandbox(hash2str(s3_url))
+    if not user_info.admin == 1:
+        sandbox_items = [one_item for one_item in sandbox_items if \
+                                                                one_item["user"] == user_info.name]
 
     # Get the collections to fill in the return data (from the DB only - no S3 connection info)
     all_collections = sdc.load_collections(db, hash2str(s3_url), bool(user_info.admin))
@@ -630,7 +702,7 @@ def species():
     if updated is True:
         user_species = [keyed_user[one_key] for one_key in keyed_user]
         species_json = json.dumps(user_species)
-        db.save_user_species(user_info.name, species_json)
+        db.save_user_species(hash2str(s3_url), user_info.name, species_json)
         return species_json
 
     # Return the collections
@@ -779,6 +851,11 @@ def upload_images():
 
     if isinstance(all_images, types.GeneratorType):
         all_images = tuple(all_images)
+
+    # Check that we have images
+    if all_images is None or len(all_images) <= 0:
+        return json.dumps([])
+
     # Get species data from the database and update the images
     edits = {}
     for one_image in all_images:
@@ -1216,7 +1293,9 @@ def set_settings():
         modified = True
 
     if modified:
-        db.update_user_settings(user_info.name, json.dumps(user_info.settings), user_info.email)
+        s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
+        db.update_user_settings(hash2str(s3_url), user_info.name, json.dumps(user_info.settings),
+                                                                                    user_info.email)
 
     user_info.settings = sdu.secure_user_settings(user_info.settings|{'email':user_info.email})
 
@@ -1380,6 +1459,190 @@ def sandbox_prev():
     return json.dumps({'exists': (uploaded_files is not None), 'path': rel_path, \
                         'uploadedFiles': uploaded_files, 'elapsed_sec': elapsed_sec, \
                         'id': upload_id})
+
+
+@app.route('/sandboxRecoveryUpdate', methods = ['POST'])
+@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+def sandbox_recovery_update():
+    """ Updates the sandbox information in the database upon upload recovery
+    Arguments: (GET)
+        t - the session token
+    Return:
+        Returns successfully if the information could be updated
+    Notes:
+         If the token is invalid, or a problem occurs, a 404 error is returned
+   """
+    db = SPARCdDatabase(DEFAULT_DB_PATH)
+    token = request.args.get('t')
+    print('SANDBOX RECOVERY UPDATE', flush=True)
+
+    # Check the credentials
+    token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
+    if token_valid is None or user_info is None:
+        return "Not Found", 404
+    if not token_valid or not user_info:
+        return "Unauthorized", 401
+
+    # Check the rest of the request parameters
+    coll_id = request.form.get('id', None)
+    upload_key = request.form.get('key', None)
+    loc_id = request.form.get('loc', None)
+    source_path = request.form.get('path', None)
+    all_files = request.form.get('files', None)
+
+    if not all(item for item in [token, source_path, upload_key, coll_id, all_files]):
+        return "Not Found", 406
+
+    s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
+
+    # Get the collection we need
+    all_colls = sdc.load_collections(db, hash2str(s3_url), user_info.admin == 1, s3_url,
+                                                            user_info.name, get_password(token, db))
+    if not all_colls:
+        print('Unable to load collections for updating an upload recovery', flush=True)
+        return "Not Found", 404
+
+    coll = [one_coll for one_coll in all_colls if one_coll["id"] == coll_id]
+    if not coll:
+        print('Unable to find the collection needed to update an upload recovery ' \
+                                                            f'{coll_id} {upload_key}', flush=True)
+        return "Not Found", 404
+    coll = coll[0]
+
+    # Find the upload in the collection
+    upload = [one_up for one_up in coll['uploads'] if one_up["key"] == upload_key]
+    if not upload:
+        print(f'Unable to find the recovery upload in the collections {coll_id} {upload_key}',
+                                                                                        flush=True)
+        return "Not Found", 404
+    upload = upload[0]
+
+    # Find the location
+    cur_locations = sdu.load_locations(s3_url, user_info.name, lambda: get_password(token, db),
+                                        hash2str(s3_url))
+    our_location = sdu.get_location_info(loc_id, cur_locations)
+    if not our_location:
+        print(f'Unable to find the location for upload recovery {coll_id} {upload_key} {loc_id}',
+                                                                                        flush=True)
+        return "Not Found", 404
+
+    # Make sure this user has permissions to do this
+    if not user_info.admin == 1 and user_info.name == upload['uploadUser']:
+        return "Not Found", 404
+
+    # Update the upload in the database
+    upload_id = db.sandbox_upload_recovery_update(hash2str(s3_url),
+                                                user_info.name,
+                                                coll['bucket'],
+                                                upload['key'],
+                                                source_path,
+                                                json.loads(all_files),
+                                                our_location['idProperty'],
+                                                our_location['nameProperty'],
+                                                our_location['latProperty'],
+                                                our_location['lngProperty'],
+                                                our_location['elevationProperty'])
+    if upload_id is None:
+        return json.dumps({'success': False,
+                            'message': 'Unable to update the upload to receive the files'})
+
+    return json.dumps({'success': True, 'id': upload_id,
+                        'message': 'Successfully updated for the file upload'})
+
+
+@app.route('/sandboxCheckContinueUpload', methods = ['POST'])
+@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+def sandbox_check_continue_upload():
+    """ Checks if a sandbox file already uploaded matches what we've just received
+    Arguments: (GET)
+        t - the session token
+    Return:
+        Returns whether the file appears to match the previous upload attempt
+    Notes:
+         If the token is invalid, or a problem occurs, a 404 error is returned
+   """
+    db = SPARCdDatabase(DEFAULT_DB_PATH)
+    token = request.args.get('t')
+    print('SANDBOX CHECK CONTINUE UPLOAD', flush=True)
+
+    # Check the credentials
+    token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
+    if token_valid is None or user_info is None:
+        return "Not Found", 404
+    if not token_valid or not user_info:
+        return "Unauthorized", 401
+
+    # Get the rest of the request parameters
+    upload_id = request.form.get('id', None)
+
+    # Check what we have from the requestor
+    if not upload_id:
+        return "Not Found", 406
+
+    s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
+
+    s3_bucket, s3_path = db.sandbox_get_s3_info(user_info.name, upload_id)
+
+    # Check all the received files are already uploaded and their hash's match
+    all_match = True
+    message = 'Success'
+    for one_file in request.files:
+        file_ext = os.path.splitext(one_file)[1].lower()
+
+        # Get temporary file
+        temp_file = tempfile.mkstemp(suffix=file_ext, prefix=SPARCD_PREFIX)
+        os.close(temp_file[0])
+
+        request.files[one_file].save(temp_file[1])
+
+        # Get comparison file
+        comp_file = tempfile.mkstemp(suffix=file_ext, prefix=SPARCD_PREFIX)
+
+        try:
+            # Get the path to the file to download and download it
+            s3_comp_path = make_s3_path((s3_path, request.files[one_file].filename))
+            S3Connection.download_image(s3_url, user_info.name,
+                                        get_password(token, db),
+                                        s3_bucket,
+                                        s3_comp_path, comp_file[1])
+            # Calculate the checksums
+            temp_file_cs = sdfu.file_checksum(temp_file[1])
+            comp_file_cs = sdfu.file_checksum(comp_file[1])
+
+            if temp_file_cs != comp_file_cs:
+                all_match = False
+                message = 'The current upload folder appears to be incorrect due to existing ' \
+                            'images not matching'
+        except S3Error as ex:
+            # If the file doesn't exist we have a big problem with the upload
+            if ex.code == "NoSuchKey":
+                print('ERROR: Missing uploaded file while comparing continue upload files ' \
+                                f'against already uploaded files: {s3_bucket} {s3_comp_path} ',
+                        flush=True)
+                print(ex, flush=True)
+                all_match = 'Missing'
+                message = 'The uploaded file is not found on the server ' \
+                                                            f'{request.files[one_file].filename}'
+            else:
+                print('ERROR: Unexpected exception while comparing continue upload files ' \
+                                f'against already uploaded files: {s3_bucket} {s3_comp_path} ',
+                        flush=True)
+                print(ex, flush=True)
+                all_match = None
+                message = 'An unexpected error ocurred while checking already uploaded files'
+        finally:
+            if os.path.exists(temp_file[1]):
+                os.unlink(temp_file[1])
+            if os.path.exists(comp_file[1]):
+                os.unlink(comp_file[1])
+
+        # Stop processing once we have a problem
+        if all_match is not True:
+            break
+
+    return json.dumps({'success': all_match is True,
+                        'missing': all_match == 'missing',
+                        'message': message})
 
 
 @app.route('/sandboxNew', methods = ['POST'])
@@ -2290,7 +2553,7 @@ def species_keybind():
         cur_species.append({'name':common, 'scientificName':scientific, 'keyBinding':new_key[0], \
                                             "speciesIconURL": "https://i.imgur.com/4qz5mI0.png"})
 
-    db.save_user_species(user_info.name, json.dumps(cur_species))
+    db.save_user_species(hash2str(s3_url), user_info.name, json.dumps(cur_species))
 
     return json.dumps({'success': True})
 
@@ -2625,14 +2888,15 @@ def admin_users():
     if user_info.admin != 1:
         return "Not Found", 404
 
+    s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
+
     # Get the users and fill in the collection information
-    all_users = db.get_admin_edit_users()
+    all_users = db.get_admin_edit_users(hash2str(s3_url))
 
     if not all_users:
         return json.dumps(all_users)
 
     # Organize the collection permissions by user
-    s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
     all_collections = sdc.load_collections(db, hash2str(s3_url), bool(user_info.admin), s3_url,
                                                     user_info.name, lambda: get_password(token, db))
     user_collections = {}
@@ -2732,14 +2996,16 @@ def admin_user_update():
     if user_info.admin != 1:
         return "Not Found", 404
 
-    old_user_info = db.get_user(old_name)
+    s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
+
+    old_user_info = db.get_user(hash2str(s3_url), old_name)
     if old_user_info is None:
         return {'success': False, 'message': f'User "{old_name}" not found'}
 
     if admin is not None:
         admin = sdu.make_boolean(admin)
 
-    db.update_user(old_name, new_email, admin)
+    db.update_user(hash2str(s3_url), old_name, new_email, admin)
     return {'success': True, 'message': f'Successfully updated user "{old_name}"', \
             'email': sdu.secure_email(new_email)}
 
@@ -2844,6 +3110,7 @@ def admin_location_update():
     utm_letter = request.form.get('utm_letter', None)
     utm_x = request.form.get('utm_x', None)
     utm_y = request.form.get('utm_y', None)
+    description = request.form.get('description', None)
 
     # Check what we have from the requestor
     if not all(item for item in [loc_name, loc_id, loc_active, measure, coordinate]):
@@ -2923,7 +3190,8 @@ def admin_location_update():
 
     # Put the change in the DB
     if db.update_location(hash2str(s3_url), user_info.name, loc_name, loc_id, loc_active,
-                                        loc_ele,loc_old_lat,loc_old_lng, loc_new_lat, loc_new_lng):
+                                        loc_ele,loc_old_lat,loc_old_lng, loc_new_lat, loc_new_lng,
+                                        description):
         return_lat = round(loc_new_lat, 3)
         return_lng = round(loc_new_lng, 3)
         return_utm_x, return_utm_y = deg2utm(return_lat, return_lng)
@@ -2942,7 +3210,7 @@ def admin_location_update():
 @app.route('/adminCollectionUpdate', methods = ['POST'])
 @cross_origin(origins="http://localhost:3000", supports_credentials=True)
 def admin_collection_update():
-    """ Adds/updates a collection information
+    """ Updates a collection information
     Arguments: (GET)
         t - the session token
     Return:
@@ -3027,6 +3295,79 @@ def admin_collection_update():
 
         # Update the collection entry in the database
         sdc.collection_update(db, hash2str(s3_url), updated_collection)
+
+    return {'success':True, 'data': updated_collection, \
+            'message': "Successfully updated the collection"}
+
+
+@app.route('/adminCollectionAdd', methods = ['POST'])
+@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+def admin_collection_add():
+    """ Adds a collection information
+    Arguments: (GET)
+        t - the session token
+    Return:
+        Returns True if the collection was added
+    Notes:
+         If the token is invalid, or a problem occurs, a 404 error is returned
+   """
+    db = SPARCdDatabase(DEFAULT_DB_PATH)
+    token = request.args.get('t')
+    print('ADMIN COLLECTION UDPATE', flush=True)
+
+    # Check the credentials
+    token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
+    if token_valid is None or user_info is None:
+        return "Not Found", 404
+    if not token_valid or not user_info:
+        return "Unauthorized", 401
+
+    # Get the rest of the request parameters
+    col_name = request.form.get('name', None)
+    col_desc = request.form.get('description', None)
+    col_email = request.form.get('email', None)
+    col_org = request.form.get('organization', None)
+    col_all_perms = request.form.get('allPermissions', None)
+
+    # Check what we have from the requestor
+    if not all(item for item in [col_name, col_all_perms]):
+        return "Not Found", 406
+
+    if col_desc is None:
+        col_desc = ''
+    if col_email is None:
+        col_email = ''
+    if col_org is None:
+        col_org = ''
+
+    col_all_perms = json.loads(col_all_perms)
+
+    # Make sure this user is an admin
+    if user_info.admin != 1:
+        return "Not Found", 404
+
+    # Get existing collection information and permissions
+    s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
+
+    # Add the collection
+    s3_bucket = S3Connection.add_collection(s3_url, user_info.name,
+                                get_password(token, db),
+                                {   'name': col_name,
+                                    'description': col_desc,
+                                    'email': col_email,
+                                    'organization': col_org,
+                                },
+                                col_all_perms)
+    print(f'INFO: Created new collection: {s3_bucket}', flush=True)
+
+    # Update the collection to reflect the changes
+    updated_collection = S3Connection.get_collection_info(s3_url, user_info.name,
+                                            get_password(token, db), s3_bucket)
+    if updated_collection:
+        updated_collection = sdu.normalize_collection(updated_collection)
+
+        # Update the collection entry in the database
+        sdc.collection_add(db, hash2str(s3_url), updated_collection)
 
     return {'success':True, 'data': updated_collection, \
             'message': "Successfully updated the collection"}
@@ -3125,6 +3466,70 @@ def ownercollection_update():
             'message': "Successfully updated the collection"}
 
 
+@app.route('/adminCheckIncomplete', methods = ['POST'])
+@cross_origin(origins="http://localhost:3000")#, supports_credentials=True)
+def admin_check_incomplete():
+    """ Looks for incomplete updated in collections
+    Arguments: (GET)
+        t - the session token
+    Return:
+        Returns True if the collection changes were made
+    Notes:
+         If the token is invalid, or a problem occurs, a 404 error is returned
+   """
+    db = SPARCdDatabase(DEFAULT_DB_PATH)
+    token = request.args.get('t')
+    print('ADMIN CHECK INCOMPLETE UPLOADS', flush=True)
+
+    # Check the credentials
+    token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
+    if token_valid is None or user_info is None:
+        return "Not Found", 404
+    if not token_valid or not user_info:
+        return "Unauthorized", 401
+
+    # Make sure this user is an admin
+    if user_info.admin != 1:
+        return "Not Found", 404
+
+    # Check the parameters we've received
+    cur_colls = request.form.get('collections', None)
+    if cur_colls is None:
+        return "Not Found", 406
+
+    # Get the list of collections
+    try:
+        cur_colls = json.loads(cur_colls)
+    except json.JSONDecodeError as ex:
+        print('ERROR: Received invalid collections list to check for incomplete uploads',flush=True)
+        print(ex, flush=True)
+        return 'Resource not found', 404
+
+    # Check if we're all done
+    if len(cur_colls) <= 0:
+        return json.dumps({'success': True})
+
+    # Get the locations and species changes logged in the database
+    s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
+
+    incomplete = S3Connection.check_incomplete_uploads(s3_url, user_info.name,
+                                                            get_password(token, db), cur_colls)
+
+    if incomplete is None:
+        print('ERROR: unable to check for incomplete uploads in indicated collections', cur_colls,
+                                                                                        flush=True)
+        return json.dumps({'success': False})
+
+    # Nothing found
+    if len(incomplete) == 0:
+        return json.dumps({'success': True})
+
+    # Update the database with unknown incomplete uploads
+    db.sandbox_new_incomplete_uploads(hash2str(s3_url), incomplete)
+
+    return {'success': True, 'count':len(incomplete)}
+
+
 @app.route('/adminCompleteChanges', methods = ['PUT'])
 @cross_origin(origins="http://localhost:3000")#, supports_credentials=True)
 def admin_complete_changes():
@@ -3218,3 +3623,248 @@ def admin_abandon_changes():
     db.clear_admin_species_changes(hash2str(s3_url), user_info.name)
 
     return {'success': True, 'message': "All changes were successully abandoned"}
+
+@app.route('/installCheck', methods = ['GET'])
+@cross_origin(origins="http://localhost:3000")#, supports_credentials=True)
+def new_install_check():
+    """ Checks if the S3 endpoint can support a new installation
+    Arguments: (GET)
+        t - the session token
+    Return:
+        Returns True/False if the endpoint appears to be able to support a new S3 installation
+        (or not), if there are already collections on the remote endpoint, if the user is in the
+        database already for this endpoint and is/is not admin.
+    Notes:
+         If the token is invalid, or a problem occurs, a 404 error is returned
+   """
+    db = SPARCdDatabase(DEFAULT_DB_PATH)
+    token = request.args.get('t')
+    print('NEW INSTALL CHECK', flush=True)
+
+    # Check the credentials
+    token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
+    if token_valid is None or user_info is None:
+        return "Not Found", 404
+    if not token_valid or not user_info:
+        return "Unauthorized", 401
+
+    # Perform the checks on the S3 instance to see that we can support a new installation
+    s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
+
+    # Return data
+    return_data = { 'success':False,
+                    'admin': user_info.admin,
+                    'needsRepair': False,
+                    'failedPerms': False,
+                    'newInstance': False,
+                    'message': 'Success'
+                   }
+
+    # Check if the S3 instance needs repairs and not a new install
+    needs_repair, has_everything = S3Connection.needs_repair(s3_url, user_info.name,
+                                                                        get_password(token, db))
+    if needs_repair:
+        return_data['needsRepair'] = True
+        return_data['message'] = 'You can try to perform a repair on the S3 endpoint'
+        return json.dumps(return_data)
+    if has_everything:
+        # The endpoint has everything needed (what are they up to?)
+        return_data['success'] = True
+        return_data['admin'] = False
+        return_data['message'] = 'The endpoint already is configured for SPARCd'
+        return json.dumps(return_data)
+
+    # Check if they can make a new install
+    can_create, test_bucket = S3Connection.check_new_install_possible(s3_url, user_info.name,
+                                                                        get_password(token, db))
+    if not can_create:
+        return_data['failedPerms'] = True
+        return_data['message'] = 'Unable to install SPARCd at the S3 endpoint. Please ' \
+                                        'contact your S3 administrator about permissions'
+        return json.dumps(return_data)
+
+    # Check that there aren't any administrators for this endpoint in the database
+    # If it's a new install, there shouldn't be an admin in the database (the endpoint is
+    # unknown so no one should be an admin)
+    if not user_info.admin:
+        if db.have_any_known_admin(hash2str(s3_url)):
+            return_data['admin'] = False        # always false or we wouldn't be here
+            return_data['message'] = 'You are not authorized to make a new installation or ' \
+                                            'repair an existing one. Please contact your ' \
+                                            'administrator'
+            return json.dumps(return_data)
+
+    # TODO: When have messages to users and the test bucket isn't removed, inform the admin(s)
+    if test_bucket is not None:
+        print(f'WARNING: unable to delete testing bucket {test_bucket}', flush=True)
+
+    return_data['success'] = True
+    return_data['newInstance'] = True
+    return json.dumps(return_data)
+
+@app.route('/installNew', methods = ['GET'])
+@cross_origin(origins="http://localhost:3000")#, supports_credentials=True)
+def install_new():
+    """ Attempts to create a new SPARCd installation
+    Arguments: (GET)
+        t - the session token
+    Return:
+        Returns True success if the endpoint could be configured for SPARCd and
+        False if not.
+    Notes:
+         If the token is invalid, or a problem occurs, a 404 error is returned
+   """
+    db = SPARCdDatabase(DEFAULT_DB_PATH)
+    token = request.args.get('t')
+    print('NEW INSTALL', flush=True)
+
+    # Check the credentials
+    token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
+    if token_valid is None or user_info is None:
+        return "Not Found", 404
+    if not token_valid or not user_info:
+        return "Unauthorized", 401
+
+    # Perform the checks on the S3 instance to see that we can support a new installation
+    s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
+
+    # Check that we can create
+    sole_user = False
+    if not user_info.admin:
+        if not db.is_sole_user(hash2str(s3_url), user_info.name):
+            return json.dumps({'success': False,
+                                'message': 'You are not authorized to create a new ' \
+                                            'SPARCd configuration'})
+        sole_user = True
+
+    # Check if the S3 instance needs repairs and of is all set
+    needs_repair, has_everything = S3Connection.needs_repair(s3_url, user_info.name,
+                                                                        get_password(token, db))
+
+    if needs_repair or has_everything:
+        return json.dumps({'success': False, 'message': 'There is already an existing SPARCd ' \
+                                                        'configuration'})
+
+    # The user is apparently the sole user or an admin, and the S3 instance is not setup for SPARCd
+    if not S3Connection.create_sparcd(s3_url, user_info.name, get_password(token, db),
+                                                                            DEFAULT_SETTINGS_PATH):
+        return json.dumps({'success': False, 'message': 'Unable to configure new SPARCd instance'})
+
+    # Make this user the admin if they're the only one in the DB
+    if sole_user:
+        db.update_user(hash2str(s3_url), user_info.name, user_info.email, True)
+
+    return json.dumps({'success': True})
+
+@app.route('/installRepair', methods = ['GET'])
+@cross_origin(origins="http://localhost:3000")#, supports_credentials=True)
+def install_repair():
+    """ Attempts to repair an existing SPARCd installation
+    Arguments: (GET)
+        t - the session token
+    Return:
+        Returns True success if the endpoint could be repaired and False if not.
+    Notes:
+         If the token is invalid, or a problem occurs, a 404 error is returned
+   """
+    db = SPARCdDatabase(DEFAULT_DB_PATH)
+    token = request.args.get('t')
+    print('REPAIR INSTALL', flush=True)
+
+    # Check the credentials
+    token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
+    if token_valid is None or user_info is None:
+        return "Not Found", 404
+    if not token_valid or not user_info:
+        return "Unauthorized", 401
+
+    # Perform the checks on the S3 instance to see that we can support a new installation
+    s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
+
+    # Check that we can create
+    if not user_info.admin:
+        return json.dumps({'success': False, 'message': 'You are not authorized to repair the ' \
+                                                    'SPARCd configuration'})
+
+    # Check if the S3 instance needs repairs and of is all set
+    needs_repair, has_everything = S3Connection.needs_repair(s3_url, user_info.name,
+                                                                        get_password(token, db))
+
+    if not needs_repair or has_everything:
+        return json.dumps({'success': True, \
+                            'message': 'The SPARCd installation doesn\'t need repair'})
+
+    # Make repairs
+    if not S3Connection.repair_sparcd(s3_url, user_info.name, get_password(token, db),
+                                                                            DEFAULT_SETTINGS_PATH):
+        return json.dumps({'success': False, 'message': 'Unable to repair this SPARCd instance'})
+
+    return json.dumps({'success': True})
+
+@app.route('/setUploadComplete', methods = ['POST'])
+@cross_origin(origins="http://localhost:3000")#, supports_credentials=True)
+def set_upload_complete():
+    """ Marks an incomplete upload as completed
+    Arguments: (GET)
+        t - the session token
+    Return:
+        Returns True success if the upload could be marked as completed and False otherwise
+    Notes:
+         If the token is invalid, or a problem occurs, a 404 error is returned
+   """
+    db = SPARCdDatabase(DEFAULT_DB_PATH)
+    token = request.args.get('t')
+    print('SET UPLOAD COMPLETE', flush=True)
+
+    # Check the credentials
+    token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
+    if token_valid is None or user_info is None:
+        return "Not Found", 404
+    if not token_valid or not user_info:
+        return "Unauthorized", 401
+
+    # Get the rest of the request parameters
+    col_id = request.form.get('collectionId', None)
+    up_key = request.form.get('uploadKey', None)
+
+    # Check what we have from the requestor
+    if not all(item for item in [col_id, up_key]):
+        return "Not Found", 406
+
+    # Perform the checks on the S3 instance to see that we can support a new installation
+    s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
+
+    # Get the collection we need
+    all_colls = sdc.load_collections(db, hash2str(s3_url), user_info.admin == 1, s3_url,
+                                                            user_info.name, get_password(token, db))
+    if not all_colls:
+        return json.dumps({'success': False,
+                            'message': "Unable to load collections for marking upload complete"})
+
+    coll = [one_coll for one_coll in all_colls if one_coll["id"] == col_id]
+    if not coll:
+        return json.dumps({'success': False,
+                            'message': 'Unable to find the collection needed to mark upload as ' \
+                                        'completed'})
+    coll = coll[0]
+
+    # Find the upload in the collection
+    upload = [one_up for one_up in coll['uploads'] if one_up["key"] == up_key]
+    if not upload:
+        return json.dumps({'success': False,
+                            'message': 'Unable to find the incomplete upload in the collections'})
+    upload = upload[0]
+
+    # Make sure this user has permissions to do this
+    if not user_info.admin == 1 and user_info.name == upload['uploadUser']:
+        return "Not Found", 404
+
+    # Update the counts of the uploaded images to reflect what's on the server
+    S3Connection.upload_recalculate_image_count(s3_url, user_info.name, get_password(token, db),
+                                                                coll['bucket'], upload['key'])
+
+    # Remove the upload from the database
+    db.sandbox_upload_complete_by_info(hash2str(s3_url), user_info.name, coll['bucket'],
+                                                                                    upload['key'])
+
+    return json.dumps({'success': True, 'message': 'Successfully marked upload as completed'})

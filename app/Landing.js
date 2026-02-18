@@ -5,6 +5,10 @@
 import * as React from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import Card from '@mui/material/Card';
+import CardActions from '@mui/material/CardActions';
+import CardContent from '@mui/material/CardContent';
+import CardHeader from '@mui/material/CardHeader';
 import Grid from '@mui/material/Grid';
 import { useTheme } from '@mui/material/styles';
 import Typography from '@mui/material/Typography';
@@ -15,8 +19,9 @@ import LandingCollections from './landing/LandingCollections';
 import LandingMaps from './landing/LandingMaps';
 import LandingQuery from './landing/LandingQuery';
 import LandingUpload from './landing/LandingUpload';
+import UploadRepair from './landing/UploadRepair';
 import UserActions from './components/userActions';
-import { CollectionsInfoContext, MobileDeviceContext, SandboxInfoContext, SizeContext } from './serverInfo';
+import { CollectionsInfoContext, MobileDeviceContext, SizeContext } from './serverInfo';
 
 // Use to declare the type of upload wanted
 const uploadTypes = {
@@ -37,11 +42,11 @@ const uploadTypes = {
 export default function Landing({loadingCollections, loadingSandbox, onUserAction, onSandboxRefresh}) {
   const theme = useTheme();
   const curCollectionInfo = React.useContext(CollectionsInfoContext);
-  const curSandboxInfo = React.useContext(SandboxInfoContext);
   const mobileDevice = React.useContext(MobileDeviceContext);
   const uiSizes = React.useContext(SizeContext);
   const [haveNewUpload, setHaveNewUpload] = React.useState(uploadTypes.uploadNone);
   const [mapImageSize, setMapImageSize] = React.useState({width:722,height:396})
+  const [recoveryInfo, setRecoveryInfo] = React.useState(null); // Used when recovering an upload
   const [selUploadInfo, setSelUploadInfo] = React.useState(null);
   const [selCollectionInfo, setSelCollectionInfo] = React.useState(null);
 
@@ -77,8 +82,8 @@ export default function Landing({loadingCollections, loadingSandbox, onUserActio
    * @function
    * @param {object} uploadInfo The selected upload identifier
    */
-  const setUploadSelection = React.useCallback((uploadInfo) => {
-    setSelUploadInfo(uploadInfo);
+  const setUploadSelection = React.useCallback((collectionInfo, uploadInfo) => {
+    setSelUploadInfo({collectionInfo, uploadInfo});
   }, [setSelUploadInfo]);
 
   /**
@@ -145,8 +150,14 @@ export default function Landing({loadingCollections, loadingSandbox, onUserActio
       </Box>
       { haveNewUpload !== uploadTypes.uploadNone && 
               <FolderUpload loadingCollections={loadingCollections} onCompleted={() => {newUploadCancel();onSandboxRefresh();}} onCancel={() => newUploadCancel()}
-                            type={haveNewUpload}
+                            type={haveNewUpload} recovery={recoveryInfo}
               />
+      }
+      { selUploadInfo !== null && 
+          <UploadRepair collectionInfo={selUploadInfo.collectionInfo} uploadInfo={selUploadInfo.uploadInfo}
+                        onUploadImages={() => {setRecoveryInfo({coll_info:selUploadInfo.collectionInfo,upload_info:selUploadInfo.uploadInfo});setHaveNewUpload(uploadTypes.uploadImages);} }
+                        onUploadMovies={() => {setRecoveryInfo({coll_info:selUploadInfo.collectionInfo,upload_info:selUploadInfo.uploadInfo});setHaveNewUpload(uploadTypes.uploadMovies);} }
+                        onClose={() => {setSelUploadInfo(null);onSandboxRefresh();}} />
       }
     </React.Fragment>
   );

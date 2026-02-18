@@ -85,6 +85,10 @@ RUN rm *.sqlite    # Clean up any testing databases
 RUN ./create_db.py --admin ${ADMIN_NAME} --admin_email ${ADMIN_EMAIL} $PWD sparcd.sqlite
 RUN rm create_db.py
 
+# Clean up files we don't want on the server
+RUN rm -f requirements.txt
+RUN rm -f .DS_Store
+
 # Setup nginx
 RUN mv /etc/nginx/nginx.conf /etc/nginx/nginx.conf.orig
 COPY ./nginx.conf /etc/nginx/nginx.conf

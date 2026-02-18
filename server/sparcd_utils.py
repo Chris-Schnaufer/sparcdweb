@@ -18,7 +18,7 @@ import image_utils
 import spd_crypt as crypt
 from sparcd_db import SPARCdDatabase
 import sparcd_file_utils as sdfu
-from s3_access import S3Connection, SPARCD_PREFIX, SPECIES_JSON_FILE_NAME
+from s3_access import S3Connection, SPARCD_PREFIX, LOCATIONS_JSON_FILE_NAME, SPECIES_JSON_FILE_NAME
 import s3_utils as s3u
 from text_formatters.coordinate_utils import DEFAULT_UTM_ZONE, deg2utm, deg2utm_code
 
@@ -28,8 +28,6 @@ TIMEOUT_COLLECTIONS_FILE_SEC = 12 * 60 * 60
 TEMP_COLLECTION_FILE_NAME = SPARCD_PREFIX + 'coll.json'
 # Name of temporary species file
 TEMP_LOCATIONS_FILE_NAME = SPARCD_PREFIX + 'locations.json'
-# Configuration file name for locations
-LOCATIONS_JSON_FILE_NAME = 'locations.json'
 
 # Uploads table timeout length
 TIMEOUT_UPLOADS_SEC = 3 * 60 * 60
@@ -250,6 +248,8 @@ def update_admin_locations(url: str, user: str, password: str, s3_id: str, chang
         loc_id = one_change[changes['loc_id']]
         loc_old_lat = one_change[changes['loc_old_lat']]
         loc_old_lon = one_change[changes['loc_old_lng']]
+        loc_descr = one_change[changes['loc_description']] \
+                                                if one_change[changes['loc_description']] else ""
 
         # Update the entry if we have it, otherwise add it
         cur_key = crypt.generate_hash((loc_id, loc_old_lat, loc_old_lon))
@@ -263,14 +263,15 @@ def update_admin_locations(url: str, user: str, password: str, s3_id: str, chang
                 cur_loc['activeProperty'] = one_change[changes['loc_active']]
             elif one_change[changes['loc_active']] == 1:
                 cur_loc['activeProperty'] = True
+            cur_loc['descriptionProperty'] = loc_descr
         else:
-            all_locs[cur_key] = {
-                                    'idProperty': one_change[changes['loc_id']],
+            all_locs[cur_key] = {   'idProperty': one_change[changes['loc_id']],
                                     'nameProperty': one_change[changes['loc_name']],
                                     'latProperty': one_change[changes['loc_new_lat']],
                                     'lngProperty': one_change[changes['loc_new_lng']],
                                     'elevationProperty': one_change[changes['loc_elevation']],
-                                    'activeProperty': one_change[changes['loc_active']] == 1
+                                    'activeProperty': one_change[changes['loc_active']] == 1,
+                                    'descriptionProperty': loc_descr,
                                 }
 
     all_locs = tuple(all_locs.values())
@@ -315,7 +316,7 @@ def normalize_upload(upload_entry: dict) -> dict:
     Return:
         The normalized upload
     """
-    return {'name': upload_entry['info']['uploadUser'] + ' on ' + \
+    return_entry = {'name': upload_entry['info']['uploadUser'] + ' on ' + \
                                             format_upload_date(upload_entry['info']['uploadDate']),
             'description': upload_entry['info']['description'],
             'imagesCount': upload_entry['info']['imageCount'],
@@ -326,6 +327,13 @@ def normalize_upload(upload_entry: dict) -> dict:
             'date': upload_entry['info']['uploadDate'],
             'folders': upload_entry['uploaded_folders']
           }
+    return_entry.update({'complete': upload_entry['complete']} if \
+                                                                'complete' in upload_entry else {})
+    return_entry.update({'path': upload_entry['path']} if \
+                                                                    'path' in upload_entry else {})
+    return_entry.update({'uploadUser': upload_entry['info']['uploadUser']})
+
+    return return_entry
 
 
 def normalize_collection(coll: dict) -> dict:
@@ -393,9 +401,11 @@ def get_sandbox_collections(url: str, user: str, password: str, items: tuple, \
                                             if one_item['s3_path'].endswith(one_upload['key']) ]
                 if len(found_uploads) > 0:
                     cur_upload = found_uploads[0]
-        else:
+        if cur_upload is None:
+            # Only add the collection if we haven't found it
+            if not found:
+                add_collection = True
             # Try to find the collection in the list of collections, otherwise fetch it
-            add_collection = True
             if all_collections:
                 found = [one_col for one_col in all_collections if one_col['bucket'] == bucket]
                 if found:
@@ -403,7 +413,7 @@ def get_sandbox_collections(url: str, user: str, password: str, items: tuple, \
                     found = found[0]
 
                     found_uploads = [one_upload for one_upload in found['uploads'] \
-                                            if one_item['s3_path'].endswith(one_upload['key']) ]
+                                            if one_item['s3_path'].endswith(one_upload['key']+'/') ]
                     if len(found_uploads) > 0:
                         cur_upload = found_uploads[0]
             else:
@@ -436,13 +446,13 @@ def get_sandbox_collections(url: str, user: str, password: str, items: tuple, \
         # Check if we need to normalize the upload now
         if s3_upload is True and coll_uploads[bucket]['s3_collection'] is False:
             cur_upload = normalize_upload(cur_upload)
-            if 'complete' in one_item:
-                cur_upload['uploadCompleted'] = one_item['complete']
-            coll_uploads[bucket]['uploads'].append(cur_upload)
-        else:
-            if 'complete' in one_item:
-                cur_upload['uploadCompleted'] = one_item['complete']
-            coll_uploads[bucket]['uploads'].append(cur_upload)
+        if 'complete' in one_item:
+            cur_upload['uploadCompleted'] = one_item['complete']
+        if 'user' in one_item:
+            cur_upload['uploadUser'] = one_item['user']
+        if 'path' in one_item:
+            cur_upload['path'] = one_item['path']
+        coll_uploads[bucket]['uploads'].append(cur_upload)
 
         if add_collection is True:
             return_info.append(found)
@@ -698,7 +708,6 @@ def process_upload_changes(s3_url: str, username: str, fetch_password: Callable,
     finally:
         # Remove the downloading folder
         shutil.rmtree(edit_folder)
-        pass
 
     return success_files, failed_files
 

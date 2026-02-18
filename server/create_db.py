@@ -1,12 +1,17 @@
-#!/usr/bin/python3
+#!python3
 """This script creates a sparcd database at the specified path
 """
 
 import argparse
+import hashlib
 import os
 import sqlite3
 import sys
 import tempfile
+
+from cryptography.fernet import Fernet
+
+import s3_utils as s3u
 
 # The name of our script
 SCRIPT_NAME = os.path.basename(__file__)
@@ -39,6 +44,19 @@ ARGPARSE_OVERWRITE_HELP = 'Specify this flag if you want to force the destructiv
 ARGPARSE_ADMIN_HELP = 'The username of the default administrator (also specify --admin_email)'
 # Help for specifying the email of an adminstrator
 ARGPARSE_ADMIN_EMAIL_HELP = 'The default administrator\'s email address (see --admin)'
+# Help for the admin S3 endpoint
+ARGPARSE_ADMIN_S3_URL = 'The URL for the S3 endpoint that the administrator is for'
+
+
+def hash2str(text: str) -> str:
+    """ Returns the hash of the passed in string
+    Arguments:
+        text: the string to hash
+    Return:
+        The hash value as a string
+    """
+    return hashlib.md5(text.encode('utf-8')).hexdigest()
+
 
 def get_arguments() -> str:
     """ Returns the data from the parsed command line arguments
@@ -53,17 +71,21 @@ def get_arguments() -> str:
     parser.add_argument('--overwrite', action='store_true', help=ARGPARSE_OVERWRITE_HELP)
     parser.add_argument('--admin', help=ARGPARSE_ADMIN_HELP)
     parser.add_argument('--admin_email', help=ARGPARSE_ADMIN_EMAIL_HELP)
+    parser.add_argument('--admin_url', help=ARGPARSE_ADMIN_S3_URL)
     args = parser.parse_args()
 
-    if (args.admin is None and args.admin_email is not None) or \
-       (args.admin_email is None and args.admin is not None):
+    # Make sure we have all the admin parameters or none
+    if not all([args.admin, args.admin_email, args.admin_url]) and \
+            any([args.admin, args.admin_email, args.admin_url]):
         print('ERROR: Not all administrator information has been specified')
+        print('Run the script with the --flag set to see all options.')
+        print(f'For example: {SCRIPT_NAME} --help')
         sys.exit(10)
 
     # We only need to check one admin parameter since we already checked for
     # admin parameter sameness
     return os.path.join(args.db_path, args.db_name), args.overwrite, \
-                            (args.admin, args.admin_email) if args.admin else None
+                            (args.admin, args.admin_email, args.admin_url) if args.admin else None
 
 
 def build_database(path: str, admin_info: tuple=None) -> None:
@@ -78,12 +100,14 @@ def build_database(path: str, admin_info: tuple=None) -> None:
                 'email TEXT DEFAULT NULL, ' \
                 'settings TEXT DEFAULT "{}", ' \
                 'species TEXT default "{}", ' \
+                's3_id TEXT, ' \
                 'administrator INT DEFAULT 0, ' \
                 'auto_added INT DEFAULT 1)',
              'CREATE TABLE tokens(id INTEGER PRIMARY KEY ASC, ' \
                 'name TEXT NOT NULL, ' \
                 'password TEXT NOT NULL, ' \
                 's3_url TEXT NOT NULL, ' \
+                's3_id TEXT NOT NULL, ' \
                 'token TEXT UNIQUE, ' \
                 'timestamp INTEGER, ' \
                 'client_ip TEXT, ' \
@@ -121,11 +145,12 @@ def build_database(path: str, admin_info: tuple=None) -> None:
                 's3_id TEXT NOT NULL, ' \
                 'bucket TEXT NOT NULL, ' \
                 's3_base_path TEXT NOT NULL, ' \
-                'location_id TEXT NOT NULL, ' \
-                'location_name TEXT NOT NULL, ' \
-                'location_lat REAL NOT NULL, ' \
-                'location_lon READ NOT NULL, ' \
-                'location_ele REAL NOT NULL, '
+                'location_id TEXT DEFAULT NULL, ' \
+                'location_name TEXT DEFAULT NULL, ' \
+                'location_lat REAL DEFAULT NULL, ' \
+                'location_lon READ DEFAULT NULL, ' \
+                'location_ele REAL DEFAULT NULL, ' \
+                'recovered INT DEFAULT 0, ' \
                 'timestamp INTEGER, ' \
                 'upload_id TEXT DEFAULT NULL)',
              'CREATE TABLE sandbox_files(id INTEGER PRIMARY KEY ASC, ' \
@@ -191,13 +216,15 @@ def build_database(path: str, admin_info: tuple=None) -> None:
                 'loc_new_lat REAL NOT NULL,'\
                 'loc_new_lng REAL NOT NULL, ' \
                 'location_updated INTEGER DEFAULT 0, ' \
+                'loc_description TEXT DEFAULT NULL, ' \
                 'timestamp INTEGER)',
              'CREATE TABLE db_locks(id INTEGER PRIMARY KEY ASC, ' \
                 'name TEXT NOT NULL, ' \
                 'value INTEGER DEFAULT NULL, ' \
                 'timestamp INTEGER)',
         )
-    add_user_stmt = 'INSERT INTO users(name, email, administrator, auto_added) values(?, ?, 1, 0)'
+    add_user_stmt = 'INSERT INTO users(name, email, s3_id, administrator, auto_added) '\
+                                                                            'values(?, ?, ?, 1, 0)'
 
     with sqlite3.connect(path) as conn:
         cursor = conn.cursor()
@@ -208,9 +235,11 @@ def build_database(path: str, admin_info: tuple=None) -> None:
             idx = idx + 1
 
         # If we have a administrator information, we add it to the users table
-        if admin_info and len(admin_info) == 2:
+        if admin_info and len(admin_info) == 3:
+            s3_url = s3u.web_to_s3_url(admin_info[2],
+                                                    lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
             print(f'Adding administrator {admin_info[0]}')
-            cursor.execute(add_user_stmt, admin_info)
+            cursor.execute(add_user_stmt, [admin_info[0], admin_info[1], hash2str(s3_url)])
 
 
 if __name__ == '__main__':
