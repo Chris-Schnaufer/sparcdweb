@@ -188,9 +188,14 @@ export default function CheckIncompleteUploads({onSandboxRefresh, onCancel}) {
             </FormGroup>
           : <Grid container direction="column" alignItems="center" justifyContent="center" sx={{height:'100%'}}>
               <CircularProgress />
-              <Typography gutterBottom variant="body2">
+              <Typography gutterBottom variant="body2" style={{marginTop:'10px'}}>
                 Please wait while checking collections ...
               </Typography>
+              {selectedCollections.length > 4 &&
+                <Typography gutterBottom variant="body3">
+                  This may take some time
+                </Typography>
+              }
             </Grid>
           }
         </Grid>

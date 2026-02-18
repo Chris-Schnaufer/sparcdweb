@@ -73,6 +73,18 @@ export default function FilterCollections({data, parentId, onClose, onChange}) {
   }, [parentId, cardRef]);
 
   /**
+   * Handles resetting the search field
+   * @function
+   */
+  const handleClearSearch = React.useCallback(() => {
+    const searchEl = document.getElementById('file-collections-search');
+    if (searchEl) {
+      searchEl.value = '';
+      setDisplayedCollections(collectionItems);
+    }
+  }, [setDisplayedCollections]);
+
+  /**
    * Handles selecting all collections to the filter
    * @function
    */
@@ -129,7 +141,7 @@ export default function FilterCollections({data, parentId, onClose, onChange}) {
    * @function
    * @param {object} event The triggering event
    */
-  const handleSearchChange = useCallback((event) => {
+  const handleSearchChange = React.useCallback((event) => {
     if (event.target.value) {
       const ucSearch = event.target.value.toUpperCase();
       setDisplayedCollections(collectionItems.filter((item) => item.bucket.toUpperCase().includes(ucSearch) ||
@@ -138,18 +150,6 @@ export default function FilterCollections({data, parentId, onClose, onChange}) {
       setDisplayedCollections(collectionItems);
     }
   }, [collectionItems, setDisplayedCollections]);
-
-  /**
-   * Handles resetting the search field
-   * @function
-   */
-  const handleClearSearch = React.useCallback(() => {
-    const searchEl = document.getElementById('file-collections-search');
-    if (searchEl) {
-      searchEl.value = '';
-      setDisplayedCollections(collectionItems);
-    }
-  }, [setDisplayedCollections]);
 
   // Return the collection filter UI
   return (

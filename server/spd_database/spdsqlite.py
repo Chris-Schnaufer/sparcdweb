@@ -1284,7 +1284,7 @@ class SPDSQLite:
         cursor = self._conn.cursor()
         query = 'UPDATE sandbox SET path="", recovered=0 WHERE name=? AND s3_id=? AND ' \
                                                                 'bucket=? AND s3_base_path like ?'
-        params = (username, s3_id, bucket, '%'+upload_name)
+        params = (username, s3_id, bucket, '%'+upload_name+'%')
         cursor.execute(query, params)
 
         self._conn.commit()
