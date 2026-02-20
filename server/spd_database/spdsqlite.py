@@ -2193,17 +2193,18 @@ class SPDSQLite:
             raise RuntimeError('Attempting to add a message to the database before ' \
                                                                                     'connecting')
         # Indexes of return values
-        indexes = { 'id': 0,
-                    'sender': 1,
-                    'subject': 2,
-                    'message': 3,
-                    'priority': 4,
-                    'created_sec': 5,
-                    'read_sec': 6,
+        indexes = { 'id':           0,
+                    'recipient':    1,
+                    'sender':       2,
+                    'subject':      3,
+                    'message':      4,
+                    'priority':     5,
+                    'created_sec':  6,
+                    'read_sec':     7,
                     }
 
         cursor = self._conn.cursor()
-        query = 'SELECT id, sender, subject, message, priority, ' \
+        query = 'SELECT id, receiver, sender, subject, message, priority, ' \
                         '(strftime("%s", "now")-timestamp) as elapsed_sec,' \
                         '(strftime("%s", "now")-read_timestamp) as read_sec ' \
                     'FROM messages ' \
@@ -2232,9 +2233,9 @@ class SPDSQLite:
 
         cursor = self._conn.cursor()
         id_params = ','.join('?' * len(ids))
-        query = 'UPDATE messages SET read=strftime("%s", "now") WHERE s3_id=? AND receiver=? AND ' \
-                                                                        'id IN (' + id_params + ')'
-        cursor.execute(query, (s3_id, username) + ids)
+        query = 'UPDATE messages SET read_timestamp=strftime("%s", "now") WHERE s3_id=? AND ' \
+                                                        'receiver=? AND id IN (' + id_params + ')'
+        cursor.execute(query, (s3_id, username) + tuple(ids))
 
         self._conn.commit()
         cursor.close()
@@ -2257,7 +2258,7 @@ class SPDSQLite:
         id_params = ','.join('?' * len(ids))
         query = 'UPDATE messages SET deleted=1 WHERE s3_id=? AND receiver=? AND ' \
                                                                         'id IN (' + id_params + ')'
-        cursor.execute(query, (s3_id, username) + ids)
+        cursor.execute(query, (s3_id, username) + tuple(ids))
 
         self._conn.commit()
         cursor.close()

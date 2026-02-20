@@ -1175,6 +1175,134 @@ export default function Home() {
   }, [addMessage, lastToken, serverURL, setUserLoginAgain, setUserMessages]);
 
   /**
+   * Handles adding a new message
+   * @function
+   * @param {string} recipients The comma separated list of recipients
+   * @param {string} subject The subject of the message
+   * @param {string} message The message itself
+   * @param {function} onMessageSent The function to call after the message sent
+   */
+  const handleMewMessage = React.useCallback((recipients, subject, message, onMessageSent) => {
+    const newMessagesUrl = serverURL + '/messageAdd?t=' + encodeURIComponent(lastToken);
+
+    const formData = new FormData();
+
+    formData.append('receiver', recipients.split(',').map((item) => item.trim()) );
+    formData.append('subject', subject);
+    formData.append('message', message);
+
+    try {
+      const resp = fetch(newMessagesUrl, {
+        method: 'POST',
+        body: formData
+      }).then(async (resp) => {
+            if (resp.ok) {
+              return resp.json();
+            } else {
+              if (resp.status === 401) {
+                // User needs to log in again
+                setUserLoginAgain(true);
+              }
+              throw new Error(`Failed to add new message: ${resp.status}`, {cause:resp});
+            }
+          })
+        .then((respData) => {
+            // Check the return
+            if (onMessageSent) {
+              onMessageSent(respData.success, respData.message)
+            }
+        })
+        .catch(function(err) {
+          console.log('Add Message Error: ',err);
+          addMessage(Level.Error, 'A problem ocurred while adding your message');
+      });
+    } catch (error) {
+      console.log('Add Message Unknown Error: ',err);
+      addMessage(Level.Error, 'An unknown problem ocurred while adding your message');
+    }
+  }, [addMessage, lastToken, serverURL, setUserLoginAgain]);
+
+  /**
+   * Handles marking messages as read
+   * @function
+   * @param {object} msgIds The array of message IDs to mark
+   */
+  const handleReadMessages= React.useCallback((msgIds) => {
+    const readMessagesUrl = serverURL + '/messageRead?t=' + encodeURIComponent(lastToken);
+
+    const formData = new FormData();
+
+    formData.append('ids', JSON.stringify(msgIds));
+
+    try {
+      const resp = fetch(readMessagesUrl, {
+        method: 'POST',
+        body: formData
+      }).then(async (resp) => {
+            if (resp.ok) {
+              return resp.json();
+            } else {
+              if (resp.status === 401) {
+                // User needs to log in again
+                setUserLoginAgain(true);
+              }
+              throw new Error(`Failed to mark messages as read: ${resp.status}`, {cause:resp});
+            }
+          })
+        .then((respData) => {
+            // It appears that everything worked out
+        })
+        .catch(function(err) {
+          console.log('Read Messages Error: ',err);
+//          addMessage(Level.Error, 'A problem ocurred while marking messages as read');
+      });
+    } catch (error) {
+      console.log('Read Messages Unknown Error: ',err);
+//      addMessage(Level.Error, 'An unknown problem ocurred while marking messages as read');
+    }
+  }, [addMessage, lastToken, serverURL, setUserLoginAgain]);
+
+  /**
+   * Handles deleting messages
+   * @function
+   * @param {object} msgIds The array of message IDs to delete
+   */
+  const handleDeleteMessages= React.useCallback((msgIds) => {
+    const delMessagesUrl = serverURL + '/messageDelete?t=' + encodeURIComponent(lastToken);
+
+    const formData = new FormData();
+
+    formData.append('ids', JSON.stringify(msgIds));
+
+    try {
+      const resp = fetch(delMessagesUrl, {
+        method: 'POST',
+        body: formData
+      }).then(async (resp) => {
+            if (resp.ok) {
+              return resp.json();
+            } else {
+              if (resp.status === 401) {
+                // User needs to log in again
+                setUserLoginAgain(true);
+              }
+              throw new Error(`Failed to delete messages: ${resp.status}`, {cause:resp});
+            }
+          })
+        .then((respData) => {
+            // It appears that everything worked out
+        })
+        .catch(function(err) {
+          console.log('Delete Messages Error: ',err);
+//          addMessage(Level.Error, 'A problem ocurred while deleting messages');
+      });
+    } catch (error) {
+      console.log('Delete Messages Unknown Error: ',err);
+//      addMessage(Level.Error, 'An unknown problem ocurred while deleting messages');
+    }
+  }, [addMessage, lastToken, serverURL, setUserLoginAgain]);
+
+  /**
    * Sets the remember login information flag to true or false (is it truthy, or not?)
    * @function
    * @param {boolean} newRemember Set to true for non-sensitive login details to be remembered, or false
@@ -1467,7 +1595,12 @@ export default function Home() {
           }
           { displayMessages && 
               <UserMessageContext.Provider value={userMessages} >
-                <UserMessages onAdd={() => {}} onDelete={() => {}} onRefresh={handleFetchMessages} onRead={() => {}} onClose={() => setDisplayMessages(false)} />
+                <UserMessages onAdd={(recip,subj,msg,onDone) => {handleMewMessage(recip,subj,msg,onDone)}}
+                              onDelete={(msgIds) => {handleDeleteMessages(msgIds)}}
+                              onRefresh={handleFetchMessages}
+                              onRead={(msgIds) => {handleReadMessages(msgIds)}}
+                              onClose={() => setDisplayMessages(false)}
+                />
               </UserMessageContext.Provider>
           }
           { (createNewInstance === true || repairInstance === true) &&

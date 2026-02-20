@@ -833,12 +833,6 @@ def species_stats(db: SPARCdDatabase, colls: tuple, s3_id: str, s3_url: str, use
             for future in concurrent.futures.as_completed(cur_futures):
                 try:
                     uploads_results = future.result()
-                    #HACK
-                    if cur_bucket == 'sparcd-373b17eb-60f4-406a-b87a-32d596bc143f':
-                        for one in upload_results['uploads_info']:
-                            print('HACK: XXXX: ', json.dumps(one), flush=True)
-                            print('HACK: ',flush=True)
-                    #HACK
                     if 'uploads_info' in uploads_results and \
                                                         len(uploads_results['uploads_info']) > 0:
                         uploads_info = [{'bucket':uploads_results['bucket'],

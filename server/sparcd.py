@@ -3941,14 +3941,10 @@ def message_get():
     if not token_valid or not user_info:
         return "Unauthorized", 401
 
-    # Get the rest of the request parameters
-    admin = request.form.get('admin', None)
-
     # Get the messages
     s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
 
-    messages = db.messages_get(hash2str(s3_url), user_info.name,
-                                                            admin is True and bool(user_info.admin))
+    messages = db.messages_get(hash2str(s3_url), user_info.name, bool(user_info.admin))
 
     return json.dumps({'success': True, 'messages': messages, 'message': 'All messages received'})
 
@@ -3977,12 +3973,17 @@ def message_read():
 
     # Get the rest of the request parameters
     ids = request.form.get('ids', None)
+    if ids is None:
+        return "Not Found", 406
+    ids = json.loads(ids)
 
     # Get the messages
     s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
 
     all_ids = [int(one_id) for one_id in ids]
     db.messages_are_read(hash2str(s3_url), user_info.name, all_ids)
+    if bool(user_info.admin):
+        db.messages_are_read(hash2str(s3_url), 'admin', all_ids)
 
     return json.dumps({'success': True, 'message': 'Messages were marked as read'})
 
@@ -4011,11 +4012,16 @@ def message_delete():
 
     # Get the rest of the request parameters
     ids = request.form.get('ids', None)
+    if ids is None:
+        return "Not Found", 406
+    ids = json.loads(ids)
 
     # Get the messages
     s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
 
     all_ids = [int(one_id) for one_id in ids]
     db.messages_are_deleted(hash2str(s3_url), user_info.name, all_ids)
+    if bool(user_info.admin):
+        db.messages_are_deleted(hash2str(s3_url), 'admin', all_ids)
 
     return json.dumps({'success': True, 'message': 'Messages were marked as deleted'})

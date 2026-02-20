@@ -10,15 +10,18 @@ import CardActions from '@mui/material/CardActions';
 import CardContent from '@mui/material/CardContent';
 import CardHeader from '@mui/material/CardHeader';
 import Checkbox from '@mui/material/Checkbox';
+import DeleteOutlinedIcon from '@mui/icons-material/DeleteOutlined';
+import DraftsOutlinedIcon from '@mui/icons-material/DraftsOutlined';
 import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
+import MailOutlinedIcon from '@mui/icons-material/MailOutlined';
 import ReplayOutlinedIcon from '@mui/icons-material/ReplayOutlined';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 
 import { Level } from './Messages';
-import NewUserMessage from './NewUserMessage';
+import UserMessage from './UserMessage';
 import { AddMessageContext, TokenExpiredFuncContext, SizeContext, UserMessageContext } from '../serverInfo';
 
 /**
@@ -39,6 +42,7 @@ export default function UserMessages({onAdd, onDelete, onRefresh, onRead, onClos
   const userMessages = React.useContext(UserMessageContext); // The user's messages
   const contentRef = React.useRef();
   const [allSelected, setAllSelected] = React.useState(false);  // When all messages are selected
+  const [readMessage, setReadMessage] = React.useState(null);   // Contains the ID of the message to read
   const [newMessage, setNewMessage] = React.useState(false);    // User wants to compose a message
   const [selectedMessages, setSelectedMessages] = React.useState([]); // The selected messages
   const [titlebarRect, setTitlebarRect] = React.useState(null); // Set when the UI displays
@@ -135,6 +139,119 @@ export default function UserMessages({onAdd, onDelete, onRefresh, onRead, onClos
   }
 
   /**
+   * Handles deleting selected messages
+   * @function
+   */
+  const handleDeleteSelected = React.useCallback(() => {
+    // If nothing is selected, do nothing
+    if (selectedMessages.length === 0) {
+      return;
+    }
+
+    const deleteIds = selectedMessages.map((item) => userMessages.messages[item]).map((msg_item) => msg_item.id);
+
+    // Clear selected messages
+    setSelectedMessages([]);
+    setAllSelected(false);
+
+    // Delete the messages
+    onDelete(deleteIds);
+
+    // Remove from our list
+    const remainMessages = userMessages.messages.filter((item) => deleteIds.findIndex((fitem) => fitem === item.id) === -1);
+    userMessages.messages = remainMessages;
+
+  }, [selectedMessages, setAllSelected, setSelectedMessages, userMessages]);
+
+  /**
+   * Handles deleting a single message
+   * @function
+   * @param {string} deleteId The ID of the message to delete
+   */
+  const handleDeleteMessage = React.useCallback((deleteId) => {
+
+    const deleteIds = userMessages.messages.filter((item) => item.id === deleteId).map((mitem) => mitem.id);
+    if (!deleteIds || deleteIds.length <= 0) {
+      return;
+    }
+
+    // Delete the messages
+    onDelete(deleteIds);
+
+    // Remove our message from the selected list
+    let selMsgs = selectedMessages.filter((item) => item !== deleteId);
+    setSelectedMessages(selMsgs);
+
+    // Remove the message from our list
+    const remainMessages = userMessages.messages.filter((item) => deleteIds.findIndex((fitem) => fitem === item.id) === -1);
+    userMessages.messages = remainMessages;
+
+  }, [selectedMessages, setSelectedMessages, userMessages]);
+
+  /**
+   * Handles the user reading a message
+   * @function
+   * @param {string} readId The ID of the message to read
+   */
+  const handleReadMessage = React.useCallback((readId) => {
+    const foundIds = userMessages.messages.filter((item) => item.id === readId).map((mitem) => mitem.id);
+    if (!foundIds || foundIds.length <= 0) {
+      return;
+    }
+
+    setReadMessage(userMessages.messages.filter((item) => foundIds.findIndex((fitem) => fitem === item.id) !== -1));
+
+  }, [setReadMessage, userMessages])
+
+  /**
+   * Handles the reader wanting to read selected messages
+   * @function
+   */
+  const handleReadSelected = React.useCallback(() => {
+    // If nothing is selected, do nothing
+    if (selectedMessages.length === 0) {
+      return;
+    }
+
+    const readMsgs = selectedMessages.map((item) => userMessages.messages[item]);
+    setReadMessage(readMsgs)
+
+  }, [selectedMessages, setReadMessage]);
+
+  /**
+   * Handles the user having read messages
+   * @function
+   * @param {object} msgIds Array of message IDs to mark as read
+   */
+  const handleUserReadMessage = React.useCallback((msgIds) => {
+    onRead(msgIds);
+
+    // Mark our copy of the messages as read
+    userMessages.messages = userMessages.messages.map((item) => {
+      const foundIdx = msgIds.findIndex((fitem) => fitem === item.id);
+      if (foundIdx > -1) {
+        item.read_sec = 1;
+      }
+      return item;
+    });
+  }, [userMessages]);
+
+  /**
+   * Formats the timestamp for a message
+   * @function
+   * @param {number} elapsedSec The number of seconds from now to apply to the timestamp
+   */
+  function formatTimestamp(elapsedSec) {
+    let curTs = new Date();
+    let createTs = new Date(curTs.getTime() + (elapsedSec * 1000));
+
+    if (curTs.getFullYear() === createTs.getFullYear()) {
+      return createTs.toLocaleDateString(navigator.language ? navigator.language : 'en-US', {month:'short', day:'numeric'}) 
+    }
+    return createTs.toLocaleDateString(navigator.language ? navigator.language : 'en-US', {month:'short', day:'numeric', year:'numeric'}) 
+  }
+
+  /**
    * Generated a line for each message (or blank ones)
    * @function
    */
@@ -161,21 +278,39 @@ export default function UserMessages({onAdd, onDelete, onRefresh, onRead, onClos
         >
         { userMessages && userMessages.messages && userMessages.messages.length > 0 &&
           userMessages.messages.map((item, idx) =>
-            <Grid id={"message-details-" + idx} key={"message-details-" + idx} container direction="row" alignItems="center" justifyContent="start"
-                  sx={{backgroundColor:read ? 'rgb(0, 0, 0, 0.07)' : 'transparent', borderBottom:'1px solid rgb(0, 0, 0, 0.07)', width:'100%', minHeight:'1.5em'}}
+            <Grid id={"message-details-" + idx} key={"message-details-" + idx} wrap="nowrap" container direction="row" alignItems="center" justifyContent="start"
+                  sx={{backgroundColor:item.read_sec ? 'rgb(0, 0, 0, 0.03)' : 'transparent', borderBottom:'1px solid rgb(0, 0, 0, 0.07)',
+                       width:'100%', minHeight:'1.5em', '&:hover':{backgroundColor:item.read ? 'rgb(50, 70, 100, 0.2)' : 'rgb(150, 170, 200, 0.1)'},
+                       cursor:'pointer'
+                      }}
             >
               <Checkbox id={'message-'+idx} size="small" checked={selectedMessages.findIndex((item) => item === idx) !== -1}
                         onChange={(event) => handleMessageChecked(event, idx)}
               />
-              <Typography variant="body2">
-                {item.sender}
-              </Typography>
-              <Typography variant="body2">
-                {item.subject}
-              </Typography>
-              <Typography variant="body2">
-                {item.message.substring(0, MAX_MESSAGE_DISPLAY_LENGTH) + item.message.length > MAX_MESSAGE_DISPLAY_LENGTH ? '...' : ''}
-              </Typography>
+              <Grid container direction="row" wrap="nowrap" alignItems="center" justifyContent="start" sx={{padding:"0px", width:"100%", color:item.read_sec ? 'grey' : 'black'}}
+                  onClick={() => handleReadMessage(item.id)}
+              >
+                <Typography variant="body2" sx={{color:'grey', fontStyle:'italic', fontSize:'x-small'}}>
+                  [to: {item.receiver}]
+                </Typography>
+                <Typography variant="body2">
+                  {item.sender}
+                </Typography>
+                <Typography variant="body2">
+                  {item.subject}
+                </Typography>
+                <Typography variant="body2">
+                  {item.message.substring(0, MAX_MESSAGE_DISPLAY_LENGTH) + item.message.length > MAX_MESSAGE_DISPLAY_LENGTH ? '...' : ''}
+                </Typography>
+                <Typography variant="body2" sx={{marginLeft:'auto'}}>
+                  {formatTimestamp(-(item.created_sec))}
+                </Typography>
+              </Grid>
+              { item.read_sec ? 
+                    <DraftsOutlinedIcon size="small" sx={{marginLeft:'auto', color:'grey'}} />
+                    : <MailOutlinedIcon size="small" sx={{marginLeft:'auto', color:'grey'}} />
+              }
+              <DeleteOutlinedIcon size="small" onClick={() => handleDeleteMessage(item.id)} />
             </Grid>
           )
         }
@@ -198,7 +333,7 @@ export default function UserMessages({onAdd, onDelete, onRefresh, onRead, onClos
     return (
       <Grid id='messages-details-wrapper' container direction="column" justifyContent="start" alignItems="start"
             sx={{width:'100%', padding:'0px 5px 0 5px'}} >
-        <Grid id='messages-details-toolbar' container direction="row" justifyContent="start" alignItems="center">
+        <Grid id='messages-details-toolbar' container direction="row" justifyContent="start" alignItems="center" sx={{width:'100%'}}>
           <Tooltip title='Select'>
             <Checkbox id='messages-check-all' size="small" checked={allSelected} onChange={() => handleAllSelected()} />
           </Tooltip>
@@ -207,7 +342,17 @@ export default function UserMessages({onAdd, onDelete, onRefresh, onRead, onClos
               <ReplayOutlinedIcon size="small" />
             </IconButton>
           </Tooltip>
-          <Button size="small" onClick={() => setNewMessage(true)} >Compose</Button>
+          <Tooltip title='Read'>
+            <IconButton aria-label="Read messages" size="small" onClick={handleReadSelected} >
+              <DraftsOutlinedIcon size="small" disabled={selectedMessages.length === 0}/>
+            </IconButton>
+          </Tooltip>
+          <Tooltip title='Delete'>
+            <IconButton aria-label="Delete messages" size="small" onClick={handleDeleteSelected} >
+              <DeleteOutlinedIcon size="small" disabled={selectedMessages.length === 0}/>
+            </IconButton>
+          </Tooltip>
+          <Button size="small" onClick={() => setNewMessage(true)} sx={{marginLeft:'auto'}}>Compose</Button>
         </Grid>
         {generateMessageLines()}
       </Grid>
@@ -223,18 +368,17 @@ export default function UserMessages({onAdd, onDelete, onRefresh, onRead, onClos
     }
   }
 
-  console.log('HACK: NEWMESSAGE',newMessage);
   return (
   <React.Fragment>
     <Grid id='messages-wrapper'
          sx={{position:'absolute', top:(workingRect.y+20)+'px', right:'20px', zIndex:2500}}
     >
-      <Card id="messages-content" ref={contentRef} sx={{minWidth:'400px', backgroundColor:'ghostwhite', border:'1px solid lightgrey', borderRadius:'20px'}} >
-        <CardHeader title="Manage Messages" />
+      <Card id="messages-content" ref={contentRef} sx={{minWidth:'600px', backgroundColor:'ghostwhite', border:'1px solid lightgrey', borderRadius:'20px'}} >
+        <CardHeader title="Your Messages" />
         <CardContent sx={{paddingTop:'0px', paddingBottom:'0px'}}>
           <Grid container direction="column" alignItems="start" justifyContent="start" wrap="nowrap"
                   spacing={1}
-                  sx={{overflowY:'scroll', paddingTop:'5px'}}
+                  sx={{minWidth:'250px', overflowY:'scroll', paddingTop:'5px'}}
           >
           {generateMessages()}
           </Grid>
@@ -247,7 +391,8 @@ export default function UserMessages({onAdd, onDelete, onRefresh, onRead, onClos
         </CardActions>
       </Card>
     </Grid>
-    { newMessage && <NewUserMessage onAdd={onAdd} onClose={() => setNewMessage(false)} />}
+    { newMessage && <UserMessage onAdd={(recip,subj,msg,onDone) => {onAdd(recip,subj,msg,onDone);onRefresh();} } onClose={() => setNewMessage(false)} />}
+    { readMessage !== null && <UserMessage curMessage={readMessage} onRead={(msgIds) => {handleUserReadMessage(msgIds)}} onClose={() => setReadMessage(null)} />}
   </React.Fragment>
   )
 }

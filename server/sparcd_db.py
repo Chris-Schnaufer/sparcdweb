@@ -1162,8 +1162,8 @@ class SPARCdDatabase:
 
         for one_row in res:
             cur_mess = Message(one_row[indexes['id']])
+            cur_mess.receiver = one_row[indexes['recipient']]
             cur_mess.sender = one_row[indexes['sender']]
-            cur_mess.receiver = receiver
             cur_mess.subject = one_row[indexes['subject']]
             cur_mess.message = one_row[indexes['message']]
             if one_row[indexes['priority']] in Priority:
