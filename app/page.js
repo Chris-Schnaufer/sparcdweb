@@ -24,10 +24,11 @@ import TitleBar from './components/TitleBar';
 import UploadManage from './UploadManage';
 import UploadEdit from './UploadEdit';
 import UserActions from './components/userActions';
+import UserMessages from './components/UserMessages';
 import { LoginCheck, LoginValidContext, DefaultLoginValid } from './checkLogin';
 import { AddMessageContext, BaseURLContext, CollectionsInfoContext, DisableIdleCheckFuncContext, TokenExpiredFuncContext, 
          LocationsInfoContext, MobileDeviceContext, NarrowWindowContext, SandboxInfoContext, SizeContext, SpeciesInfoContext, 
-         SpeciesOtherNamesContext, TokenContext, UploadEditContext, UserNameContext,
+         SpeciesOtherNamesContext, TokenContext, UploadEditContext, UserMessageContext, UserNameContext,
          UserSettingsContext } from './serverInfo';
 import * as utils from './utils';
 
@@ -152,8 +153,11 @@ export default function Home() {
   const [dbRemember, setDbRemember] = React.useState(false);
   const [dbUser, setDbUser] = React.useState('');
   const [dbURL, setDbURL] = React.useState('');
+  // TODO: Change these to display enumeration
   const [displayAdminSettings, setDisplayAdminSettings] =  React.useState(false); // Admin settings editing
+  const [displayMessages, setDisplayMessages] = React.useState(false);            // Display messages
   const [displayOwnerSettings, setDisplayOwnerSettings] =  React.useState(false); // Collection owner settings editing
+  // TODO: end of above
   const [editing, setEditing] = React.useState(false);
   const [isNarrow, setIsNarrow] = React.useState(null);
   const [lastIdleTimeoutId, setLastIdleTimeoutId] = React.useState(null);   // The last timeout ID we set for checking the idle
@@ -185,6 +189,7 @@ export default function Home() {
   const [speciesOtherInfo, setSpeciesOtherInfo] = React.useState(null);
   const [userLoginAgain, setUserLoginAgain] = React.useState(false);      // The user needs to log in again
   const [userIdleTimedOut, setUserIdleTimedOut] = React.useState(false);  // The user idles out and needs to log in again
+  const [userMessages, setUserMessages] =  React.useState({count:0, messages:null});
   const [userSettings, setUserSettings] =  React.useState(defaultUserSettings);
 
   const loginValidStates = loginValid;
@@ -775,7 +780,8 @@ export default function Home() {
             curSettings['sandersonOutput'] = !curSettings['sandersonOutput'] ? false : 
                                                       typeof(curSettings['sandersonOutput']) === 'boolean' ? curSettings['sandersonOutput'] :
                                                                               curSettings['sandersonOutput'].toLowerCase() === 'true';
-            setUserSettings({name:respData['name'], settings:curSettings});
+            setUserSettings({name:respData.name, settings:curSettings});
+            setUserMessages({count:respData.messageCount ? respData.messageCount : 0, messages:null, loading: false})
 
             setLoggedIn(true);
             setLastToken(loginToken);
@@ -1126,7 +1132,47 @@ export default function Home() {
       console.log('Settings Unknown Error: ',err);
       addMessage(Level.Error, 'An unknown problem ocurred while saving your settings');
     }
-  }, [addMessage, lastToken, serverURL, setUserSettings, userSettings]);
+  }, [addMessage, lastToken, serverURL, setUserLoginAgain, setUserSettings, userSettings]);
+
+  /**
+   * Fetches the messages from the server
+   * @function
+   */
+  const handleFetchMessages = React.useCallback(() => {
+    setUserMessages({...userMessages,...{loading:true}});
+
+    const messagesUrl =  serverURL + '/messageGet?t=' + encodeURIComponent(lastToken)
+    try {
+      const resp = fetch(messagesUrl, {
+        method: 'GET'
+      }).then(async (resp) => {
+            if (resp.ok) {
+              return resp.json();
+            } else {
+              if (resp.status === 401) {
+                // User needs to log in again
+                setUserLoginAgain(true);
+              }
+              throw new Error(`Failed to get messages: ${resp.status}`, {cause:resp});
+            }
+          })
+        .then((respData) => {
+          // Save response data
+          if (respData.success) {
+            setUserMessages({count:respData.messages.length, messages:respData.messages, loading:false});
+          } else {
+            addMessage(Level.Warning, respData.message);
+          }
+        })
+        .catch((err) => {
+          console.log('Fetch Message Error: ',err);
+          addMessage(Level.Error, 'A problem ocurred while fetching messages');
+      });
+    } catch (error) {
+      console.log('Message Fetch Unknown Error: ',error);
+      addMessage(Level.Error, 'An unknown problem ocurred while fetching messages');
+    }
+  }, [addMessage, lastToken, serverURL, setUserLoginAgain, setUserMessages]);
 
   /**
    * Sets the remember login information flag to true or false (is it truthy, or not?)
@@ -1348,10 +1394,19 @@ export default function Home() {
           <TokenContext.Provider value={createNewInstance ? null : lastToken}>
           <AddMessageContext.Provider value={addMessage}>
           <CollectionsInfoContext.Provider value={collectionInfo}>
+          <UserMessageContext.Provider value={userMessages}>
             <Grid id='sparcd-wrapper' container direction="row" alignItems="start" justifyContent="start" sx={{minWidth:'100vw',minHeight:'100vh'}}>
-              <TitleBar searchTitle={curSearchTitle} onSearch={handleSearch} onSettings={loggedIn ? handleSettings : null}
-                        onLogout={handleLogout} size={narrowWindow?"small":"normal"} 
-                        breadcrumbs={breadcrumbs} onBreadcrumb={restoreBreadcrumb} onAdminSettings={handleAdminSettings} onOwnerSettings={handleOwnerSettings}/>
+              <TitleBar searchTitle={curSearchTitle}
+                        size={narrowWindow?"small":"normal"} 
+                        onSearch={handleSearch}
+                        onSettings={loggedIn ? handleSettings : null}
+                        onLogout={handleLogout}
+                        breadcrumbs={breadcrumbs} 
+                        onBreadcrumb={restoreBreadcrumb}
+                        onAdminSettings={handleAdminSettings}
+                        onOwnerSettings={handleOwnerSettings}
+                        onMessages={() => {setDisplayMessages(true); handleFetchMessages();} }
+              />
               <Box id='sparcd-middle-wrapper' sx={{overflow:"scroll"}} >
                 {!curLoggedIn || createNewInstance === true || repairInstance === true ? 
                   <LoginValidContext.Provider value={loginValidStates}>
@@ -1366,6 +1421,7 @@ export default function Home() {
                 </Box>
               <FooterBar />
             </Grid>
+          </UserMessageContext.Provider>
           </CollectionsInfoContext.Provider>
           </AddMessageContext.Provider>
           </TokenContext.Provider>
@@ -1409,12 +1465,17 @@ export default function Home() {
                 </CollectionsInfoContext.Provider>
                 </TokenContext.Provider>
           }
+          { displayMessages && 
+              <UserMessageContext.Provider value={userMessages} >
+                <UserMessages onAdd={() => {}} onDelete={() => {}} onRefresh={handleFetchMessages} onRead={() => {}} onClose={() => setDisplayMessages(false)} />
+              </UserMessageContext.Provider>
+          }
           { (createNewInstance === true || repairInstance === true) &&
-            <BaseURLContext.Provider value={serverURL}>
-            <AddMessageContext.Provider value={addMessage}>
-              <NewInstallation token={lastToken} repair={repairInstance} onCancel={handleCancelNewInstallation} />
-            </AddMessageContext.Provider>
-            </BaseURLContext.Provider>
+              <BaseURLContext.Provider value={serverURL}>
+              <AddMessageContext.Provider value={addMessage}>
+                <NewInstallation token={lastToken} repair={repairInstance} onCancel={handleCancelNewInstallation} />
+              </AddMessageContext.Provider>
+              </BaseURLContext.Provider>
         }
           { // Needs to be next to last (allow messages to overlay)
             (userLoginAgain === true || userIdleTimedOut === true) && 

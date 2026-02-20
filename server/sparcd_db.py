@@ -125,7 +125,7 @@ class SPARCdDatabase:
             A dict containing the user's name, email, settings, and admin level.
         """
         res = self._db.get_user_by_name(s3_id, username)
-
+        print('HACK:  GETUSER: RES: ', res, flush=True)
         if res and len(res) >= 4:
             user_info = UserInfo(res[0], res[4])  # Name and admin
             user_info.email = res[1]
@@ -1194,3 +1194,13 @@ class SPARCdDatabase:
             ids: a tuple of the IDs of the messages to mark as read
         """
         self._db.messages_are_deleted(s3_id, receiver, ids)
+
+    def message_count(self, s3_id: str, receiver: str) -> int:
+        """ Returns the number of messages for this user
+        Arguments:
+            s3_id: the ID of the S3 instance
+            username: the name of the recipient
+        Return:
+            The number of messages for the user
+        """
+        self._db.message_count(s3_id, receiver)

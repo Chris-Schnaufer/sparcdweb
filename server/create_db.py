@@ -96,7 +96,7 @@ def build_database(path: str, admin_info: tuple=None) -> None:
     """
     # Loop through and create all the database objects
     stmts = ('CREATE TABLE users(id INTEGER PRIMARY KEY ASC, ' \
-                'name TEXT UNIQUE NOT NULL, ' \
+                'name TEXT NOT NULL, ' \
                 'email TEXT DEFAULT NULL, ' \
                 'settings TEXT DEFAULT "{}", ' \
                 'species TEXT default "{}", ' \

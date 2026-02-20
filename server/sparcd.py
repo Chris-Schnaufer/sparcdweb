@@ -470,6 +470,7 @@ def login_token():
                    'name': login_info.name,
                    'settings': \
                         sdu.secure_user_settings(login_info.settings|{'email':login_info.email}),
+                    'messageCount': db.message_count(hash2str(login_info.url), login_info.name),
                     'newInstance': False,
                })
 
@@ -3918,7 +3919,7 @@ def message_add():
     return json.dumps({'success': True, 'message': 'All messages stored'})
 
 
-@app.route('/messageGet', methods = ['POST'])
+@app.route('/messageGet', methods = ['GET'])
 @cross_origin(origins="http://localhost:3000")#, supports_credentials=True)
 def message_get():
     """ Gets messages for the user

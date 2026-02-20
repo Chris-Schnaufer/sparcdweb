@@ -2206,8 +2206,9 @@ class SPDSQLite:
         query = 'SELECT id, sender, subject, message, priority, ' \
                         '(strftime("%s", "now")-timestamp) as elapsed_sec,' \
                         '(strftime("%s", "now")-read_timestamp) as read_sec ' \
-                    'WHERE s3_id=? AND deleted=0 AND ' + \
-                        '(receiver=? OR receiver="admin")' if admin is True else 'receiver=?'
+                    'FROM messages ' \
+                    'WHERE s3_id=? AND deleted=0 AND '
+        query += '(receiver=? OR receiver="admin")' if admin is True else 'receiver=?'
         cursor.execute(query, (s3_id, username))
 
         res = cursor.fetchall()
@@ -2260,3 +2261,34 @@ class SPDSQLite:
 
         self._conn.commit()
         cursor.close()
+
+    def message_count(self, s3_id: str, username: str) -> Optional[int]:
+        """ Returns the number of messages for a recipient
+        Arguments:
+            s3_id: the ID of the S3 instance
+            username: the name of the recipient
+        Return:
+            Returns the number of messages for a recipient
+        """
+        if self._conn is None:
+            raise RuntimeError('Attempting to count messages in the database before ' \
+                                                                                    'connecting')
+
+        cursor = self._conn.cursor()
+        cursor.execute('SELECT count(1) FROM messages WHERE s3_id=? AND  receiver=?',
+                                                                                (s3_id, username))
+        # Get the count
+        res = cursor.fetchone()
+        cursor.close()
+
+        # Make sure we have something
+        if not res or len(res) <= 0:
+            return None
+
+        # Return the best integer answer
+        try:
+            return int(res[0])
+        except ValueError:
+            pass
+
+        return 0
