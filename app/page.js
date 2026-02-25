@@ -335,6 +335,8 @@ export default function Home() {
           } else {
             loginStore.clearLoginInfo();
           }
+          // Check for messages
+          window.setTimeout(() => handleFetchMessages(newToken), 100);
           // Load collections if it's not a new instance
           if (!newInstance && !repairServer) {
             window.setTimeout(() => loginAfterActions(newToken), 500);
@@ -1138,10 +1140,10 @@ export default function Home() {
    * Fetches the messages from the server
    * @function
    */
-  const handleFetchMessages = React.useCallback(() => {
+  const handleFetchMessages = React.useCallback((loginToken) => {
     setUserMessages({...userMessages,...{loading:true}});
 
-    const messagesUrl =  serverURL + '/messageGet?t=' + encodeURIComponent(lastToken)
+    const messagesUrl =  serverURL + '/messageGet?t=' + encodeURIComponent(loginToken)
     try {
       const resp = fetch(messagesUrl, {
         method: 'GET'
@@ -1387,7 +1389,7 @@ export default function Home() {
   // Check for messages if we haven't already
   React.useEffect(() => {
     if (userMessages.count === null && !userMessages.loading && lastToken) {
-      window.setTimeout(() => handleFetchMessages(), 100);
+      window.setTimeout(() => handleFetchMessages(lastToken), 100);
     }
   }, [lastToken, userMessages]);
 
@@ -1540,7 +1542,7 @@ export default function Home() {
                         onBreadcrumb={restoreBreadcrumb}
                         onAdminSettings={handleAdminSettings}
                         onOwnerSettings={handleOwnerSettings}
-                        onMessages={() => {setDisplayMessages(true); handleFetchMessages();} }
+                        onMessages={() => {setDisplayMessages(true); handleFetchMessages(lastToken);} }
               />
               <Box id='sparcd-middle-wrapper' sx={{overflow:"scroll"}} >
                 {!curLoggedIn || createNewInstance === true || repairInstance === true ? 
@@ -1604,7 +1606,7 @@ export default function Home() {
               <UserMessageContext.Provider value={userMessages} >
                 <UserMessages onAdd={(recip,subj,msg,onDone) => {handleMewMessage(recip,subj,msg,onDone)}}
                               onDelete={(msgIds) => {handleDeleteMessages(msgIds)}}
-                              onRefresh={handleFetchMessages}
+                              onRefresh={() => handleFetchMessages(lastToken)}
                               onRead={(msgIds) => {handleReadMessages(msgIds)}}
                               onClose={() => setDisplayMessages(false)}
                 />

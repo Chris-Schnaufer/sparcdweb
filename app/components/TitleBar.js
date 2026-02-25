@@ -174,7 +174,7 @@ export default function TitleBar({searchTitle, breadcrumbs, size, onSearch, onBr
                 }
                 { loginToken !== null && 
                   <Tooltip title='Messages'>
-                    <IconButton fontSize="small" onClick={() => onMessages()}
+                    <IconButton fontSize="small" onClick={() => onMessages(loginToken)}
                                 sx={{ ...(userMessages.count > 0 ? theme.palette.have_messages : {}) }}
                       >
                       <MailOutlinedIcon fontSize="small"/>
@@ -192,12 +192,12 @@ export default function TitleBar({searchTitle, breadcrumbs, size, onSearch, onBr
             </Grid>
           </Grid>
           <Grid size={{xs:12}} style={{paddingTop:'0', visibility:'visible'}} >
-            <Typography sx={{fontSize:"xx-small"}}>
+            <Typography sx={{fontSize:"small", fontWeight:'bold'}}>
             { breadcrumbs && breadcrumbs.length > 0 ? 
                 breadcrumbs.map((item, idx) => {
                               return (<React.Fragment key={"breadcrumb-" + idx + '-' + item.name} >
                                         &nbsp;
-                                        <Link component="button" underline="hover" sx={{fontSize:'larger'}}
+                                        <Link component="button" underline="hover" sx={{}}
                                               onClick={() => handleNav(item)}
                                         >
                                           {item.name}{idx < (breadcrumbs.length -1) ? ' / ' : ' '}

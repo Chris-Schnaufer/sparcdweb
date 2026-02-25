@@ -308,29 +308,6 @@ def sanimalbackground():
                                'sanimalBackground.JPG', mimetype='image/jpeg')
 
 
-## Disable this, only serve files like this explicitly
-#@app.route('/<string:filename>', methods = ['GET'])
-#@cross_origin(origins="http://localhost:3000", supports_credentials=True)
-#def sendfile(filename: str):
-#    """Return root files"""
-#    print("RETURN FILENAME:",filename,flush=True)
-#
-#    # Check that the file is allowed
-#    if not os.path.splitext(filename)[1].lower() in REQEST_ALLOWED_FILE_EXTENSIONS:
-#        return 'Resource not found', 404
-#
-#    fullpath = os.path.realpath(os.path.join(RESOURCE_START_PATH, filename.lstrip('/')))
-#    print("HACK:   FILE PATH:", fullpath,flush=True)
-#
-#    # Make sure we're only serving something that's in the same location that we are in and that
-#    # it exists
-#    if not fullpath or not os.path.exists(fullpath) or not \
-#                                                        fullpath.startswith(RESOURCE_START_PATH):
-#        return 'Resource not found', 404
-#
-#    return send_file(fullpath)
-
-
 @app.route('/_next/static/<path:path_fagment>', methods = ['GET'])
 @cross_origin(origins="http://localhost:3000", supports_credentials=True)
 def sendnextfile(path_fagment: str):

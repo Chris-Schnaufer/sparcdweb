@@ -19,11 +19,21 @@ import { useTheme } from '@mui/material/styles';
 
 import { Editor } from '@tinymce/tinymce-react';
 
+// Different types of messages
+export const MESSAGE_TYPE = {
+  None: -1,
+  New: 0,
+  Read: 1,
+  Reply: 2,
+  ReplyAll: 2
+};
+
 /**
  * Provides the UI for a user messages. If curMessage is set, messages are read-only. Otherwise
  * it's assumed that a message is being added
  * @function
  * @param {object} {curMessage} An array of messages to display. Control is read-only
+ * @param {boolean} {messageType} The MESSAGE_TYPE the current message is
  * @param {function} {onRead} Called to indicate a message has been read
  * @param {function} {onAdd} Called to add a new message. Use when creating a new message
  * @param {function} {onReply} Called to reply to an existing message
@@ -31,21 +41,35 @@ import { Editor } from '@tinymce/tinymce-react';
  * @param {function} onClose Called when the user is finished
  * @returns {object} The UI for managing messages
  */
-export default function UserMessage({curMessage, onRead, onAdd, onReply, onReplyAll, onClose}) {
+export default function UserMessage({curMessage, messageType, onRead, onAdd, onReply, onReplyAll, onClose}) {
   const theme = useTheme();
   const recipientRef = React.useRef(null);
   const subjectRef = React.useRef(null);
   const editorRef = React.useRef(null);
-  const [curReadMessage, setCurReadMessage] = React.useState(curMessage ? curMessage[0] : null); // Current message being read
-  const [curMessageIndex, setCurMessageIndex] = React.useState(curMessage ? 0 : -1);
-  const [curRecipient, setCurRecipient] = React.useState(curMessage ? curMessage[0].sender : ''); // Controlled textfield
+  const [curReadMessage, setCurReadMessage] = React.useState(messageType !== MESSAGE_TYPE.New ? curMessage[0] : null); // Current message being read
+  const [curMessageIndex, setCurMessageIndex] = React.useState(messageType !== MESSAGE_TYPE.New ? 0 : -1);
+  const [curRecipient, setCurRecipient] = React.useState(''); // Controlled textfield
   const [curSubject, setCurSubject] = React.useState(curMessage ? curMessage[0].subject : '');    // Controlled textfield
   const [messageError, setMessageError] = React.useState(false);    // Error with new message
   const [readMessageIds, setReadMessageIds] = React.useState([]);
   const [recipientError, setRecipientError] = React.useState(false);// Error with new recipient
   const [subjectError, setSubjectError] = React.useState(false);    // Error with new subject
 
-  const readOnly = !!curMessage;
+  // Determine the correct recipient
+  React.useLayoutEffect(() => {
+    if (!curMessage) {
+      return;
+    }
+
+    if (messageType === MESSAGE_TYPE.Reply) {
+      setCurRecipient(curMessage[0].sender)
+    } else if (messageType === MESSAGE_TYPE.ReplyAll) {
+      const allRecipient = curMessage[0].receiver.split(',').filter((item) => item.trim().toLowerCase() !== curMessage[0].sender.trim().toLowerCase())
+      setCurRecipient([curMessage[0].sender, ...allRecipient].join(', '));
+    } else {
+      setCurRecipient(curMessage[0].receiver);
+    }
+  }, [curMessage, setCurRecipient]);
 
   // Set the first message as read
   React.useEffect(() => {
@@ -55,7 +79,7 @@ export default function UserMessage({curMessage, onRead, onAdd, onReply, onReply
         onRead([curMessage[0].id]);
       }
     }
-  }, [curMessage, readMessageIds, setReadMessageIds])
+  }, [curMessage, messageType, readMessageIds, setReadMessageIds])
 
   /**
    * Adds a new message
@@ -135,11 +159,11 @@ export default function UserMessage({curMessage, onRead, onAdd, onReply, onReply
       >
         <Grid id="new-message-fields" container direction="column" style={{backgroundColor:'ghostwhite', border:'1px solid grey', borderRadius:'15px', padding:'25px 10px'}}>
           <TextField id='new-message-recepient'
-                      required={readOnly ? false : true}
+                      required={messageType === MESSAGE_TYPE.Read ? false : true}
                       error={recipientError}
                       inputRef={recipientRef}
-                      label={readOnly ? 'From' : 'To (comma seperated list of names. Send to admin to notify administrators)'}
-                      disabled={readOnly}
+                      label={messageType === MESSAGE_TYPE.Read ? 'From' : 'To (comma seperated list of names. Send to admin to notify administrators)'}
+                      disabled={messageType === MESSAGE_TYPE.Read}
                       fullWidth
                       size="small"
                       variant="standard"
@@ -150,11 +174,11 @@ export default function UserMessage({curMessage, onRead, onAdd, onReply, onReply
                       }}
                       sx={{marginBottom:'20px'}} />
           <TextField id='new-message-subject'
-                      required={readOnly ? false : true}
+                      required={messageType === MESSAGE_TYPE.Read ? false : true}
                       error={subjectError}
                       inputRef={subjectRef}
                       label='Subject'
-                      disabled={readOnly}
+                      disabled={messageType === MESSAGE_TYPE.Read}
                       fullWidth 
                       size="small"
                       variant="standard" 
@@ -167,14 +191,15 @@ export default function UserMessage({curMessage, onRead, onAdd, onReply, onReply
           <Editor
             apiKey="himih4f89itmc44j6vzbjju2kavymhqdiax1u3rpvul7cj5s"
             onInit={(evt, editor) => editorRef.current = editor}
-            initialValue={readOnly ? curReadMessage.message : undefined}
-            disabled={readOnly}
+            initialValue={curReadMessage ? curReadMessage.message : undefined}
+            disabled={messageType === MESSAGE_TYPE.Read}
             init={{
               promotion: false,
               branding: false,
               height: 200,
               menubar: false,
               elementpath: false,
+              nonEditable_class: 'mceNonEditable',
               plugins: [
                 'anchor', 'autolink', 'charmap', 'emoticons', 'link', 'lists',
                 'searchreplace', 'table', 'wordcount',
@@ -187,7 +212,7 @@ export default function UserMessage({curMessage, onRead, onAdd, onReply, onReply
             }}
           />
           <Grid container direction="row" alignItems="center" justifyContent="space-between" sx={{paddingTop:'15px'}}>
-            { readOnly && 
+            { messageType === MESSAGE_TYPE.Read && 
               <Grid container direction="row">
                 <Button size="small" disabled={!curMessage || curMessage.length <= 1 || curMessageIndex === 0} onClick={handlePrevMessage}>&lt;</Button>
                 <Typography variant="body2" sx={{color:curMessage.length === 1 ? 'lightgrey':'black' }}>
@@ -196,7 +221,7 @@ export default function UserMessage({curMessage, onRead, onAdd, onReply, onReply
                 <Button size="small" disabled={!curMessage || curMessage.length <= 1 || curMessageIndex === curMessage.length-1} onClick={handleNextMessage}>&gt;</Button>
               </Grid>
             }
-            { readOnly && 
+            { messageType === MESSAGE_TYPE.Read && 
               <div style={{leftMargin:'auto'}}>
                 <Tooltip title='Reply'>
                   <IconButton aria-label="Reply messages" onClick={() => onReply(curReadMessage.id)} >
@@ -210,8 +235,8 @@ export default function UserMessage({curMessage, onRead, onAdd, onReply, onReply
                 </Tooltip>
               </div>
             }
-            { !readOnly && <Button variant="contained" onClick={() => onSend()}>Send</Button> }
-            <Button variant="contained" onClick={() => onClose()}>{readOnly ? "Done" : "Close"}</Button>
+            { messageType !== MESSAGE_TYPE.Read && <Button variant="contained" onClick={() => onSend()}>Send</Button> }
+            <Button variant="contained" onClick={() => onClose()}>{messageType === MESSAGE_TYPE.Read ? "Done" : "Close"}</Button>
           </Grid>
         </Grid>
       </Grid>

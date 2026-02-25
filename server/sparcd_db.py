@@ -125,7 +125,6 @@ class SPARCdDatabase:
             A dict containing the user's name, email, settings, and admin level.
         """
         res = self._db.get_user_by_name(s3_id, username)
-        print('HACK:  GETUSER: RES: ', res, flush=True)
         if res and len(res) >= 4:
             user_info = UserInfo(res[0], res[4])  # Name and admin
             user_info.email = res[1]
