@@ -674,13 +674,16 @@ def species():
                                             hash2str(s3_url)+'-'+TEMP_SPECIES_FILE_NAME,
                                             s3_url, user_info.name, lambda: get_password(token, db))
 
-    keyed_species = {one_species['scientificName']:one_species for one_species in cur_species}
+    if cur_species:
+        keyed_species = {one_species['scientificName']:one_species for one_species in cur_species}
+    else:
+        keyed_species = {}
     keyed_user = {one_species['scientificName']:one_species for one_species in user_species}
 
     # Check the easy path first
     updated = False
     if not user_species:
-        user_species = cur_species
+        user_species = cur_species if cur_species else {}
     else:
         # Try to find meaningfull differences
         all_keys = tuple(set(keyed_species.keys())|set(keyed_user.keys()))
@@ -1394,6 +1397,8 @@ def sandbox_stats():
     # Get all the collections so we can parse them for our stats
     all_collections = sdc.load_collections(db, hash2str(s3_url), bool(user_info.admin), s3_url,
                                                     user_info.name, lambda: get_password(token, db))
+    if not all_collections:
+        return json.dumps([])
 
     now_dt = datetime.datetime.today()
     month_diff = now_dt - relativedelta(months=1) - now_dt

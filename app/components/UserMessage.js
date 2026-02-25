@@ -9,7 +9,11 @@ import CardActions from '@mui/material/CardActions';
 import CardContent from '@mui/material/CardContent';
 import CardHeader from '@mui/material/CardHeader';
 import Grid from '@mui/material/Grid';
+import IconButton from '@mui/material/IconButton';
+import ReplyIcon from '@mui/icons-material/Reply';
+import ReplyAllIcon from '@mui/icons-material/ReplyAll';
 import TextField from '@mui/material/TextField';
+import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 
@@ -19,13 +23,15 @@ import { Editor } from '@tinymce/tinymce-react';
  * Provides the UI for a user messages. If curMessage is set, messages are read-only. Otherwise
  * it's assumed that a message is being added
  * @function
- * @param {object} {curMessage} An array of messages to display
+ * @param {object} {curMessage} An array of messages to display. Control is read-only
  * @param {function} {onRead} Called to indicate a message has been read
- * @param {function} {onAdd} Called to add a new message 
+ * @param {function} {onAdd} Called to add a new message. Use when creating a new message
+ * @param {function} {onReply} Called to reply to an existing message
+ * @param {function} {onReplyAll} Called to reply-all to an existing message
  * @param {function} onClose Called when the user is finished
  * @returns {object} The UI for managing messages
  */
-export default function UserMessage({curMessage, onRead, onAdd, onClose}) {
+export default function UserMessage({curMessage, onRead, onAdd, onReply, onReplyAll, onClose}) {
   const theme = useTheme();
   const recipientRef = React.useRef(null);
   const subjectRef = React.useRef(null);
@@ -184,9 +190,25 @@ export default function UserMessage({curMessage, onRead, onAdd, onClose}) {
             { readOnly && 
               <Grid container direction="row">
                 <Button size="small" disabled={!curMessage || curMessage.length <= 1 || curMessageIndex === 0} onClick={handlePrevMessage}>&lt;</Button>
-                <Typography variant="body2">{curMessageIndex + 1} of {curMessage ? curMessage.length : "?"}</Typography>
+                <Typography variant="body2" sx={{color:curMessage.length === 1 ? 'lightgrey':'black' }}>
+                  {curMessageIndex + 1} of {curMessage ? curMessage.length : "?"}
+                </Typography>
                 <Button size="small" disabled={!curMessage || curMessage.length <= 1 || curMessageIndex === curMessage.length-1} onClick={handleNextMessage}>&gt;</Button>
               </Grid>
+            }
+            { readOnly && 
+              <div style={{leftMargin:'auto'}}>
+                <Tooltip title='Reply'>
+                  <IconButton aria-label="Reply messages" onClick={() => onReply(curReadMessage.id)} >
+                    <ReplyIcon fontSize="small"/>
+                  </IconButton>
+                </Tooltip>
+                <Tooltip title='Reply to all'>
+                  <IconButton aria-label="Reply all messages" onClick={() => onReplyAll(curReadMessage.id)} >
+                    <ReplyAllIcon fontSize="small"/>
+                  </IconButton>
+                </Tooltip>
+              </div>
             }
             { !readOnly && <Button variant="contained" onClick={() => onSend()}>Send</Button> }
             <Button variant="contained" onClick={() => onClose()}>{readOnly ? "Done" : "Close"}</Button>

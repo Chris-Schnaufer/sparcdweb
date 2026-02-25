@@ -15,6 +15,9 @@ import DraftsOutlinedIcon from '@mui/icons-material/DraftsOutlined';
 import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton';
 import MailOutlinedIcon from '@mui/icons-material/MailOutlined';
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 import ReplayOutlinedIcon from '@mui/icons-material/ReplayOutlined';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
@@ -42,6 +45,8 @@ export default function UserMessages({onAdd, onDelete, onRefresh, onRead, onClos
   const userMessages = React.useContext(UserMessageContext); // The user's messages
   const contentRef = React.useRef();
   const [allSelected, setAllSelected] = React.useState(false);  // When all messages are selected
+  const [menuAnchor, setMenuAnchor] = React.useState(null);
+  const [activeMessageId, setActiveMessageId] = React.useState(null);
   const [readMessage, setReadMessage] = React.useState(null);   // Contains the ID of the message to read
   const [newMessage, setNewMessage] = React.useState(false);    // User wants to compose a message
   const [selectedMessages, setSelectedMessages] = React.useState([]); // The selected messages
@@ -252,6 +257,51 @@ export default function UserMessages({onAdd, onDelete, onRefresh, onRead, onClos
   }
 
   /**
+   * Handle closing the more menu
+   * @function
+   */
+  const handleMoreClose = React.useCallback(() => {
+    setMenuAnchor(null);
+    setActiveMessageId(null);
+  }, [setActiveMessageId, setMenuAnchor]);
+
+  /**
+   * Handles the user wanting to reply to a message
+   * @function
+   * @param {string} messageId The ID of the message to reply to
+   */
+  const handleMessageReply = React.useCallback((messageId) => {
+    console.log('HACK: REPLY',messageId);
+  }, []);
+
+  /**
+   * Handles the user wanting to reply to all in a message
+   * @function
+   * @param {string} messageId The ID of the message to reply to
+   */
+  const handleMessageReplyAll = React.useCallback((messageId) => {
+    console.log('HACK: REPLY ALL',messageId);
+  }, []);
+
+  // Menu items for more button on each message
+  const moreMenuItems = [
+    {name: "Reply", action: handleMessageReply},
+    {name: "Reply All", action: handleMessageReplyAll},
+  ];
+
+  /**
+   * Generates the click handler for menu items
+   * @function
+   * @param {string} messageId The ID of the message for this menu
+   * @param {function} menuClickHandler The handler for the menu click
+   */
+  function generateMenuClick(messageId, menuClickHandler) {
+    let curId = '' + messageId;
+    console.log('HACK:  CURID:',curId);
+    return () => {menuClickHandler(curId);handleMoreClose();};
+  }
+
+  /**
    * Generated a line for each message (or blank ones)
    * @function
    */
@@ -299,23 +349,57 @@ export default function UserMessages({onAdd, onDelete, onRefresh, onRead, onClos
                 <Typography variant="body2">
                   {item.subject}
                 </Typography>
-                <Typography variant="body2">
-                  {item.message.substring(0, MAX_MESSAGE_DISPLAY_LENGTH) + item.message.length > MAX_MESSAGE_DISPLAY_LENGTH ? '...' : ''}
-                </Typography>
                 <Typography variant="body2" sx={{marginLeft:'auto'}}>
                   {formatTimestamp(-(item.created_sec))}
                 </Typography>
               </Grid>
               { item.read_sec ? 
-                    <DraftsOutlinedIcon size="small" sx={{marginLeft:'auto', color:'grey'}} />
-                    : <MailOutlinedIcon size="small" sx={{marginLeft:'auto', color:'grey'}} />
+                    <Tooltip title='Read'>
+                      <DraftsOutlinedIcon fontSize="small" sx={{marginLeft:'auto', color:'grey'}} />
+                    </Tooltip>
+                    : 
+                    <Tooltip title='Unread'>
+                      <MailOutlinedIcon fontSize="small" sx={{marginLeft:'auto', color:'grey'}} />
+                    </Tooltip>
               }
-              <DeleteOutlinedIcon size="small" onClick={() => handleDeleteMessage(item.id)} />
+              <Tooltip title='Delete this message'>
+                <IconButton aria-label="delete this message" onClick={() => handleDeleteMessage(item.id)} >
+                  <DeleteOutlinedIcon fontSize="small" />
+                </IconButton >
+              </Tooltip>
+              <div>
+                <Tooltip title='More options'>
+                  <IconButton aria-label="More options" onClick={(event) => {
+                              setMenuAnchor(event.currentTarget);
+                              setActiveMessageId(item.id);
+                            }} >
+                    <MoreVertIcon fontSize="small" />
+                  </IconButton>
+                </Tooltip>
+                <Menu id={"message-menu-"+idx} 
+                      MenuListProps={{'aria-labelledby': 'menu-button'}}
+                      anchorEl={menuAnchor}
+                      open={Boolean(menuAnchor) && activeMessageId === item.id}
+                      onClose={handleMoreClose}
+                >
+                {moreMenuItems.map((menuItem) => {
+                  const msgId = item.id;
+                  return (
+                    <MenuItem id={"message-more-menu-" + menuItem.name + '-' + idx}
+                              key={"message-more-menu-" + menuItem.name + '-' + idx}
+                              onClick={() => {menuItem.action(msgId);handleMoreClose();}}
+                    >
+                      {menuItem.name}
+                    </MenuItem>
+                  )})
+                }
+                </Menu>
+              </div>
             </Grid>
           )
         }
         { [...Array(remainCount).keys()].map((item, idx) => 
-            <Grid id={"message-details-" + idx} key={"message-details-" + idx} container direction="row" alignItems="center" justifyContent="start"
+            <Grid id={"message-details-fill-" + idx} key={"message-details-fill-" + idx} container direction="row" alignItems="center" justifyContent="start"
                   sx={{borderBottom:'1px solid rgb(0, 0, 0, 0.07)', width:'100%', minHeight:'1.5em'}}
             >
             </Grid>
@@ -338,18 +422,18 @@ export default function UserMessages({onAdd, onDelete, onRefresh, onRead, onClos
             <Checkbox id='messages-check-all' size="small" checked={allSelected} onChange={() => handleAllSelected()} />
           </Tooltip>
           <Tooltip title='Reload messages'>
-            <IconButton aria-label="reload messages" size="small" onClick={onRefresh} >
-              <ReplayOutlinedIcon size="small" />
+            <IconButton aria-label="reload messages" onClick={onRefresh} >
+              <ReplayOutlinedIcon fontSize="small" />
             </IconButton>
           </Tooltip>
           <Tooltip title='Read'>
-            <IconButton aria-label="Read messages" size="small" onClick={handleReadSelected} >
-              <DraftsOutlinedIcon size="small" disabled={selectedMessages.length === 0}/>
+            <IconButton aria-label="Read messages" onClick={handleReadSelected} >
+              <DraftsOutlinedIcon fontSize="small" disabled={selectedMessages.length === 0}/>
             </IconButton>
           </Tooltip>
           <Tooltip title='Delete'>
-            <IconButton aria-label="Delete messages" size="small" onClick={handleDeleteSelected} >
-              <DeleteOutlinedIcon size="small" disabled={selectedMessages.length === 0}/>
+            <IconButton aria-label="Delete messages" onClick={handleDeleteSelected} >
+              <DeleteOutlinedIcon fontSize="small" disabled={selectedMessages.length === 0}/>
             </IconButton>
           </Tooltip>
           <Button size="small" onClick={() => setNewMessage(true)} sx={{marginLeft:'auto'}}>Compose</Button>
@@ -371,9 +455,9 @@ export default function UserMessages({onAdd, onDelete, onRefresh, onRead, onClos
   return (
   <React.Fragment>
     <Grid id='messages-wrapper'
-         sx={{position:'absolute', top:(workingRect.y+20)+'px', right:'20px', zIndex:2500}}
+         sx={{position:'absolute', top:(workingRect.y+20)+'px', right:'20px'}}
     >
-      <Card id="messages-content" ref={contentRef} sx={{minWidth:'600px', backgroundColor:'ghostwhite', border:'1px solid lightgrey', borderRadius:'20px'}} >
+      <Card id="messages-content" ref={contentRef} sx={{minWidth:'700px', backgroundColor:'ghostwhite', border:'1px solid lightgrey', borderRadius:'20px'}} >
         <CardHeader title="Your Messages" />
         <CardContent sx={{paddingTop:'0px', paddingBottom:'0px'}}>
           <Grid container direction="column" alignItems="start" justifyContent="start" wrap="nowrap"
@@ -392,7 +476,13 @@ export default function UserMessages({onAdd, onDelete, onRefresh, onRead, onClos
       </Card>
     </Grid>
     { newMessage && <UserMessage onAdd={(recip,subj,msg,onDone) => {onAdd(recip,subj,msg,onDone);onRefresh();} } onClose={() => setNewMessage(false)} />}
-    { readMessage !== null && <UserMessage curMessage={readMessage} onRead={(msgIds) => {handleUserReadMessage(msgIds)}} onClose={() => setReadMessage(null)} />}
+    { readMessage !== null && 
+        <UserMessage curMessage={readMessage}
+                      onRead={(msgIds) => {handleUserReadMessage(msgIds)}}
+                      onReply={(msgId) => handleMessageReply(msgId)}
+                      onReplyAll={(msgId) =>handleMessageReplyAll(msgId)}
+                      onClose={() => setReadMessage(null)} />
+    }
   </React.Fragment>
   )
 }

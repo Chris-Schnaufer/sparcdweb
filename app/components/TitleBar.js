@@ -174,7 +174,7 @@ export default function TitleBar({searchTitle, breadcrumbs, size, onSearch, onBr
                 }
                 { loginToken !== null && 
                   <Tooltip title='Messages'>
-                    <IconButton size="small" onClick={() => onMessages()}
+                    <IconButton fontSize="small" onClick={() => onMessages()}
                                 sx={{ ...(userMessages.count > 0 ? theme.palette.have_messages : {}) }}
                       >
                       <MailOutlinedIcon fontSize="small"/>

@@ -189,7 +189,7 @@ export default function Home() {
   const [speciesOtherInfo, setSpeciesOtherInfo] = React.useState(null);
   const [userLoginAgain, setUserLoginAgain] = React.useState(false);      // The user needs to log in again
   const [userIdleTimedOut, setUserIdleTimedOut] = React.useState(false);  // The user idles out and needs to log in again
-  const [userMessages, setUserMessages] =  React.useState({count:0, messages:null});
+  const [userMessages, setUserMessages] =  React.useState({count:null, messages:null});
   const [userSettings, setUserSettings] =  React.useState(defaultUserSettings);
 
   const loginValidStates = loginValid;
@@ -1383,6 +1383,13 @@ export default function Home() {
       setMobileDeviceChecked(true);
     }
   }
+
+  // Check for messages if we haven't already
+  React.useEffect(() => {
+    if (userMessages.count === null && !userMessages.loading && lastToken) {
+      window.setTimeout(() => handleFetchMessages(), 100);
+    }
+  }, [lastToken, userMessages]);
 
   /**
    * Returns the UI components for the specified action

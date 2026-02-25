@@ -133,7 +133,7 @@ export default function LandingUpload({loadingSandbox, onChange}) {
                   sx={{padding:'3px 0px', width:'100%', backgroundColor: row_index & 1 ? "transparent" : "rgb(0,0,0,0.05)"}}
             >
               <Tooltip title="Incomplete upload" placement="left" sx={{paddingLeft:'5px'}}>
-                <PriorityHighOutlinedIcon size="small" sx={{color:"sandybrown"}} />
+                <PriorityHighOutlinedIcon fontSize="small" sx={{color:"sandybrown"}} />
               </Tooltip>
               <Typography variant="body" >
                 {up_obj.name}
@@ -149,7 +149,7 @@ export default function LandingUpload({loadingSandbox, onChange}) {
                           </React.Fragment>
                         }
               >
-                <InfoOutlinedIcon size="small" sx={{color:"black", paddingTop:"3px", marginLeft:'auto'}} />
+                <InfoOutlinedIcon fontSize="small" sx={{color:"black", paddingTop:"3px", marginLeft:'auto'}} />
               </Tooltip>
               <Tooltip placement="left" title="Repair this upload" style={{marginLeft:"3px"}} >
                 <CloudUploadOutlinedIcon
