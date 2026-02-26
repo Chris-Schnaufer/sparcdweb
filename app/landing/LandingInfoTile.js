@@ -1,0 +1,33 @@
+'use client'
+
+/** @module landing/LandingInfoTile */
+
+import * as React from 'react';
+import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
+import Grid from '@mui/material/Grid';
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
+import PriorityHighOutlinedIcon from '@mui/icons-material/PriorityHighOutlined';
+import Tooltip from '@mui/material/Tooltip';
+import Typography from '@mui/material/Typography';
+import { useTheme } from '@mui/material/styles';
+
+/**
+ * Returns the UI for information tiles for the landing page
+ * @function
+ * @returns {object} The rendered UI
+ */
+export default function LandingInfoTile({title, details}) {
+  const theme = useTheme();
+
+  return (
+    <Grid  container direction="column" alignItems="center" justifyContent="center" columnSpacing={1}
+            sx={{background:'rgb(155, 189, 217, 0.3)', border:'2px solid rgb(122, 155, 196, 0.25)', borderRadius:'13px', padding:'7px 12px', minWidth:'30%'}} >
+      <Typography variant="h4" sx={{color:'#3b5a7d'}} >
+        {title}
+      </Typography>
+      <Typography variant="body3" sx={{paddingTop:'7px', textTransform:'uppercase', color:'#3b5a7d'}} >
+        {details}
+      </Typography>
+    </Grid>
+  );
+}

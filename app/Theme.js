@@ -135,7 +135,7 @@ let theme = createTheme({
     landing_card: {
       backgroundColor: 'rgba(255, 255, 255, 0.78)',
       borderRadius: '15px',
-      minHeight: '20vh',
+      minHeight: '15vh',
       minWidth: '46vw',
       maxWidth: '46vw',
     },
