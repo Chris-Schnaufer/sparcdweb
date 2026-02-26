@@ -1544,7 +1544,7 @@ export default function Home() {
                         onOwnerSettings={handleOwnerSettings}
                         onMessages={() => {setDisplayMessages(true); handleFetchMessages(lastToken);} }
               />
-              <Box id='sparcd-middle-wrapper' sx={{overflow:"scroll"}} >
+              <Box id='sparcd-middle-wrapper' sx={{}} >
                 {!curLoggedIn || createNewInstance === true || repairInstance === true ? 
                   <LoginValidContext.Provider value={loginValidStates}>
                     <Login prev_url={dbURL} prev_user={dbUser} prev_remember={dbRemember} onLogin={handleLogin}
