@@ -9,7 +9,7 @@ import Typography from '@mui/material/Typography';
 import Box from '@mui/material/Box';
 import CircularProgress from '@mui/material/CircularProgress';
 import CollectionsManage from './CollectionsManage';
-import FooterBar from './components/FooterBar';
+import FooterBar from './FooterBar';
 import Landing from './Landing';
 import Login from './Login';
 import LoginAgain from './components/LoginAgain';

@@ -1,22 +1,17 @@
 'use client'
 
-/** @module LandingUpload */
+/** @module landing/LandingUpload */
 
 import * as React from 'react';
 import Box from '@mui/material/Box';
-import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
-import FormControl from '@mui/material/FormControl';
-import FormControlLabel from '@mui/material/FormControlLabel';
 import Grid from '@mui/material/Grid';
-import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined';
-import PriorityHighOutlinedIcon from '@mui/icons-material/PriorityHighOutlined';
 import Radio from '@mui/material/Radio';
-import RadioGroup from '@mui/material/RadioGroup';
 import Stack from '@mui/material/Stack';
 import { useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 
+import IncompleteUploadItem from './IncompleteUploadItem';
 import { BaseURLContext, CollectionsInfoContext, TokenExpiredFuncContext, MobileDeviceContext, 
          SandboxInfoContext, TokenContext, UserNameContext } from '../serverInfo';
 
@@ -113,56 +108,6 @@ export default function LandingUpload({loadingSandbox, onChange}) {
     onChange(sandboxItem, uploadItem);
   }, []);
 
-  /**
-   * Generates the sandbox UI items
-   * @function
-   */
-  function generate_sandbox_items() {
-    // Make sure we have something
-    if (!sandboxItems) {
-      return null;
-    }
-
-    let row_index = 0;
-
-    return sandboxItems.map((obj) => {
-      return obj.uploads.map((up_obj) => {
-        row_index += 1;
-        return (
-          up_obj.uploadCompleted === false &&
-            <Grid key={obj.bucket+up_obj.name} container direction="row" alignItems="center" justifyContent="start"
-                  sx={{padding:'3px 0px', width:'100%', backgroundColor: row_index & 1 ? "transparent" : "rgb(0,0,0,0.05)"}}
-            >
-              <Tooltip title="Incomplete upload" placement="left" sx={{paddingLeft:'5px'}}>
-                <PriorityHighOutlinedIcon fontSize="small" sx={{color:"sandybrown"}} />
-              </Tooltip>
-              <Typography variant="body" >
-                {up_obj.name}
-              </Typography>
-              <Tooltip placement="left"
-                        title={
-                          <React.Fragment>
-                            <p>Source folder: {up_obj.path ? up_obj.path : "<unknown>"}</p>
-                            <p>User: {up_obj.uploadUser}</p>
-                            <p>Images: {up_obj.imagesCount}</p>
-                            <p>Location: {up_obj.location}</p>
-                            <p>Folders: {up_obj.folders && up_obj.folders.length > 0 ? up_obj.folders.join(', ') : "<none>"}</p>
-                          </React.Fragment>
-                        }
-              >
-                <InfoOutlinedIcon fontSize="small" sx={{color:"black", paddingTop:"3px", marginLeft:'auto'}} />
-              </Tooltip>
-              <Tooltip placement="left" title="Repair this upload" style={{marginLeft:"3px"}} >
-                <CloudUploadOutlinedIcon
-                      onClick={() => handleRepairUpload(obj, up_obj)}
-                      sx={{color:"black", backgroundColor:'rgb(224, 224, 224, 0.7)', border:'1px solid black', borderRadius:'7px', padding:'2px', marginRight:'15px'}} />
-              </Tooltip>
-            </Grid>
-        );
-      })
-    })
-  }
-
   // Render the UI
   return (
     <Stack>
@@ -187,7 +132,21 @@ export default function LandingUpload({loadingSandbox, onChange}) {
           </Grid>
           <Grid id="sandbox-upload-item-wrapper" container direction="row" alignItems="start" justifyContent="start"
                 sx={{ ...theme.palette.landing_upload, padding:'0px 0px', minHeight:'40px', maxHeight:'120px'}} >
-            {sandboxItems && generate_sandbox_items()}
+            { sandboxItems?.map((item, idx) => {
+                let curRow = 0;
+                const incompleteUploads = item.uploads.filter((item) => item.uploadCompleted === false);
+                return incompleteUploads.map((upItem, upIdx) => {
+                    curRow += 1;
+                    return (<IncompleteUploadItem key={`${idx}-${upIdx}`}
+                                                  upload={upItem}
+                                                  collection={item}
+                                                  highlight={curRow & 0x01 === 1}
+                                                  onRepair={handleRepairUpload}
+                            />
+                            );
+                })
+              })
+            }
           </Grid>
         </React.Fragment>
         )

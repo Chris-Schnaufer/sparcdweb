@@ -1,6 +1,6 @@
 'use client'
 
-/** @module landing/FolderUpload */
+/** @module landing/UploadRepair */
 
 import * as React from 'react';
 import Box from '@mui/material/Box';
