@@ -1,6 +1,6 @@
 'use client'
 
-/** @module landing/FolderUpload */
+/** @module landing/UploadRepair */
 
 import * as React from 'react';
 import Box from '@mui/material/Box';
@@ -48,6 +48,7 @@ export default function UploadRepair({collectionInfo, uploadInfo, onUploadImages
 
     try {
       const resp = fetch(uploadCompleteUrl, {
+        credentials: 'include',
         method: 'POST',
         body: formData,
       }).then(async (resp) => {

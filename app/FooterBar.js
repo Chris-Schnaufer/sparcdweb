@@ -3,7 +3,7 @@
 
 import { useTheme } from '@mui/material/styles';
 
-import styles from './components.module.css';
+import styles from './components/components.module.css';
 
 /**
  * Renders the footer bar

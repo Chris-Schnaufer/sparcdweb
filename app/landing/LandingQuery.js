@@ -15,6 +15,7 @@ import { useTheme } from '@mui/material/styles';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 
+import LandingInfoTile from './LandingInfoTile';
 import { BaseURLContext, TokenExpiredFuncContext, TokenContext } from '../serverInfo';
 
 /**
@@ -38,6 +39,7 @@ export default function LandingQuery() {
 
     try {
       const resp = fetch(speciesStatsUrl, {
+          credentials: 'include',
           method: 'GET',
         }).then(async (resp) => {
             if (resp.ok) {
@@ -103,19 +105,9 @@ export default function LandingQuery() {
   // Render the UI
   return (
     <Stack>
-      <Grid id="sandbox-upload-info-wrapper" container direction="row" alignItems="center" justifyContent="space-around"
-            sx={{paddingTop:'30px'}}>
-        { animalsNums && animalsNums.map((item, idx) => 
-            showAnimalIdx && showAnimalIdx.includes(idx) &&
-                  <Grid id={"sandbox-upload-info-" + item[0]} key={item[0]+'_'+idx} container direction="column" alignItems="center" justifyContent="center" columnSpacing={1}
-                          sx={{background:'rgb(155, 189, 217, 0.3)', border:'2px solid rgb(122, 155, 196, 0.25)', borderRadius:'13px', padding:'7px 12px', minWidth:'30%'}} >
-                    <Typography variant="h4" sx={{color:'#3b5a7d'}} >
-                      {item[1]}
-                    </Typography>
-                    <Typography variant="body2" sx={{fontSize:'x-small', paddingTop:'7px', textTransform:'uppercase', color:'#3b5a7d'}} >
-                      {item[0]}
-                    </Typography>
-                  </Grid>
+      <Grid id="sandbox-query-info-wrapper" container direction="row" alignItems="center" justifyContent="space-around"
+            sx={{paddingTop:'10px'}}>
+        { animalsNums?.map((item, idx) =>  showAnimalIdx?.includes(idx) && <LandingInfoTile key={idx} title={item[1]} details={item[0]} />
         )
       }
       </Grid>
