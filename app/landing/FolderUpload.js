@@ -22,8 +22,7 @@ import { Level } from '../components/Messages';
 import LocationItem from '../components/LocationItem';
 import { meters2feet } from '../utils';
 import ProgressWithLabel from '../components/ProgressWithLabel';
-import { checkPreviousUpload, continueNewUpload, checkUploadedFiles, prevUploadResetContinue,
-          updateUploadRecovery } from './LandingServerCalls';
+import * as Server from './LandingServerCalls';
 import { AddMessageContext, AllowedImageMime, AllowedMovieMime, BaseURLContext, CollectionsInfoContext, 
           DisableIdleCheckFuncContext, TokenExpiredFuncContext, LocationsInfoContext,SizeContext, TokenContext,
           UserSettingsContext } from '../serverInfo';
@@ -675,7 +674,7 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
     relativePath = relativePath.substr(0, relativePath.length - allowedFiles[0].name.length - 1);
 
     if (!recovery) {
-      checkPreviousUpload(serverURL, uploadToken, relativePath, tokenExpiredFunc, 
+      Server.checkPreviousUpload(serverURL, uploadToken, relativePath, tokenExpiredFunc, 
                         (respData) => {havePrevUploadSuccess(respData, relativePath, allowedFiles)},     // Success
                         (err) => {  // Failure
                           addMessage(Level.Error, 'A problem ocurred while preparing for upload');
@@ -685,7 +684,7 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
     } else {
       setUploadingFileCounts({total:files.length, uploaded:0});
       setDisableDetails(true);
-      window.setTimeout(() => updateUploadRecovery(serverURL,
+      window.setTimeout(() => Server.updateUploadRecovery(serverURL,
                                                     uploadToken,
                                                     recovery.coll_info.id,
                                                     recovery.upload_info.location,
@@ -824,7 +823,7 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
 
     // Add the upload to the server letting the UI to update
     window.setTimeout(() => {
-        continueNewUpload(serverURL, 
+        Server.continueNewUpload(serverURL, 
                           uploadToken,
                           collectionSelection.id,
                           locationSelection.idProperty,
@@ -860,7 +859,7 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
     setUploadingFiles(true);
 
     // Check that the continuing upload attempt has the same files as the previous attempt
-    checkUploadedFiles(serverURL, uploadToken, continueUploadInfo.id, continueUploadInfo.loadedFiles, 
+    Server.checkUploadedFiles(serverURL, uploadToken, continueUploadInfo.id, continueUploadInfo.loadedFiles, 
         (respData) => {     // Success
           if (!respData || respData.success) {
             uploadFolder(continueUploadInfo.files, continueUploadInfo.id); // Success - continue uploading
@@ -922,7 +921,7 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
     setUploadingFileCounts({total:continueUploadInfo.files.length, uploaded:0});
 
     // Reset the upload on the server and then restart the upload
-    prevUploadResetContinue(serverURL, uploadToken, continueUploadInfo.id, continueUploadInfo.files, tokenExpiredFunc,
+    Server.prevUploadResetContinue(serverURL, uploadToken, continueUploadInfo.id, continueUploadInfo.files, tokenExpiredFunc,
                               (respData) => {    // Success
                                   const curFiles = continueUploadInfo.files;
                                   const upload_id = continueUploadInfo.id;
