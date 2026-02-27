@@ -178,7 +178,6 @@ export function continueNewUpload(serverURL, token, collectionId, locationId, pa
       method: 'POST',
       body: formData
     }).then(async (resp) => {
-          setDisableDetails(false);
           if (resp.ok) {
             return resp.json();
           } else {
@@ -231,7 +230,6 @@ export function prevUploadResetContinue(serverURL, token, uploadId, files, onExp
       method: 'POST',
       body: formData
     }).then(async (resp) => {
-          disableUploadCheckRef.current = false;
           if (resp.ok) {
             return resp.json();
           } else {
@@ -282,7 +280,6 @@ export function prevUploadAbandonContinue(serverURL, token, uploadId, onExpiredT
       method: 'POST',
       body: formData
     }).then(async (resp) => {
-          disableUploadCheckRef.current = false;
           if (resp.ok) {
             return resp.json();
           } else {
@@ -311,17 +308,16 @@ export function prevUploadAbandonContinue(serverURL, token, uploadId, onExpiredT
  * @function
  * @param {string} serverURL The URL to the server
  * @param {string} token The authorization token
- * @param {array} files The list of files to check the upload validity of
  * @param {string} uploadId The ID associated with the upload
+ * @param {array} files The list of files to check the upload validity of
  * @param {function} onExpiredToken Function to call when we get an expired token return
  * @param {function} onSuccess The function to call if the files check is successful
  * @param {function} onFailure The function to call on failure
  */
-export function checkUploadedFiles(serverURL, token, files, uploadId, onExpiredToken, onSuccess, onFailure)  {
+export function checkUploadedFiles(serverURL, token, uploadId, files, onExpiredToken, onSuccess, onFailure)  {
   onExpiredToken ||= () => {};
-  cbSuccess ||= () => {};
-  cbMissing ||= () => {};
-  cbFail ||= () => {};
+  onSuccess ||= () => {};
+  onFailure ||= () => {};
 
   // If we have nothing to check, we are successful
   if (files.length <= 0) {

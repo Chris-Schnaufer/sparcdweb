@@ -1573,59 +1573,60 @@ def sandbox_check_continue_upload():
     # Check all the received files are already uploaded and their hash's match
     all_match = True
     message = 'Success'
-    for one_file in request.files:
-        file_ext = os.path.splitext(one_file)[1].lower()
+    if S3Connection.have_images(s3_url, user_info.name, get_password(token, db), s3_bucket,s3_path):
+        for one_file in request.files:
+            file_ext = os.path.splitext(one_file)[1].lower()
 
-        # Get temporary file
-        temp_file = tempfile.mkstemp(suffix=file_ext, prefix=SPARCD_PREFIX)
-        os.close(temp_file[0])
+            # Get temporary file
+            temp_file = tempfile.mkstemp(suffix=file_ext, prefix=SPARCD_PREFIX)
+            os.close(temp_file[0])
 
-        request.files[one_file].save(temp_file[1])
+            request.files[one_file].save(temp_file[1])
 
-        # Get comparison file
-        comp_file = tempfile.mkstemp(suffix=file_ext, prefix=SPARCD_PREFIX)
+            # Get comparison file
+            comp_file = tempfile.mkstemp(suffix=file_ext, prefix=SPARCD_PREFIX)
 
-        try:
-            # Get the path to the file to download and download it
-            s3_comp_path = make_s3_path((s3_path, request.files[one_file].filename))
-            S3Connection.download_image(s3_url, user_info.name,
-                                        get_password(token, db),
-                                        s3_bucket,
-                                        s3_comp_path, comp_file[1])
-            # Calculate the checksums
-            temp_file_cs = sdfu.file_checksum(temp_file[1])
-            comp_file_cs = sdfu.file_checksum(comp_file[1])
+            try:
+                # Get the path to the file to download and download it
+                s3_comp_path = make_s3_path((s3_path, request.files[one_file].filename))
+                S3Connection.download_image(s3_url, user_info.name,
+                                            get_password(token, db),
+                                            s3_bucket,
+                                            s3_comp_path, comp_file[1])
+                # Calculate the checksums
+                temp_file_cs = sdfu.file_checksum(temp_file[1])
+                comp_file_cs = sdfu.file_checksum(comp_file[1])
 
-            if temp_file_cs != comp_file_cs:
-                all_match = False
-                message = 'The current upload folder appears to be incorrect due to existing ' \
-                            'images not matching'
-        except S3Error as ex:
-            # If the file doesn't exist we have a big problem with the upload
-            if ex.code == "NoSuchKey":
-                print('ERROR: Missing uploaded file while comparing continue upload files ' \
-                                f'against already uploaded files: {s3_bucket} {s3_comp_path} ',
-                        flush=True)
-                print(ex, flush=True)
-                all_match = 'Missing'
-                message = 'The uploaded file is not found on the server ' \
-                                                            f'{request.files[one_file].filename}'
-            else:
-                print('ERROR: Unexpected exception while comparing continue upload files ' \
-                                f'against already uploaded files: {s3_bucket} {s3_comp_path} ',
-                        flush=True)
-                print(ex, flush=True)
-                all_match = None
-                message = 'An unexpected error ocurred while checking already uploaded files'
-        finally:
-            if os.path.exists(temp_file[1]):
-                os.unlink(temp_file[1])
-            if os.path.exists(comp_file[1]):
-                os.unlink(comp_file[1])
+                if temp_file_cs != comp_file_cs:
+                    all_match = False
+                    message = 'The current upload folder appears to be incorrect due to existing ' \
+                                'images not matching'
+            except S3Error as ex:
+                # If the file doesn't exist we have a big problem with the upload
+                if ex.code == "NoSuchKey":
+                    print('ERROR: Missing uploaded file while comparing continue upload files ' \
+                                    f'against already uploaded files: {s3_bucket} {s3_comp_path} ',
+                            flush=True)
+                    print(ex, flush=True)
+                    all_match = 'Missing'
+                    message = 'The uploaded file is not found on the server ' \
+                                                                f'{request.files[one_file].filename}'
+                else:
+                    print('ERROR: Unexpected exception while comparing continue upload files ' \
+                                    f'against already uploaded files: {s3_bucket} {s3_comp_path} ',
+                            flush=True)
+                    print(ex, flush=True)
+                    all_match = None
+                    message = 'An unexpected error ocurred while checking already uploaded files'
+            finally:
+                if os.path.exists(temp_file[1]):
+                    os.unlink(temp_file[1])
+                if os.path.exists(comp_file[1]):
+                    os.unlink(comp_file[1])
 
-        # Stop processing once we have a problem
-        if all_match is not True:
-            break
+            # Stop processing once we have a problem
+            if all_match is not True:
+                break
 
     return jsonify({'success': all_match is True,
                         'missing': all_match == 'missing',

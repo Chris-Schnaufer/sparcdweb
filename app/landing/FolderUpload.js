@@ -220,7 +220,7 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
       addMessage(Level.Error, 'An unknown problem ocurred while getting failed files for the upload');
       setUploadState(uploadingState.error);
     }
-  }, [addMessage, serverURL, setUploadState, uploadToken]);
+  }, [addMessage, setUploadState]);
 
   /**
    * Internal function that gets the counts of an upload
@@ -323,7 +323,7 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
       setUploadState(uploadingState.error);
       disabledIdleCheckFunc(false);    // Enable checking for idle
     }
-  }, [addMessage, serverURL, setUploadingFileCounts, setUploadCompleted, setUploadState, uploadStateRef, uploadToken])
+  }, [addMessage, setUploadingFileCounts, setUploadCompleted, setUploadState, uploadStateRef])
 
   /**
    * Gets the counts of an upload
@@ -485,7 +485,7 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
       console.log('Upload Images Unknown Error: ',err);
       addMessage(Level.Error, 'An unknown problem ocurred while uploading images');
     }
-  }, [addMessage, options, selectedTimezone, serverURL, setHaveFailedUpload, uploadToken]);
+  }, [addMessage, options, selectedTimezone, setHaveFailedUpload]);
 
   /**
    * Handles uploading a folder of files
@@ -550,6 +550,13 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
    * @param {object} respData The response data from the call
    */
   const havePrevUploadSuccess = React.useCallback((respData, path, files) => {
+      if (folderUploadRef.current) {
+        folderUploadRef.current.disabled = false;
+      }
+      if (folderCancelRef.current) {
+        folderCancelRef.current.disabled = false;
+      }
+
     // Process the results
     if (respData.exists === false) {
       setNewUpload(true);
@@ -577,6 +584,13 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
    * @param {object} respData The response data from the call
    */
   const haveUploadRecoverySuccess = React.useCallback((respData) => {
+      if (folderUploadRef.current) {
+        folderUploadRef.current.disabled = false;
+      }
+      if (folderCancelRef.current) {
+        folderCancelRef.current.disabled = false;
+      }
+
     if (respData.success) {
       setNewUpload(false);
       window.setTimeout(() => uploadFolder(files, respData.id), 10);
@@ -677,6 +691,12 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
       Server.checkPreviousUpload(serverURL, uploadToken, relativePath, tokenExpiredFunc, 
                         (respData) => {havePrevUploadSuccess(respData, relativePath, allowedFiles)},     // Success
                         (err) => {  // Failure
+                          if (folderUploadRef.current) {
+                            folderUploadRef.current.disabled = false;
+                          }
+                          if (folderCancelRef.current) {
+                            folderCancelRef.current.disabled = false;
+                          }
                           addMessage(Level.Error, 'A problem ocurred while preparing for upload');
                           setUploadState(uploadingState.error);
                         }
@@ -694,13 +714,19 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
                                                     tokenExpiredFunc,
                                                     (respData) => {haveUploadRecoverySuccess(respData)}, // Success
                                                     (err) => {    // Failure
+                                                    if (folderUploadRef.current) {
+                                                      folderUploadRef.current.disabled = false;
+                                                    }
+                                                    if (folderCancelRef.current) {
+                                                      folderCancelRef.current.disabled = false;
+                                                    }
                                                       addMessage(Level.Error, 'A problem ocurred while preparing for upload');
                                                       setUploadState(uploadingState.error);
                                                       cancelUpload();
                                                     })
      , 100);
     }
-  }, [addMessage, serverURL, setDisableDetails, setNewUpload, setUploadingFileCounts, setUploadState, uploadToken]);
+  }, [addMessage, setDisableDetails, setNewUpload, setUploadingFileCounts, setUploadState]);
 
   /**
    * Handles the user changing the selected folder to upload
@@ -832,6 +858,7 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
                           newUploadFiles,
                           tokenExpiredFunc,
                           (respData) => {   // Success
+                            setDisableDetails(false);
                             setNewUpload(false);
                             window.setTimeout(() => uploadFolder(newUploadFiles, respData.id), 10);
                           },
@@ -841,8 +868,8 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
                           }
                         );
     }, 100);
-  }, [addMessage, collectionSelection, comment, disableUploadDetailsRef, locationSelection, newUploadFiles, serverURL, setDisableDetails, 
-      setNewUpload, setUploadingFileCounts, uploadPath, uploadToken]);
+  }, [addMessage, collectionSelection, comment, disableUploadDetailsRef, locationSelection, newUploadFiles, setDisableDetails, 
+      setNewUpload, setUploadingFileCounts, uploadPath]);
 
   /**
    * Continues a previous upload of images
@@ -859,24 +886,28 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
     setUploadingFiles(true);
 
     // Check that the continuing upload attempt has the same files as the previous attempt
-    Server.checkUploadedFiles(serverURL, uploadToken, continueUploadInfo.id, continueUploadInfo.loadedFiles, 
+    Server.checkUploadedFiles(serverURL, uploadToken, continueUploadInfo.id, continueUploadInfo.files,  tokenExpiredFunc,
         (respData) => {     // Success
-          if (!respData || respData.success) {
-            uploadFolder(continueUploadInfo.files, continueUploadInfo.id); // Success - continue uploading
-          } else if (respData.missing) {
-              setNotificationMessage({message:respData.message, action:cancelUpload});
-          } else {
-              cbFailsetNotificationMessage({message:respData.message, action:cancelUpload});
-          }},
-          (err) => {        // Failure
-            cbFailsetNotificationMessage({message:'An error ocurred while trying to continue the upload', action:cancelUpload});
-          }
+            if (!respData || respData.success) {
+              uploadFolder(continueUploadInfo.files, continueUploadInfo.id); // Success - continue uploading
+            } else if (respData.missing) {
+                setUploadingFiles(false);
+                setNotificationMessage({message:respData.message, action:() => {cancelUpload();failedIgnore();} });
+            } else {
+                setUploadingFiles(false);
+                setNotificationMessage({message:respData.message, action:() => {cancelUpload();failedIgnore();} });
+            }
+        },
+        (err) => {        // Failure
+            setUploadingFiles(false);
+            setNotificationMessage({message:'An error ocurred while trying to continue the upload', action:() => {cancelUpload();failedIgnore();} });
+        }
     );
 
     setContinueUploadInfo(null);
 
-  }, [continueUploadInfo, cancelUpload, disableUploadPrevRef, serverURL, setContinueUploadInfo, setUploadingFiles, setUploadingFileCounts, 
-      uploadFolder, uploadToken]);
+  }, [continueUploadInfo, cancelUpload, disableUploadPrevRef, setContinueUploadInfo, setUploadingFiles, setUploadingFileCounts, 
+      uploadFolder]);
 
   /**
    * Restarts a folder upload
@@ -923,6 +954,7 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
     // Reset the upload on the server and then restart the upload
     Server.prevUploadResetContinue(serverURL, uploadToken, continueUploadInfo.id, continueUploadInfo.files, tokenExpiredFunc,
                               (respData) => {    // Success
+                                  disableUploadCheckRef.current = false;
                                   const curFiles = continueUploadInfo.files;
                                   const upload_id = continueUploadInfo.id;
                                   setPrevUploadCheck(prevUploadCheckState.noCheck);
@@ -930,11 +962,12 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
                                   window.setTimeout(() => uploadFolder(curFiles, upload_id), 10);
                               },
                               (err) => {
+                                  disableUploadCheckRef.current = false;
                                   addMessage(Level.Error, 'A problem ocurred while preparing for reset sandbox upload');
                               }
                             );
-  }, [addMessage, continueUploadInfo, disableUploadCheckRef, prevUploadCheckState, serverURL, setContinueUploadInfo, setPrevUploadCheck,
-      setUploadingFileCounts, uploadFolder, uploadToken]);
+  }, [addMessage, continueUploadInfo, disableUploadCheckRef, prevUploadCheckState, setContinueUploadInfo, setPrevUploadCheck,
+      setUploadingFileCounts, uploadFolder]);
 
   /**
    * Handles abandoning an upload
@@ -949,6 +982,7 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
 
     prevUploadAbandonContinue(serverURL, uploadToken, continueUploadInfo.id, tokenExpiredFunc,
                               (respData) => {   // Success
+                                  disableUploadCheckRef.current = false;
                                   setUploadingFileCounts({total:newUploadFiles.length, uploaded:0});
                                   setPrevUploadCheck(prevUploadCheckState.noCheck);
                                   setContinueUploadInfo(null);
@@ -960,11 +994,12 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
                                   addMessage(Level.Warning,'Unable to complete removal of previously started upload from the storage server. Please contact your administrator to complete removal');
                               },
                               (err) => {   // Failure
+                                  disableUploadCheckRef.current = false;
                                   addMessage(Level.Error, 'A problem ocurred while preparing for abandoning sandbox upload');
                               }
                           );
-  }, [addMessage, continueUploadInfo, newUploadFiles, onCompleted, prevUploadCheckState, serverURL, setCollectionSelection,
-      setComment, setContinueUploadInfo, setLocationSelection, setNewUpload, setPrevUploadCheck, setUploadingFileCounts, tokenExpiredFunc, uploadToken]);
+  }, [addMessage, continueUploadInfo, newUploadFiles, onCompleted, prevUploadCheckState, setCollectionSelection,
+      setComment, setContinueUploadInfo, setLocationSelection, setNewUpload, setPrevUploadCheck, setUploadingFileCounts, tokenExpiredFunc]);
 
   /**
    * Creates a new upload for these files
@@ -1071,6 +1106,10 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
    */
   function getUploadStateString(state) {
     switch (state) {
+      case uploadingState.uploading:
+        return "Uploading files";
+      case uploadingState.none:
+        return "No upload at this time";
       case uploadingState.haveFailed:
         return "Some files failed to upload, waiting before attempting to retry";
       case uploadingState.retryingFailed:
@@ -1219,7 +1258,7 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
                         stepTotal={'3'}
                         content={renderUploadDetails()}
                         actionInfo={[{label:'Continue', onClick:handleNewUpload, disabled:details_continue_enabled ? false : true},
-                                  {label:'Cance', onClick:cancelDetails, disabled:details_continue_enabled ? false : true}
+                                  {label:'Cancel', onClick:cancelDetails, disabled:false}
                                 ]}
           />
         }
@@ -1275,7 +1314,7 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
       >
         <div style={{backgroundColor:'rgb(212, 230, 241, 0.95)', border:'1px solid grey', borderRadius:'15px', padding:'25px 10px'}}>
           <Grid container direction="column" alignItems="center" justifyContent="center" >
-              <Typography gutterBottom variant="body2" color="lightgrey">
+              <Typography gutterBottom variant="body2" color="black">
                 {notificationMessage.message}
               </Typography>
               <Button size="small" onClick={() => {setNotificationMessage(null);notificationMessage.action();} }

@@ -710,6 +710,33 @@ class S3Connection:
 
         return images
 
+
+    @staticmethod
+    def have_images(url: str, user: str, password: str, bucket: str, path: str) -> bool:
+        """ Checks if the path has images
+        Arguments:
+            url: the URL to the s3 instance
+            user: the name of the user to use when connecting
+            password: the user's password
+            bucket: the bucket to download from
+            path: the path to the search on
+        Return:
+            True is returned if image files were found and False otherwise
+        """
+        minio = Minio(url, access_key=user, secret_key=password)
+
+        # Get the sub folders and search those
+        loaded_folders = get_uploaded_folders(minio, bucket, path)
+
+        # Do these one at a time so we don't iterate through lots of folders
+        for one_folder in loaded_folders:
+            print('HACK:  CHECKING FOLDER:',one_folder, flush=True)
+            count = get_image_counts(minio, bucket, [one_folder])
+            if count > 0:
+                return True
+
+        return False
+
     @staticmethod
     def get_images(url: str, user: str, password: str, collection_id: str, \
                    upload_name: str, need_url: bool=True) -> Optional[tuple]:
