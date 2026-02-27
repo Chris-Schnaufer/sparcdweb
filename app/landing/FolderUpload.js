@@ -16,11 +16,14 @@ import Grid from '@mui/material/Grid';
 import MenuItem from '@mui/material/MenuItem';
 import TextField from '@mui/material/TextField';
 import Select from '@mui/material/Select';
+import Stack from '@mui/material/Stack';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 
 import { allTimezones, useTimezoneSelect } from "react-timezone-select";
 
+import FolderNewUpload from './FolderNewUpload';
+import FolderSelectionProgress from './FolderSelectionProgress';
 import FolderUploadConfirm from './FolderUploadConfirm';
 import FolderUploadContinue from './FolderUploadContinue';
 import FolderUploadForm from './FolderUploadForm';
@@ -101,6 +104,7 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
   const disableUploadDetailsRef = React.useRef(false); // Used to lock out multiple clicks
   const disableUploadPrevRef = React.useRef(false); // Used to lock out multiple clicks
   const disableUploadCheckRef = React.useRef(false); // Used to lock out multiple clicks (resets next time page is redrawn)
+  const folderSelectRef = React.useRef(false); // Folder upload control
   const uploadStateRef = React.useRef(uploadingState.none);  // Used to keep upload state up to date for functions
   const [collectionSelection, setCollectionSelection] = React.useState(null);
   const [comment, setComment] = React.useState(null);
@@ -127,6 +131,11 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
   const { options, parseTimezone } = useTimezoneSelect({ labelStyle:'altName', allTimezones });
   const [selectedTimezone, setSelectedTimezone] = React.useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
 
+  const uploadPercentComplete = React.useMemo(() => {
+    // We assume 100% until we know better
+    return uploadingFileCounts.total ? Math.floor((uploadingFileCounts.uploaded / uploadingFileCounts.total) * 100) : 100;
+  }, [uploadingFileCounts]);
+
   let displayCoordSystem = 'LATLON';
   if (userSettings['coordinatesDisplay']) {
     displayCoordSystem = userSettings['coordinatesDisplay'];
@@ -136,6 +145,24 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
   React.useEffect(() => {
     uploadStateRef.current = uploadState;
   }, [uploadState]);
+
+  // Calculate the size of the file loading control to use as sizing
+  React.useLayoutEffect(() => {
+    if (!folderSelectRef.current) {
+      return;
+    }
+
+    const {width, height} = folderSelectRef.current.getBoundingClientRect();
+
+    // Set the input size if it's changed, otherwise keep what we have so it doesn't trigger a redraw
+    setInputSize((prev) => {
+      if ((prev.width !== width) || (prev.height !== height)) {
+        return {width, height};
+      }
+
+      return prev;
+    });
+  }, []);
 
   /**
    * Returns whether or not this is a new upload or a continuation of a previous one
@@ -1277,51 +1304,80 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
   }, [forceRedraw, collectionSelection, locationSelection, setComment, setForceRedraw]);
 
   /**
+   * Function to return the correct uploading state message
+   * @function
+   * @param {object} state The state to get the message for
+   * @return {string} The message string
+   */
+  function getUploadStateString(state) {
+    switch (state) {
+      case uploadingState.haveFailed:
+        return "Some files failed to upload, waiting before attempting to retry";
+      case uploadingState.retryingFailed:
+        return "Retrying failed images";
+      case uploadingState.uploadFailure:
+          return "Failed to upload all files";
+    }
+    return "";
+  }
+
+  /**
    * Renders the UI based upon how many images have been uploaded
    * @function
    * @return {object} The UI to render
    */
   function renderInputControls() {
-    const el = document.getElementById('folder_select');
-    let curWidth = inputSize.width;
-    let curHeight = inputSize.height;
-    if (el) {
-      const parentEl = el.parentNode;
-      const elSize = el.getBoundingClientRect();
-
-      if (inputSize.width != elSize.width || inputSize.height != elSize.height) {
-        setInputSize({'width':elSize.width,'height':elSize.height});
-        curWidth = elSize.width;
-        curHeight = elSize.height;
-      }
-    }
-
-    if (uploadingFiles) {
-      // TODO: adjust upload percent to include already uploaded images when continued upload restarts
-      let uploadCount = uploadingFileCounts.uploaded;
-      let percentComplete = uploadingFileCounts.total ? Math.floor((uploadCount / uploadingFileCounts.total) * 100) : 100;
-
-      return (
-        <Grid id="uploading-wrapper" container direction="row" alignItems="start" justifyContent="center">
-          <Grid id="uploading-grid" container direction="column" alignItems="center" justifyContent="center" sx={{minWidth: curWidth+'px', minHeight: curHeight+'px'}}>
-            <Typography gutterBottom variant="body3" noWrap="true">
-            {uploadingFileCounts.uploaded} of {uploadingFileCounts.total} uploaded
-            </Typography>
-            <ProgressWithLabel value={percentComplete}/>
-            <Typography gutterBottom variant="body">
-              { uploadState === uploadingState.haveFailed && "Some files failed to upload, waiting before attempting to retry" }
-              { uploadState === uploadingState.retryingFailed && "Retrying failed images" }
-              { uploadState === uploadingState.uploadFailure && "Failed to upload all files" }
-          </Typography>
-          </Grid>
-        </Grid>
-      );
-    }
-
+    // TODO: adjust upload percent to include already uploaded images when continued upload restarts
     return (
-      <input id="folder_select" type="file" name="file" webkitdirectory="true" 
-             directory="true" onChange={selectionChanged}></input>
+      <Grid id='uploading-wrapper' container direction='row' sx={{alignItems:'flex-start', justifyContent:'center'}}>
+        <Stack id='uploading-grid' display='flex' flexDirection='column' alignItems='center' justifyContent='center'
+              sx={{minWidth:inputSize.width, minHeight:inputSize.height}}
+        >
+          <Typography gutterBottom variant="body3" noWrap>
+          {uploadingFileCounts.uploaded} of {uploadingFileCounts.total} uploaded
+          </Typography>
+          <ProgressWithLabel value={uploadPercentComplete}/>
+          <Typography gutterBottom variant="body">
+            { getUploadStateString(uploadState) }
+          </Typography>
+        </Stack>
+      </Grid>
     );
+  }
+
+  /**
+   * Returns the controls for actions when not a new upload
+   * @function
+   */
+  function renderUploadingActions() {
+      if (!uploadingFiles && continueUploadInfo === null) {
+        return (
+          <React.Fragment>
+            <Button id="folder_upload" sx={{'flex':'1'}} size="small" onClick={filesUpload}
+                    disabled={filesSelected > 0 ? false : true}>Upload</Button>
+            <Button id="folder_cancel" sx={{'flex':'1'}} size="small" onClick={cancelUpload}>Cancel</Button>
+          </React.Fragment>
+        );
+      }
+      if (uploadCompleted) {
+        return (
+          <React.Fragment>
+            <Button id="folder_upload_continue" sx={{'flex':'1'}} size="small" onClick={doneUpload}>Done</Button>
+            <Button id="folder_upload_another" sx={{'flex':'1'}} size="small" onClick={anotherUpload}>Upload Another</Button>
+          </React.Fragment>
+        );
+      }
+      if (uploadState === uploadingState.uploadFailure) {
+        return (
+          <React.Fragment>
+            <Button id="folder_upload_fail_retry" sx={{'flex':'1'}} size="small" onClick={failedRetry}>Retry Now</Button>
+            <Button id="folder_upload_fail_ignore" sx={{'flex':'1'}} size="small" onClick={failedIgnore}>Retry Later</Button>
+            <Button id="folder_upload_fail_done" sx={{'flex':'1', whiteSpace:"nowrap"}} size="small" onClick={failedDone}>Mark Completed</Button>
+          </React.Fragment>
+        );
+      }
+
+      return (null);
   }
 
   /**
@@ -1370,82 +1426,33 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
           justifyContent="center"
           sx={{ minHeight: uiSizes.workspace.height + 'px' }}
         >
-        { newUpload === false ?
-          <Card id='folder-upload-select' variant="outlined" sx={{ ...theme.palette.folder_upload }} >
-            <CardHeader sx={{ textAlign: 'center' }}
-               title={
-                <Typography gutterBottom variant="h6" component="h4">
-                  Upload {String(type).charAt(0).toUpperCase() + String(type).slice(1)} Folder
-                </Typography>
-               }
-               subheader={
-                <React.Fragment>
-                  <Typography gutterBottom variant="body">
-                    {!uploadingFiles ? "Select folder to upload" : !uploadCompleted ? "Uploading selected files" : "Upload complete"}
-                  </Typography>
-                  <br />
-                  <Typography gutterBottom variant="body2">
-                    Step {!uploadingFiles ? '1' : '3'} of 3
-                  </Typography>
-                </React.Fragment>
-                }
-             />
-            <CardContent>
-              {renderInputControls()}
-            </CardContent>
-            <CardActions>
-            { !uploadingFiles && continueUploadInfo === null && 
-              <React.Fragment>
-                <Button id="folder_upload" sx={{'flex':'1'}} size="small" onClick={filesUpload}
-                        disabled={filesSelected > 0 ? false : true}>Upload</Button>
-                <Button id="folder_cancel" sx={{'flex':'1'}} size="small" onClick={cancelUpload}>Cancel</Button>
-              </React.Fragment>
-            }
-            { uploadCompleted &&
-              <React.Fragment>
-                <Button id="folder_upload_continue" sx={{'flex':'1'}} size="small" onClick={doneUpload}>Done</Button>
-                <Button id="folder_upload_another" sx={{'flex':'1'}} size="small" onClick={anotherUpload}>Upload Another</Button>
-              </React.Fragment>
-            }
-            { uploadState === uploadingState.uploadFailure &&
-              <React.Fragment>
-                <Button id="folder_upload_fail_retry" sx={{'flex':'1'}} size="small" onClick={failedRetry}>Retry Now</Button>
-                <Button id="folder_upload_fail_ignore" sx={{'flex':'1'}} size="small" onClick={failedIgnore}>Retry Later</Button>
-                <Button id="folder_upload_fail_done" sx={{'flex':'1', whiteSpace:"nowrap"}} size="small" onClick={failedDone}>Mark Completed</Button>
-              </React.Fragment>
-            }
-            </CardActions>
-          </Card>
+        { newUpload === false ? 
+              <FolderSelectionProgress type={type} 
+                        subTitle={!uploadingFiles ? "Select folder to upload" : !uploadCompleted ? "Uploading selected files" : "Upload complete"}
+                        stepNumber={!uploadingFiles ? '1' : '3'}
+                        stepTotal={'3'}
+                        content={uploadingFiles ? 
+                                        renderInputControls()
+                                      : <Stack display='flex' flexDirection='column' alignItems='center' justifyContent='center'>
+                                          <Button variant="contained" component="label">
+                                          Upload Folder
+                                          <input id="folder_select" hidden ref={folderSelectRef} type="file" name="file" webkitdirectory="" 
+                                                  directory="" onChange={selectionChanged}
+                                          />
+                                        </Button>
+                                      </Stack>
+                                }
+                        actions={renderUploadingActions()}
+              />
         :
-           <Card id='folder-upload-details' variant="outlined" sx={{ ...theme.palette.folder_upload, minWidth:(uiSizes.workspace.width * 0.8) + 'px' }} >
-            <CardHeader sx={{ textAlign: 'center' }}
-               title={
-                <Typography gutterBottom variant="h6" component="h4">
-                  New Upload Details
-                </Typography>
-               }
-               subheader={
-                <React.Fragment>
-                  <Typography gutterBottom variant="body">
-                    Select Collection and Location to proceed
-                  </Typography>
-                  <br />
-                  <Typography gutterBottom variant="body2">
-                    Step 2 of 3
-                  </Typography>
-                </React.Fragment>
-                }
-             />
-            <CardContent>
-              {renderUploadDetails()}
-            </CardContent>
-            <CardActions>
-              <Button id="sandbox-upload-details-continue" sx={{'flex':'1'}} size="small" onClick={continueNewUpload}
-                      disabled={details_continue_enabled ? false : true}>Continue</Button>
-              <Button id="sandbox-upload-details-cancel" sx={{'flex':'1'}} size="small" onClick={cancelDetails}
-                      disabled={disableDetails ? true : false}>Cancel</Button>
-            </CardActions>
-          </Card>
+          <FolderNewUpload 
+                        stepNumber={'2'}
+                        stepTotal={'3'}
+                        content={renderUploadDetails()}
+                        actionInfo={[{label:'Continue', onClick:continueNewUpload, disabled:details_continue_enabled ? false : true},
+                                  {label:'Cance', onClick:cancelDetails, disabled:details_continue_enabled ? false : true}
+                                ]}
+          />
         }
         </Grid>
       </Box>
