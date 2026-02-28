@@ -730,7 +730,6 @@ class S3Connection:
 
         # Do these one at a time so we don't iterate through lots of folders
         for one_folder in loaded_folders:
-            print('HACK:  CHECKING FOLDER:',one_folder, flush=True)
             count = get_image_counts(minio, bucket, [one_folder])
             if count > 0:
                 return True

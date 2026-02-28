@@ -34,7 +34,6 @@ export default function MessageLine({message, isSelected, menuItems, onDelete, o
 
   // Format the date
   const formattedDate = React.useMemo(() => {
-    console.log('HACK: ',message.created_sec);
     return message.created_sec == null ? '': formatTimestamp(-(message.created_sec));
   }, [message.created_sec]);
 

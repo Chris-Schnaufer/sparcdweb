@@ -90,7 +90,7 @@ def load_camtrap_media(url: str, user: str, get_password: Callable, bucket: str,
     loaded_media = load_camtrap_info(url, user, get_password, bucket, s3_path,
                                                                 MEDIA_CSV_FILE_NAME, temp_to_disk)
     if loaded_media:
-        s3_path_len = len(s3_path) + 1 # We add one to remove the separator
+        s3_path_len = len(s3_path)
         return {one_row[camtrap.CAMTRAP_MEDIA_ID_IDX][s3_path_len:]: one_row for \
         																	one_row in loaded_media}
 

@@ -13,6 +13,7 @@ const MAX_FORM_FILE_CHUNK = 5000;  // Maximum number of files to put into a form
  * @param {function} onExpiredToken Function to call when we get an expired token return
  * @param {function} onSuccess The function to call upon success
  * @param {function} onFailure The function to call upon failure
+ * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function checkPreviousUpload(serverURL, token, path, onExpiredToken, onSuccess, onFailure) {
   onExpiredToken ||= () => {};
@@ -50,8 +51,10 @@ export function checkPreviousUpload(serverURL, token, path, onExpiredToken, onSu
     });
   } catch (err) {
     console.log('Prev Upload Unknown Error: ',err);
-    onFailure(err);
+    return false;
   }
+
+  return true;
 }
 
 
@@ -68,6 +71,7 @@ export function checkPreviousUpload(serverURL, token, path, onExpiredToken, onSu
  * @param {function} onExpiredToken Function to call when we get an expired token return
  * @param {function} onSuccess The function to call upon success
  * @param {function} onFailure The function to call upon failure
+ * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function updateUploadRecovery(serverURL, token, collId, locId, uploadKey, path, files, onExpiredToken, onSuccess, onFailure) {
   onExpiredToken ||= () => {};
@@ -122,8 +126,10 @@ export function updateUploadRecovery(serverURL, token, collId, locId, uploadKey,
     });
   } catch (err) {
     console.log('Prev Upload Unknown Error: ',err);
-        onFailure(err)
+    return false;
   }
+
+  return true;
 }
 
 
@@ -140,6 +146,7 @@ export function updateUploadRecovery(serverURL, token, collId, locId, uploadKey,
  * @param {function} onExpiredToken Function to call when we get an expired token return
  * @param {function} onSuccess The function to call upon success
  * @param {function} onFailure The function to call upon failure
+ * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function continueNewUpload(serverURL, token, collectionId, locationId, path, comment, files, onExpiredToken, onSuccess, onFailure) {
   onExpiredToken ||= () => {};
@@ -197,8 +204,10 @@ export function continueNewUpload(serverURL, token, collectionId, locationId, pa
     });
   } catch (err) {
     console.log('New Upload Unknown Error: ',err);
-    onFailure(err);
+    return false;
   }
+
+  return true;
 }
 
 /**
@@ -211,6 +220,7 @@ export function continueNewUpload(serverURL, token, collectionId, locationId, pa
  * @param {function} onExpiredToken Function to call when we get an expired token return
  * @param {function} onSuccess The function to call upon success
  * @param {function} onFailure The function to call upon failure
+ * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function prevUploadResetContinue(serverURL, token, uploadId, files, onExpiredToken, onSuccess, onFailure) {
   onExpiredToken ||= () => {};
@@ -249,8 +259,10 @@ export function prevUploadResetContinue(serverURL, token, uploadId, files, onExp
     });
   } catch (err) {
     console.log('Reset Upload Unknown Error: ',err);
-    onFailure(err);
+    return false;
   }
+
+  return true;
 }
 
 /**
@@ -262,6 +274,7 @@ export function prevUploadResetContinue(serverURL, token, uploadId, files, onExp
  * @param {function} onExpiredToken Function to call when we get an expired token return
  * @param {function} onSuccess The function to call upon success
  * @param {function} onFailure The function to call upon failure
+ * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function prevUploadAbandonContinue(serverURL, token, uploadId, onExpiredToken, onSuccess, onFailure) {
   onExpiredToken ||= () => {};
@@ -299,8 +312,10 @@ export function prevUploadAbandonContinue(serverURL, token, uploadId, onExpiredT
     });
   } catch (err) {
     console.log('Abandon Upload Unknown Error: ',err);
-    onFailure(err);
+    return false;
   }
+
+  return true;
 }
 
 /**
@@ -313,6 +328,7 @@ export function prevUploadAbandonContinue(serverURL, token, uploadId, onExpiredT
  * @param {function} onExpiredToken Function to call when we get an expired token return
  * @param {function} onSuccess The function to call if the files check is successful
  * @param {function} onFailure The function to call on failure
+ * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function checkUploadedFiles(serverURL, token, uploadId, files, onExpiredToken, onSuccess, onFailure)  {
   onExpiredToken ||= () => {};
@@ -356,6 +372,223 @@ export function checkUploadedFiles(serverURL, token, uploadId, files, onExpiredT
     });
   } catch (err) {
     console.log('Check Prev Upload Images Unknown Error: ',err);
-    onFailure(err);
+    return false;
   }
+
+  return true;
+}
+
+/**
+ * Handles failed uploaded files
+ * @function
+ * @param {string} serverURL The URL to the server
+ * @param {string} token The authorization token
+ * @param {string} uploadId The ID of the upload that's in progress
+ * @param {object} uploadedFiles The files that were being uploaded
+ * @param {function} onExpiredToken Function to call when we get an expired token return
+ * @param {function} onSuccess The function to call if the files check is successful
+ * @param {function} onFailure The function to call on failure
+ * @return {boolean} Returns true if the call was successfullly made, false if not
+ */
+export function handleFailedUploads (serverURL, token, uploadId, uploadedFiles, onExpiredToken, onSuccess, onFailure) {
+  onExpiredToken ||= () => {};
+  onSuccess ||= () => {};
+  onFailure ||= () => {};
+
+  const failedUploadsUrl = serverURL + '/sandboxUnloadedFiles?t=' + encodeURIComponent(token) +
+                                                            '&i=' + encodeURIComponent(uploadId);
+
+  try {
+    const resp = fetch(failedUploadsUrl, {
+      credentials: 'include',
+      method: 'GET'
+    }).then(async (resp) => {
+          if (resp.ok) {
+            return resp.json();
+          } else {
+            if (resp.status === 401) {
+              // User needs to log in again
+              onExpiredToken();
+            }
+            throw new Error(`Failed to get failed files for upload: ${resp.status}`, {cause:resp});
+          }
+        })
+      .then((respData) => {
+        onSuccess(respData)
+      })
+      .catch(function(err) {
+        console.log('Getting Failed Files For Upload Error: ', err);
+        onFailure(err);
+    });
+  } catch (err) {
+    console.log('Getting Failed Files For Upload  Unknown Error: ',err);
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Function that gets the counts of an upload
+ * @function
+ * @param {string} serverURL The URL to the server
+ * @param {string} token The authorization token
+ * @param {string} uploadId The ID of the upload that's in progress
+ * @param {object} uploadFiles The arraay of files that are being uploaded
+ * @param {function} onExpiredToken Function to call when we get an expired token return
+ * @param {function} onSuccess The function to call if the files check is successful
+ * @param {function} onFailure The function to call on failure
+ * @return {boolean} Returns true if the call was successfullly made, false if not
+ */
+export function getUploadCounts(serverURL, token, uploadId, uploadFiles, onExpiredToken, onSuccess, onFailure) {
+  onExpiredToken ||= () => {};
+  onSuccess ||= () => {};
+  onFailure ||= () => {};
+
+  const sandboxCountsUrl = serverURL + '/sandboxCounts?t=' + encodeURIComponent(token) + 
+                                                            '&i=' + encodeURIComponent(uploadId);
+
+  try {
+    const resp = fetch(sandboxCountsUrl, {
+      credentials: 'include',
+      method: 'GET'
+    }).then(async (resp) => {
+          if (resp.ok) {
+            return resp.json();
+          } else {
+            if (resp.status === 401) {
+              // User needs to log in again
+              onExpiredToken();
+            }
+            throw new Error(`Failed to get uploaded files count: ${resp.status}`, {cause:resp});
+          }
+        })
+      .then((respData) => {
+        onSuccess(respData);
+      })
+      .catch(function(err) {
+        console.log('Upload Images Counts Error: ', err);
+        onFailure(err);
+    });
+  } catch (err) {
+    console.log('Upload Images Counts Unknown Error: ',err);
+    return false;
+  }
+
+  return true;
+}
+
+
+/**
+ * Sends the completion status to the server
+ * @function
+ * @param {string} serverURL The URL to the server
+ * @param {string} token The authorization token
+ * @param {string} uploadId The ID of the upload that's in progress
+ * @param {function} onExpiredToken Function to call when we get an expired token return
+ * @param {function} onSuccess The function to call if the files check is successful
+ * @param {function} onFailure The function to call on failure
+ * @return {boolean} Returns true if the call was successfullly made, false if not
+ */
+export function uploadCompleted(serverURL, token, uploadId, onExpiredToken, onSuccess, onFailure) {
+  onExpiredToken ||= () => {};
+  onSuccess ||= () => {};
+  onFailure ||= () => {};
+
+  const sandboxCompleteUrl = serverURL + '/sandboxCompleted?t=' + encodeURIComponent(token);
+  const formData = new FormData();
+
+  formData.append('id', uploadId);
+
+  try {
+    const resp = fetch(sandboxCompleteUrl, {
+      credentials: 'include',
+      method: 'POST',
+      body: formData
+    }).then(async (resp) => {
+          if (resp.ok) {
+            return resp.json();
+          } else {
+            if (resp.status === 401) {
+              // User needs to log in again
+              onExpiredToken();
+            }
+            throw new Error(`Failed to mark upload as completed: ${resp.status}`, {cause:resp});
+          }
+        })
+      .then((respData) => {
+          // Process the results
+          onSuccess(respData);
+      })
+      .catch(function(err) {
+        console.log('Upload Images Completed Error: ', err);
+        onFailure(err);
+    });
+  } catch (error) {
+    console.log('Upload Images Completed Unknown Error: ',err);
+    return false;
+  }
+
+  return true;
+}
+
+
+/**
+ * Uploads chunks of files from the list
+ * @function
+ * @param {string} serverURL The URL to the server
+ * @param {string} token The authorization token
+ * @param {object} fileChunk The array of files to upload
+ * @param {string} uploadId The ID of the upload
+ * @param {number} numFiles The number of images to send
+ * @param {object} tzInfo The timezone information
+ * @param {function} onExpiredToken Function to call when we get an expired token return
+ * @param {function} onSuccess The function to call if the files check is successful
+ * @param {function} onFailure The function to call on failure
+ * @return {boolean} Returns true if the call was successfullly made, false if not
+ */
+export function uploadChunk(serverURL, token, fileChunk, uploadId, numFiles, tzInfo, onExpiredToken, onSuccess, onFailure) {
+  onExpiredToken ||= () => {};
+  onSuccess ||= () => {};
+  onFailure ||= () => {};
+
+  const sandboxFileUrl = serverURL + '/sandboxFile?t=' + encodeURIComponent(token);
+  const formData = new FormData();
+
+  formData.append('id', uploadId);
+  formData.append('tz_off', tzInfo ? tzInfo.offset : selectedTimezone);
+
+  for (let idx = 0; idx < numFiles && idx < fileChunk.length; idx++) {
+    formData.append(fileChunk[idx].name, fileChunk[idx]);
+  }
+
+  try {
+    const resp = fetch(sandboxFileUrl, {
+      credentials: 'include',
+      method: 'POST',
+      body: formData
+    }).then(async (resp) => {
+          if (resp.ok) {
+            return resp.json();
+          } else {
+            if (resp.status === 401) {
+              // User needs to log in again
+              onExpiredToken();
+            }
+            throw new Error(`Failed to check upload: ${resp.status}`, {cause:resp});
+          }
+        })
+      .then((respData) => {
+        onSuccess(respData);
+      })
+      .catch(function(err) {
+        console.log('Upload File Error: ',err);
+        onFailure(err);
+    });
+  } catch (error) {
+    console.log('Upload Images Unknown Error: ',err);
+    return false;
+  }
+
+  return true;
 }

@@ -1367,17 +1367,13 @@ def sandbox_stats():
     # Check if we already have the stats
     stats_temp_filename = os.path.join(tempfile.gettempdir(), hash2str(s3_url) + \
                                                                 TEMP_UPLOAD_STATS_FILE_NAME_POSTFIX)
-    print('HACK: SANDBOXSTATS: BEFORE LOAD TIMED INFO', flush=True)
     stats = sdfu.load_timed_info(stats_temp_filename, TEMP_UPLOAD_STATS_FILE_TIMEOUT_SEC)
-    print('HACK:             : AFTER LOAD TIMED INFO', flush=True)
     if stats is not None:
         return jsonify(stats)
 
     # Get all the collections so we can parse them for our stats
-    print('HACK: SANDBOXSTATS: BEFORE LOAD COLLECTION', flush=True)
     all_collections = sdc.load_collections(db, hash2str(s3_url), bool(user_info.admin), s3_url,
                                                     user_info.name, lambda: get_password(token, db))
-    print('HACK:              : AFTER LOAD COLLECTION', flush=True)
     if not all_collections:
         return jsonify([])
 

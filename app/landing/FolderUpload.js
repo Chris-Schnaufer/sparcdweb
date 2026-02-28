@@ -170,57 +170,105 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
    * @param {number} numRetries The number of retry attempts made
    */
   const handleFailedUploads = React.useCallback((uploadId, uploadedFiles, cbComplete, cbFail, numRetries = 0) => {
-    const failedUploadsUrl = serverURL + '/sandboxUnloadedFiles?t=' + encodeURIComponent(uploadToken) +
-                                                              '&i=' + encodeURIComponent(uploadId);
+    cbComplete ||= () => {};
+    cbFail ||= () => {};
 
-    try {
-      const resp = fetch(failedUploadsUrl, {
-        credentials: 'include',
-        method: 'GET'
-      }).then(async (resp) => {
-            if (resp.ok) {
-              return resp.json();
+    const err = Server.handleFailedUploads(serverURL, uploadToken, uploadId, uploadedFiles,
+      (respData) => { // Success
+          // Build up list of files to retry
+          if (respData.length > 0) {
+            const failedFiles = uploadedFiles.filter((item) => respData.findIndex((oneName) => oneName.toLowerCase() === item.webkitRelativePath.toLowerCase()) !== -1 )
+            if (failedFiles.length > 0) {
+              window.setTimeout(() => uploadChunk(failedFiles, uploadId), 200);
             } else {
-              if (resp.status === 401) {
-                // User needs to log in again
-                tokenExpiredFunc();
-              }
-              throw new Error(`Failed to get failed files for upload: ${resp.status}`, {cause:resp});
+              cbFail()
             }
-          })
-        .then((respData) => {
-            // Build up list of files to retry
-            if (respData.length > 0) {
-              const failedFiles = uploadedFiles.filter((item) => respData.findIndex((oneName) => oneName.toLowerCase() === item.webkitRelativePath.toLowerCase()) !== -1 )
-              if (failedFiles.length > 0) {
-                window.setTimeout(() => uploadChunk(failedFiles, uploadId), 200);
-              } else {
-                if (cbFail && typeof(cbFail) === 'function') {
-                  cbFail()
-                }
-              }
-            } else {
-              if (cbComplete && typeof(cbComplete) === 'function') {
-                cbComplete()
-              }
-            }
-        })
-        .catch(function(err) {
+          } else {
+            cbComplete()
+          }
+      },
+      (err) => {      // Failure
           if (numRetries >= 6) {
-            console.log('Getting Failed Files For Upload Error: ', err);
             addMessage(Level.Error, 'A problem ocurred while getting failed files for the upload');
             setUploadState(uploadingState.error);
           } else {
             numRetries++;
             window.setTimeout(() => handleFailedUploads(uploadId, uploadedFiles, cbComplete, cbFail, numRetries), 10000 * numRetries);
           }
-      });
-    } catch (error) {
-      console.log('Getting Failed Files For Upload  Unknown Error: ',err);
+      }
+    );
+
+    // Check for a problem
+    if (err) {
       addMessage(Level.Error, 'An unknown problem ocurred while getting failed files for the upload');
       setUploadState(uploadingState.error);
     }
   }, [addMessage, setUploadState]);
+
+  /**
+   * Handles success when getting upload counts
+   * @function
+   * @param {object} respData The response data
+   * @param {string} uploadId The ID of the upload that's in progress
+   * @param {object} uploadFiles The arraay of files that are being uploaded
+   * @param {number} prevUploadCount The number of uploaded files used when uploads are failing.
+   * @param {number} startTs The timestamp of when the prevUploadCount last changed
+   */
+  function haveGetUploadCountsSuccess(respData, uploadId, uploadFiles, prevUploadCount, startTs) {
+    // Process the results
+    setUploadingFileCounts(respData);
+    if (respData.uploaded === respData.total) {
+      // We are done uploading
+      setUploadCompleted(true);
+      setUploadState(uploadingState.none);
+      disabledIdleCheckFunc(false);       // Enable idle checking
+    } else {
+      // We have failed uploads. Keep track of what we have so that we can retry when
+      // the uploads have stabilized (the ones that could succeed, have succeeded)
+      if (respData.uploaded !== prevUploadCount || !startTs) {
+        // Something updated, we're not ready to get the failed images
+        window.setTimeout(() => internalGetUploadCounts(uploadId, uploadFiles, 0, respData.uploaded, Date.now()), 2000);
+        if (uploadStateRef.current !== uploadingState.retryingFailed) {
+          setUploadState(uploadingState.uploading);
+        }
+      } else {
+        // We haven't had a change in the number of successful uploads
+        const elapsedSec = Math.trunc((Date.now() - startTs) / 1000);
+        // Check if we're ready to display a pending message
+        if (elapsedSec >= 1 * 60) {    // 1 minutes
+          // Only if we're not retrying
+          if (uploadStateRef.current !== uploadingState.retryingFailed) {
+            setUploadState(uploadingState.haveFailed);
+          }
+        }
+        if (elapsedSec >= 3 * 60) {    // 3 minutes
+          // Retry only if we're not already retrying
+          if (uploadStateRef.current !== uploadingState.retryingFailed) {
+            setUploadState(uploadingState.retryingFailed);
+            handleFailedUploads(uploadId, uploadFiles, 
+                () => {   // Success function
+                      setUploadState(uploadingState.none);
+                      disabledIdleCheckFunc(false);    // Enable checking for idle
+                      },
+                () => {   // Failure function
+                      console.log('ERROR: Unable to find failed files in list of files to upload');
+                      addMessage(Level.Error, 'An error ocurred while trying to fetch list of failed files from the server');
+                      setUploadState(uploadingState.uploadFailure);
+                      disabledIdleCheckFunc(false);    // Enable checking for idle
+                      }
+              );
+            window.setTimeout(() => internalGetUploadCounts(uploadId, uploadFiles), 2000);
+          } else {
+            setUploadState(uploadingState.uploadFailure);
+            disabledIdleCheckFunc(false);    // Enable checking for idle
+          }
+        } else {
+          // Not ready to do take any action yet
+          window.setTimeout(() => internalGetUploadCounts(uploadId, uploadFiles, 0, respData.uploaded, startTs), 2000);
+        }
+      }
+    }   
+  }
 
   /**
    * Internal function that gets the counts of an upload
@@ -232,98 +280,32 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
    * @param {number} startTs The timestamp of when the prevUploadCount last changed
    */
   const internalGetUploadCounts = React.useCallback((uploadId, uploadFiles, numRetries = 0, prevUploadCount = null, startTs = null) => {
-    const sandboxCountsUrl = serverURL + '/sandboxCounts?t=' + encodeURIComponent(uploadToken) + 
-                                                              '&i=' + encodeURIComponent(uploadId);
 
-    try {
-      const resp = fetch(sandboxCountsUrl, {
-        credentials: 'include',
-        method: 'GET'
-      }).then(async (resp) => {
-            if (resp.ok) {
-              return resp.json();
-            } else {
-              if (resp.status === 401) {
-                // User needs to log in again
-                tokenExpiredFunc();
-              }
-              throw new Error(`Failed to get uploaded files count: ${resp.status}`, {cause:resp});
-            }
-          })
-        .then((respData) => {
-            // Process the results
-            setUploadingFileCounts(respData);
-            if (respData.uploaded === respData.total) {
-              // We are done uploading
-              setUploadCompleted(true);
-              setUploadState(uploadingState.none);
-              disabledIdleCheckFunc(false);       // Enable idle checking
-            } else {
-              // We have failed uploads. Keep track of what we have so that we can retry when
-              // the uploads have stabilized (the ones that could succeed, have succeeded)
-              if (respData.uploaded !== prevUploadCount || !startTs) {
-                // Something updated, we're not ready to get the failed images
-                window.setTimeout(() => internalGetUploadCounts(uploadId, uploadFiles, 0, respData.uploaded, Date.now()), 2000);
-                if (uploadStateRef.current !== uploadingState.retryingFailed) {
-                  setUploadState(uploadingState.uploading);
-                }
-              } else {
-                // We haven't had a change in the number of successful uploads
-                const elapsedSec = Math.trunc((Date.now() - startTs) / 1000);
-                // Check if we're ready to display a pending message
-                if (elapsedSec >= 1 * 60) {    // 1 minutes
-                  // Only if we're not retrying
-                  if (uploadStateRef.current !== uploadingState.retryingFailed) {
-                    setUploadState(uploadingState.haveFailed);
-                  }
-                }
-                if (elapsedSec >= 3 * 60) {    // 3 minutes
-                  // Retry only if we're not already retrying
-                  if (uploadStateRef.current !== uploadingState.retryingFailed) {
-                    setUploadState(uploadingState.retryingFailed);
-                    handleFailedUploads(uploadId, uploadFiles, 
-                        () => {   // Success function
-                              setUploadState(uploadingState.none);
-                              disabledIdleCheckFunc(false);    // Enable checking for idle
-                              },
-                        () => {   // Failure function
-                              console.log('ERROR: Unable to find failed files in list of files to upload');
-                              addMessage(Level.Error, 'An error ocurred while trying to fetch list of failed files from the server');
-                              setUploadState(uploadingState.uploadFailure);
-                              disabledIdleCheckFunc(false);    // Enable checking for idle
-                              }
-                      );
-                    window.setTimeout(() => internalGetUploadCounts(uploadId, uploadFiles), 2000);
-                  } else {
-                    setUploadState(uploadingState.uploadFailure);
-                    disabledIdleCheckFunc(false);    // Enable checking for idle
-                  }
-                } else {
-                  // Not ready to do take any action yet
-                  window.setTimeout(() => internalGetUploadCounts(uploadId, uploadFiles, 0, respData.uploaded, startTs), 2000);
-                }
-              }
-            }
-        })
-        .catch(function(err) {
-          if (numRetries >= 6) {
-            console.log('Upload Images Counts Error: ', err);
-            addMessage(Level.Error, 'A problem ocurred while checking upload image counts');
-            setUploadState(uploadingState.error);
-            disabledIdleCheckFunc(false);    // Enable checking for idle
-          } else {
-            numRetries++;
-            window.setTimeout(() => internalGetUploadCounts(uploadId, uploadFiles, numRetries), 7000 * numRetries);
-            setUploadState(uploadingState.uploading);
-          }
-      });
-    } catch (err) {
-      console.log('Upload Images Counts Unknown Error: ',err);
+    let err = Server.getUploadCounts(serverURL, uploadToken, uploadId, uploadFiles, tokenExpiredFunc,
+      (respData) => { // Success
+        haveGetUploadCountsSuccess(respData, uploadId, uploadFiles, prevUploadCount, startTs)
+      },
+      (err) => {      // Failure
+        if (numRetries >= 6) {
+          addMessage(Level.Error, 'A problem ocurred while checking upload image counts');
+          setUploadState(uploadingState.error);
+          disabledIdleCheckFunc(false);    // Enable checking for idle
+        } else {
+          numRetries++;
+          window.setTimeout(() => internalGetUploadCounts(uploadId, uploadFiles, numRetries), 7000 * numRetries);
+          setUploadState(uploadingState.uploading);
+        }
+      }
+    );
+
+    // Check for an error
+    if (err) {
       addMessage(Level.Error, 'An unknown problem ocurred while checking upload image counts');
       setUploadState(uploadingState.error);
       disabledIdleCheckFunc(false);    // Enable checking for idle
     }
-  }, [addMessage, setUploadingFileCounts, setUploadCompleted, setUploadState, uploadStateRef])
+
+  }, [addMessage, disabledIdleCheckFunc, setUploadingFileCounts, setUploadCompleted, setUploadState, uploadStateRef])
 
   /**
    * Gets the counts of an upload
@@ -344,46 +326,23 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
    * @param {function} {onFailure} Function to call upon failure
    */
   function serverUploadCompleted(uploadId, onSuccess, onFailure) {
-    const sandboxCompleteUrl = serverURL + '/sandboxCompleted?t=' + encodeURIComponent(uploadToken);
-    const formData = new FormData();
+    onSuccess ||= () => {};
+    onFailure ||= () => {};
 
-    formData.append('id', uploadId);
-
-    try {
-      const resp = fetch(sandboxCompleteUrl, {
-        credentials: 'include',
-        method: 'POST',
-        body: formData
-      }).then(async (resp) => {
-            if (resp.ok) {
-              return resp.json();
-            } else {
-              if (resp.status === 401) {
-                // User needs to log in again
-                tokenExpiredFunc();
-              }
-              throw new Error(`Failed to mark upload as completed: ${resp.status}`, {cause:resp});
-            }
-          })
-        .then((respData) => {
-            // Process the results
-            if (typeof(onSuccess) === 'function') {
-              onSuccess(uploadId, respData);
-            }
-        })
-        .catch(function(err) {
-          console.log('Upload Images Completed Error: ', err);
-          addMessage(Level.Error, 'A problem ocurred while completing image upload');
-          if (typeof(onFailure) === 'function') {
-            onFailure(uploadId);
-          }
-      });
-    } catch (error) {
-      console.log('Upload Images Completed Unknown Error: ',err);
-      addMessage(Level.Error, 'An unknown problem ocurred while completing image upload');
-      if (typeof(onFailure) === 'function') {
+    let err = Server.uploadCompleted(serverURL, uploadToken, uploadId, tokenExpiredFunc,
+      (respData) => { // Success
+        onSuccess(uploadId, respData);
+      },
+      (err) => {      // Failure
+        addMessage(Level.Error, 'A problem ocurred while completing image upload');
         onFailure(uploadId);
       }
+    );
+
+    // Check for an error
+    if (err) {
+      addMessage(Level.Error, 'An unknown problem ocurred while completing image upload');
+      onFailure(uploadId);
     }
   }
 
@@ -404,7 +363,6 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
       // Figure out how many files to upload next
       let curUploadCount = MAX_FILES_UPLOAD_SPLIT;
       const perFileSec = ((Date.now() - startTimestamp) / 1000.0) / count;
-      console.log('HACK:     :', perFileSec);
       // Check if we have low memory (only works on Chrome-like browsers)
       if (!haveLowMemory()) {
         curUploadCount = Math.max(1, MAX_FILES_UPLOAD_SPLIT - Math.round(perFileSec / 7.0)); // Checking against 7.0 seconds (aka magic number)
@@ -412,7 +370,6 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
         curUploadCount = 1
       }
 
-      console.log('HACK: NUMFILES:',curUploadCount, remainingFiles.length);
       return {files:remainingFiles, count:curUploadCount};
   }
 
@@ -425,47 +382,20 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
    * @param {number} attempts The remaining number of attempts to try
    */
   const uploadChunk = React.useCallback((fileChunk, uploadId, numFiles = 1, attempts = 3) => {
-    const sandboxFileUrl = serverURL + '/sandboxFile?t=' + encodeURIComponent(uploadToken);
-    const formData = new FormData();
     const maxAttempts = attempts;
     const tzinfo = options.find((item) => item.value === selectedTimezone);
     const startTs = Date.now();
 
-    formData.append('id', uploadId);
-    formData.append('tz_off', tzinfo ? tzinfo.offset : selectedTimezone);
-    for (let idx = 0; idx < numFiles && idx < fileChunk.length; idx++) {
-      formData.append(fileChunk[idx].name, fileChunk[idx]);
-    }
-
-    try {
-      const resp = fetch(sandboxFileUrl, {
-        credentials: 'include',
-        method: 'POST',
-        body: formData
-      }).then(async (resp) => {
-            if (resp.ok) {
-              return resp.json();
-            } else {
-              if (resp.status === 401) {
-                // User needs to log in again
-                tokenExpiredFunc();
-              }
-              throw new Error(`Failed to check upload: ${resp.status}`, {cause:resp});
-            }
-          })
-        .then((respData) => {
-            // Process the results
-            const nextFiles = getNextUploadChunk(fileChunk, numFiles, startTs);
-            // If we have no more files to upload, we are done
-            if (nextFiles.files.length > 0) {
-              window.setTimeout(() => uploadChunk(nextFiles.files, uploadId, nextFiles.count), 10);
-            }
-        })
-        .catch(function(err) {
-          // Report this the first time we encounter it
-          if (attempts == 3) {
-            console.log('Upload File Error: ',err);
-          }
+    const err = Server.uploadChunk(serverURL, uploadToken, fileChunk, uploadId, numFiles, tzinfo, tokenExpiredFunc,
+      (respData) => { // Success
+        // Process the results
+        const nextFiles = getNextUploadChunk(fileChunk, numFiles, startTs);
+        // If we have no more files to upload, we are done
+        if (nextFiles.files.length > 0) {
+          window.setTimeout(() => uploadChunk(nextFiles.files, uploadId, nextFiles.count), 10);
+        }
+      },
+      (err) => {      // Failure
           // Try uploading this chunk a few times
           attempts--;
           if (attempts > 0) {
@@ -480,12 +410,15 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
               window.setTimeout(() => uploadChunk(nextFiles.files, uploadId), 10);
             }
           }
-      });
-    } catch (error) {
+      }
+    );
+
+    // Check for a problem making the call
+    if (err) {
       console.log('Upload Images Unknown Error: ',err);
       addMessage(Level.Error, 'An unknown problem ocurred while uploading images');
     }
-  }, [addMessage, options, selectedTimezone, setHaveFailedUpload]);
+  }, [addMessage, options, selectedTimezone, serverURL, setHaveFailedUpload, uploadToken]);
 
   /**
    * Handles uploading a folder of files
@@ -582,8 +515,9 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
    * Handle successful result when checking for a previous upload
    * @function
    * @param {object} respData The response data from the call
+   * @param {object} files The list of files to upload
    */
-  const haveUploadRecoverySuccess = React.useCallback((respData) => {
+  const haveUploadRecoverySuccess = React.useCallback((respData, files) => {
       if (folderUploadRef.current) {
         folderUploadRef.current.disabled = false;
       }
@@ -622,6 +556,12 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
     // Return if there's nothing to do
     if (!folderSelectRef.current || !folderSelectRef.current.files || !folderSelectRef.current.files.length) {
       addMessage(Level.Information, 'Please choose a folder with files to upload');
+      if (folderUploadRef.current) {
+        folderUploadRef.current.disabled = false;
+      }
+      if (folderCancelRef.current) {
+        folderCancelRef.current.disabled = false;
+      }
       return;
     }
 
@@ -688,7 +628,7 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
     relativePath = relativePath.substr(0, relativePath.length - allowedFiles[0].name.length - 1);
 
     if (!recovery) {
-      Server.checkPreviousUpload(serverURL, uploadToken, relativePath, tokenExpiredFunc, 
+      const err = Server.checkPreviousUpload(serverURL, uploadToken, relativePath, tokenExpiredFunc, 
                         (respData) => {havePrevUploadSuccess(respData, relativePath, allowedFiles)},     // Success
                         (err) => {  // Failure
                           if (folderUploadRef.current) {
@@ -700,11 +640,18 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
                           addMessage(Level.Error, 'A problem ocurred while preparing for upload');
                           setUploadState(uploadingState.error);
                         }
-      );
+        );
+
+      // Check for an error
+      if (err) {
+        addMessage(Level.Error, 'An unknown problem ocurred while preparing for upload');
+        setUploadState(uploadingState.error);
+      }
     } else {
-      setUploadingFileCounts({total:files.length, uploaded:0});
+      setUploadingFileCounts({total:allowedFiles.length, uploaded:0});
       setDisableDetails(true);
-      window.setTimeout(() => Server.updateUploadRecovery(serverURL,
+      window.setTimeout(() => {
+                  const err = Server.updateUploadRecovery(serverURL,
                                                     uploadToken,
                                                     recovery.coll_info.id,
                                                     recovery.upload_info.location,
@@ -712,19 +659,25 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
                                                     relativePath,
                                                     allowedFiles,
                                                     tokenExpiredFunc,
-                                                    (respData) => {haveUploadRecoverySuccess(respData)}, // Success
+                                                    (respData) => {haveUploadRecoverySuccess(respData, allowedFiles)}, // Success
                                                     (err) => {    // Failure
-                                                    if (folderUploadRef.current) {
-                                                      folderUploadRef.current.disabled = false;
-                                                    }
-                                                    if (folderCancelRef.current) {
-                                                      folderCancelRef.current.disabled = false;
-                                                    }
+                                                      if (folderUploadRef.current) {
+                                                        folderUploadRef.current.disabled = false;
+                                                      }
+                                                      if (folderCancelRef.current) {
+                                                        folderCancelRef.current.disabled = false;
+                                                      }
                                                       addMessage(Level.Error, 'A problem ocurred while preparing for upload');
                                                       setUploadState(uploadingState.error);
                                                       cancelUpload();
-                                                    })
-     , 100);
+                                                    });
+                  // Check for an error
+                  if (err) {
+                    addMessage(Level.Error, 'An unknown problem ocurred while preparing for upload');
+                    setUploadState(uploadingState.error);
+                    cancelUpload();
+                  }
+      }, 100);
     }
   }, [addMessage, setDisableDetails, setNewUpload, setUploadingFileCounts, setUploadState]);
 
@@ -849,7 +802,7 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
 
     // Add the upload to the server letting the UI to update
     window.setTimeout(() => {
-        Server.continueNewUpload(serverURL, 
+        const err = Server.continueNewUpload(serverURL, 
                           uploadToken,
                           collectionSelection.id,
                           locationSelection.idProperty,
@@ -867,6 +820,11 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
                             addMessage(Level.Error, 'An problem ocurred while preparing for new sandbox upload');
                           }
                         );
+        // Check for an error
+        if (err) {
+          setDisableDetails(false);
+          addMessage(Level.Error, 'An unknown problem ocurred while preparing for new sandbox upload');
+        }
     }, 100);
   }, [addMessage, collectionSelection, comment, disableUploadDetailsRef, locationSelection, newUploadFiles, setDisableDetails, 
       setNewUpload, setUploadingFileCounts, uploadPath]);
@@ -886,7 +844,7 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
     setUploadingFiles(true);
 
     // Check that the continuing upload attempt has the same files as the previous attempt
-    Server.checkUploadedFiles(serverURL, uploadToken, continueUploadInfo.id, continueUploadInfo.files,  tokenExpiredFunc,
+    let err = Server.checkUploadedFiles(serverURL, uploadToken, continueUploadInfo.id, continueUploadInfo.files,  tokenExpiredFunc,
         (respData) => {     // Success
             if (!respData || respData.success) {
               uploadFolder(continueUploadInfo.files, continueUploadInfo.id); // Success - continue uploading
@@ -903,6 +861,12 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
             setNotificationMessage({message:'An error ocurred while trying to continue the upload', action:() => {cancelUpload();failedIgnore();} });
         }
     );
+
+    // Check for an error
+    if (err) {
+      addMessage(Level.Error, 'An unknown problem ocurred while confirming continuation of upload');
+      setNotificationMessage({message, action:cancelUpload});
+    }
 
     setContinueUploadInfo(null);
 
@@ -952,7 +916,7 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
     setUploadingFileCounts({total:continueUploadInfo.files.length, uploaded:0});
 
     // Reset the upload on the server and then restart the upload
-    Server.prevUploadResetContinue(serverURL, uploadToken, continueUploadInfo.id, continueUploadInfo.files, tokenExpiredFunc,
+    const err = Server.prevUploadResetContinue(serverURL, uploadToken, continueUploadInfo.id, continueUploadInfo.files, tokenExpiredFunc,
                               (respData) => {    // Success
                                   disableUploadCheckRef.current = false;
                                   const curFiles = continueUploadInfo.files;
@@ -966,6 +930,11 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
                                   addMessage(Level.Error, 'A problem ocurred while preparing for reset sandbox upload');
                               }
                             );
+
+    // Check for an error
+    if (err) {
+      addMessage(Level.Error, 'An unknown problem ocurred while preparing for reset sandbox upload');
+    }
   }, [addMessage, continueUploadInfo, disableUploadCheckRef, prevUploadCheckState, setContinueUploadInfo, setPrevUploadCheck,
       setUploadingFileCounts, uploadFolder]);
 
@@ -980,10 +949,10 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
     }
     disableUploadCheckRef.current = true;
 
-    prevUploadAbandonContinue(serverURL, uploadToken, continueUploadInfo.id, tokenExpiredFunc,
+    const err = Server.prevUploadAbandonContinue(serverURL, uploadToken, continueUploadInfo.id, tokenExpiredFunc,
                               (respData) => {   // Success
                                   disableUploadCheckRef.current = false;
-                                  setUploadingFileCounts({total:newUploadFiles.length, uploaded:0});
+                                  setUploadingFileCounts({total:continueUploadInfo.files.length, uploaded:0});
                                   setPrevUploadCheck(prevUploadCheckState.noCheck);
                                   setContinueUploadInfo(null);
                                   setCollectionSelection(null);
@@ -991,13 +960,18 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
                                   setComment(null);
                                   setNewUpload(false);
                                   onCompleted();
-                                  addMessage(Level.Warning,'Unable to complete removal of previously started upload from the storage server. Please contact your administrator to complete removal');
+                                  addMessage(Level.Info,'Unable to complete removal of previously started upload from the storage server. Please contact your administrator to complete removal');
                               },
                               (err) => {   // Failure
                                   disableUploadCheckRef.current = false;
                                   addMessage(Level.Error, 'A problem ocurred while preparing for abandoning sandbox upload');
                               }
                           );
+
+    // Check for an error
+    if (err) {
+      addMessage(Level.Error, 'An unknown problem ocurred while preparing for abandoning sandbox upload');
+    }
   }, [addMessage, continueUploadInfo, newUploadFiles, onCompleted, prevUploadCheckState, setCollectionSelection,
       setComment, setContinueUploadInfo, setLocationSelection, setNewUpload, setPrevUploadCheck, setUploadingFileCounts, tokenExpiredFunc]);
 
@@ -1038,7 +1012,7 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
 
     serverUploadCompleted(continueUploadInfo.id,
       () => { // Success
-          const uploadFiles = continueUploadInfo.allFiles;
+          const uploadFiles = continueUploadInfo.files;
           setUploadingFileCounts({total:uploadFiles.length, uploaded:0});
           setContinueUploadInfo(null);
           setCollectionSelection(null);
