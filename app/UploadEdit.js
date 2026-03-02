@@ -396,7 +396,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
    * @param {object} event The keypress event
    */
   const onKeypress = React.useCallback((event) => {
-    if (curEditState === editingStates.editImage) {
+    if (curEditState === editingStates.editImage && !speciesKeybindName) {
       if (!event.altKey && !event.ctrlKey && !event.metaKey) {
         if (event.key === 'ArrowLeft') {
           // Notify the ImageEdit child to reset its zoom, et al
@@ -636,11 +636,11 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
    */
   function onKeybindClick(event, name, oldKeybinding) {
     setSpeciesZoomName(null);
-    if (curEditState !== editingStates.editImage) {
+//    if (curEditState !== editingStates.editImage) {
       setSpeciesKeybindName(name);
-    } else {
-      setSpeciesKeybindName(null);
-    }
+//    } else {
+//      setSpeciesKeybindName(null);
+//    }
   }
 
   /**
@@ -648,11 +648,21 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
    * @function
    * @param {string} speciesName The name of the species to change the keybinding for
    * @param {string} newKey The new keybinding character
+   * @return {string} Returns null when the request has been sent to the server. Otherwise an error
+   *                  message is returned. Setting the newKey to null (to clear it) always returns 
+   *                  null (no error message) if the species exists
    */
   function keybindChange(speciesName, newKey) {
+    // Find the species
     const newKeySpeciesIdx = speciesItems.findIndex((item) => item.name === speciesName);
     if (newKeySpeciesIdx <= -1) {
-      return;
+      return "Unable to find keybind species. Please close and try again";
+    }
+    // Make sure we don't have a duplicate
+    if (newKey !== null) {
+      if (speciesItems.findIndex((item) => item.keyBinding && item.keyBinding.toLowerCase() === newKey.toLowerCase()) !== -1) {
+        return "Duplicate keybinding detected. Please try another key";
+      }
     }
 
     const keybindUrl = serverURL + '/speciesKeybind?t=' + encodeURIComponent(editToken);
@@ -679,7 +689,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
             }
           })
         .then((respData) => {
-            // Nothing to do            
+            // Nothing to do. We always set the keybinding even if it doesn't work on the server
         })
         .catch(function(err) {
           console.log('Update Location Error: ',err);
@@ -688,9 +698,12 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
     } catch (error) {
       console.log('Update Location Unknown Error: ',err);
       addMessage(Level.Error, 'An unknown problem ocurred while updating the keybinding');
+      return('An error ocurred while setting keybinding');
     }
 
     speciesItems[newKeySpeciesIdx].keyBinding = newKey;
+
+    return null;
   }
 
   /**
@@ -1167,7 +1180,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
           </Grid>
         : null
       }
-      { speciesKeybindName && curEditState !== editingStates.editImage ? 
+      { speciesKeybindName ? 
           <Grid id='image-edit-species-keybind' container spacing={0} direction="column" alignItems="center" justifyContent="center"
               style={{ 'paddingTop':'10px', 'paddingLeft':'10px',
                        'minHeight':curHeight+'px', 'maxHeight':curHeight+'px', 'height':curHeight+'px',
