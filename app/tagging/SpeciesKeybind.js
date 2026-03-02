@@ -25,6 +25,7 @@ import Typography from '@mui/material/Typography';
 export default function SpeciesKeybind({keybind, name, parentId, onClose, onChange}) {
   const [parentX, setParentX] = React.useState(0);
   const [curKeybind, setCurKeybind] = React.useState(keybind);
+  const [errorMessage, setErrorMessage] = React.useState(null);
 
   // Handler for when the window is resized
   React.useLayoutEffect(() => {
@@ -57,6 +58,7 @@ export default function SpeciesKeybind({keybind, name, parentId, onClose, onChan
     }
   }, []);
 
+
   // If we don't have a parent X position, try and get one
   if (parentX === 0) {
     const el = document.getElementById(parentId);
@@ -65,26 +67,48 @@ export default function SpeciesKeybind({keybind, name, parentId, onClose, onChan
     }
   }
 
+  /**
+   * Handles the user setting the keybinding to a key
+   * @function
+   */
+  const handleBindChange = React.useCallback(() => {
+    setErrorMessage(null);
+
+    const res = onChange(curKeybind);
+
+    // Check for an error
+    if (res) {
+      setErrorMessage(res);
+    } else {
+      onClose();
+    }
+  }, [curKeybind]);
+
   // Return the UI
   return (
-    <Card sx={{backgroundColor:'rgb(255,255,255,0.8)'}}>
+    <Card id="specied-keybind" sx={{backgroundColor:'rgb(255,255,255,0.8)'}}>
       <CardContent>
-        <Typography gutterBottom sx={{ color: 'text.primary', fontSize: 14, textAlign: 'center' }} >
+        <Typography gutterBottom sx={{ color: 'text.primary', fontSize: 14, textAlign:'center' }} >
           Setting new keybinding for &nbsp;
           <span style={{ fontSize: 16, fontWeight:'bold'}} >
             {name}
           </span>
         </Typography>
-        <Typography gutterBottom sx={{ color: 'text.primary', fontSize: 14, textAlign: 'center', fontWeight:'bold' }} >
+        { errorMessage && 
+          <Typography gutterBottom variant='body2' sx={{textAlign:'center', color:'indianred' }} >
+            {errorMessage}
+          </Typography>
+        }
+        <Typography gutterBottom sx={{ color:'text.primary', fontSize: 14, textAlign: 'center', fontWeight:'bold' }} >
           Press a key
         </Typography>
-        <Typography gutterBottom variant='h5' sx={{ color: 'text.primary', textAlign: 'center' }} >
+        <Typography gutterBottom variant='h5' sx={{ color:'text.primary', textAlign:'center' }} >
           {curKeybind ? (curKeybind === ' ' ? 'SPACE' : curKeybind) : '<none>'}
         </Typography>
       </CardContent>
       <CardActions>
-        <Button sx={{flex:'1'}} onClick={() => {setCurKeybind(null);onChange(null);}}>Clear</Button>
-        <Button sx={{flex:'1'}} onClick={() => {onChange(curKeybind);onClose();}}>Update</Button>
+        <Button sx={{flex:'1'}} onClick={() => {setErrorMessage(null);setCurKeybind(null);}}>Clear</Button>
+        <Button sx={{flex:'1'}} onClick={() => {handleBindChange();}}>Update</Button>
         <Button sx={{flex:'1'}} onClick={onClose}>Cancel</Button>
     </CardActions>
     </Card>
