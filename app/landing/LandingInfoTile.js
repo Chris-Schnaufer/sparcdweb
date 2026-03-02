@@ -14,6 +14,8 @@ import { useTheme } from '@mui/material/styles';
 /**
  * Returns the UI for information tiles for the landing page
  * @function
+ * @param {string} title The title to display
+ * @param {string} details The details to display
  * @returns {object} The rendered UI
  */
 export default function LandingInfoTile({title, details}) {

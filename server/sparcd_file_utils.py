@@ -73,15 +73,12 @@ def load_timed_info(load_path: str, timeout_sec: int=TEMP_FILE_EXPIRE_SEC):
     while tries < TEMP_FILE_MAX_OPEN_TRIES:
         try:
             with open(load_path, 'r', encoding='utf-8') as infile:
-                print('HACK:   OPENED:',tries, load_path, flush=True)
                 try:
-                    print('HACK:   BEFORE LOAD:',tries, load_path, flush=True)
                     loaded_data = json.loads(infile.read())
-                    print('HACK:   AFTER LOAD:',tries, load_path, flush=True)
                     break
                 except json.JSONDecodeError as ex:
                     infile.close()
-                    print(f'WARN: Timed file has invalid contents: {load_path}')
+                    print(f'WARNING: Timed file has invalid contents: {load_path}')
                     print(ex)
                     print('      Removing invalid file')
                     try:
@@ -94,7 +91,6 @@ def load_timed_info(load_path: str, timeout_sec: int=TEMP_FILE_EXPIRE_SEC):
                     return None
         except FileNotFoundError:
             # We have some kind of opening error. Keep trying
-            print('HACK: UNABLE TO OPEN TEMP FILE:',tries, load_path, flush=True)
             if tries < TEMP_FILE_MAX_OPEN_TRIES:
                 tries += 1
                 time.sleep(1)
@@ -105,7 +101,7 @@ def load_timed_info(load_path: str, timeout_sec: int=TEMP_FILE_EXPIRE_SEC):
     # Check if the contents are too old
     if not isinstance(loaded_data, dict) or 'timestamp' not in loaded_data or \
                                                     not loaded_data['timestamp']:
-        print(f'WARN: Timed file has missing contents: {load_path}')
+        print(f'WARNING: Timed file has missing contents: {load_path}')
         print('      Removing invalid file')
         try:
             os.unlink(load_path)

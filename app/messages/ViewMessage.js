@@ -190,6 +190,7 @@ export default function ViewMessage({curMessage, messageType, onRead, onAdd, onR
                       sx={{marginBottom:'2em'}} />
           <Editor
             apiKey="himih4f89itmc44j6vzbjju2kavymhqdiax1u3rpvul7cj5s"
+            license_key='gpl'
             onInit={(evt, editor) => editorRef.current = editor}
             initialValue={curReadMessage ? curReadMessage.message : undefined}
             disabled={messageType === MESSAGE_TYPE.Read}
