@@ -2515,11 +2515,12 @@ def species_keybind():
     if not common or not scientific or not new_key:
         return "Not Found", 406
 
+    s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
+
     # Get the species
     if user_info.species:
         cur_species = user_info.species
     else:
-        s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
         cur_species = s3u.load_sparcd_config(SPECIES_JSON_FILE_NAME,
                                             hash2str(s3_url)+'-'+TEMP_SPECIES_FILE_NAME,
                                             s3_url, user_info.name, lambda: get_password(token, db))
