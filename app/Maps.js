@@ -108,7 +108,7 @@ export default function Maps() {
     <Box id='maps-workspace-wrapper' sx={{ flexGrow: 1, 'width': '100vw'}} >
       {curMapChoice && curMapChoice.provider === 'esri' 
           && <MapsEsriLazyload id={"map-" + curMapChoice.value} key={"map-" + curMapChoice.value} center={center}
-                              top={uiSizes.workspace.top} width={uiSizes.workspace.width} height={uiSizes.workspace.height}
+                              width={uiSizes.workspace.width} height={uiSizes.workspace.height}
                               mapChoices={mapChoices} {...curMapChoice.config} onChange={handleMapChanged}
               />
       }

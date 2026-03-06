@@ -19,33 +19,40 @@ const Input = styled(MuiInput)`
  * @function
  * @param {string} label The label for the slider
  * @param {function} onChange Function to call when the value changes
- * @param {int} curValue The value of the control
+ * @param {number} curValue The value of the control
  * @param {string} [width='350px'] Optional width of the container
- * @param {string} [paddingRight='5'] Optional right padding of the container
+ * @param {string} [paddingRight='5px'] Optional right padding of the container
  * @returns {object} The rendered UI
  */
 export default function InputSlider({label, onChange, curValue, width = '350px', paddingRight = '5px'}) {
-  const value = React.useRef(curValue);
+  const [value, setValue] = React.useState(curValue);
 
+  // Some local variables
+  const sliderId = `input-slider-${label.toLowerCase().replace(/\s+/g, '-')}`;
+
+  // Update the current value when it changes
+  React.useEffect(() => {
+    setValue(curValue);
+  }, [curValue]);
   /**
    * Stores the new value when the slider was changed
    * @function
    * @param {object} event The triggering event
-   * @param {int} The new value
+   * @param {number} newValue The new value
    */
   const handleSliderChange = (event, newValue) => {
-    value.current = newValue;
+    setValue(newValue);
     onChange(newValue);
   }
 
   /**
-   * Stored the new value when the input field is modified
+   * Stores the new value when the input field is modified
    * @function
    * @param {object} event The triggering event
    */
   function handleInputChange(event) {
     const newValue = event.target.value === '' ? 0 : Number(event.target.value);
-    value.current = newValue;
+    setValue(newValue);
     onChange(newValue);
   }
 
@@ -54,11 +61,11 @@ export default function InputSlider({label, onChange, curValue, width = '350px',
    * @function
    */
   function handleBlur() {
-    if (value.current < 0) {
-      value.current = 0;
+    if (value < 0) {
+      setValue(0);
       onChange(0);
-    } else if (value.current > 100) {
-      value.current = 100;
+    } else if (value > 100) {
+      setValue(100);
       onChange(100);
     }
   }
@@ -66,22 +73,22 @@ export default function InputSlider({label, onChange, curValue, width = '350px',
   // Return the rendered UI
   return (
     <Box sx={{ width, paddingRight }}>
-      <Grid container alignItems="start" justifyContent="space-between">
+      <Grid container alignItems="center" justifyContent="space-between">
         <Grid size={3}>
-          <Typography id="input-slider" gutterBottom>
+          <Typography id={sliderId} gutterBottom>
             {label}
           </Typography>
         </Grid>
         <Grid size={6}>
           <Slider
-            value={typeof value.current === 'number' ? value.current : 0}
+            value={typeof value === 'number' ? value : 0}
             onChange={handleSliderChange}
-            aria-labelledby="input-slider"
+            aria-labelledby={sliderId}
           />
         </Grid>
         <Grid>
           <Input
-            value={value.current}
+            value={value}
             size="small"
             onChange={handleInputChange}
             onBlur={handleBlur}
@@ -90,7 +97,7 @@ export default function InputSlider({label, onChange, curValue, width = '350px',
               min: 0,
               max: 100,
               type: 'number',
-              'aria-labelledby': 'input-slider',
+              'aria-labelledby':sliderId,
             }}
           />
         </Grid>
@@ -99,3 +106,10 @@ export default function InputSlider({label, onChange, curValue, width = '350px',
   );
 }
 
+InputSlider.propTypes = {
+  label: PropTypes.string.isRequired,
+  onChange: PropTypes.func.isRequired,
+  curValue: PropTypes.number.isRequired,
+  width: PropTypes.string,
+  paddingRight: PropTypes.string,
+};
