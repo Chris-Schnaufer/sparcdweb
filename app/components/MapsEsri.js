@@ -7,13 +7,15 @@ import * as React from 'react';
 import '@arcgis/map-components/dist/components/arcgis-legend';
 import '@arcgis/map-components/dist/components/arcgis-map';
 import '@arcgis/map-components/dist/components/arcgis-zoom';
+import Collection from "@arcgis/core/core/Collection";
+import FeatureLayer from "@arcgis/core/layers/FeatureLayer";
 import GraphicsLayer from "@arcgis/core/layers/GraphicsLayer";
 import Graphic from "@arcgis/core/Graphic";
 import Map from "@arcgis/core/Map";
 import MapView from "@arcgis/core/views/MapView";
 import Point from "@arcgis/core/geometry/Point";
-import PropTypes from 'prop-types';
 import ValuePicker from "@arcgis/core/widgets/ValuePicker";
+import ValuePickerCombobox from "@arcgis/core/widgets/ValuePicker/ValuePickerCombobox";
 import * as reactiveUtils from "@arcgis/core/core/reactiveUtils";
 
 import { LocationsInfoContext, UserSettingsContext } from '../serverInfo';
@@ -22,15 +24,15 @@ import { meters2feet } from '../utils';
 /**
  * Returns the UI for displaying an ESRI map
  * @function
- * @param {object} center An X, Y value with the center of the area of interest
+ * @param {object} enter An X, Y value with the center of the area of interest
  * @param {string} mapName The ESRI name of the map to display
  * @param {array} mapChoices An array of available map display choice objects
  * @param {function} onChange Handler for when the user changes the map to display
- * @param {number} width The width of the map element (assumed to start at left:0)
- * @param {number} height The height of the map element
- * @returns {object} The rendered UI
+ * @param {int} top The top position of the map element
+ * @param {int} width The width of the map element (assumed to start at left:0)
+ * @param {int} height The height of the map element
  */
-export default function MapsEsri({center, mapName, mapChoices, onChange, width, height}) {
+export default function MapsEsri({center, mapName, mapChoices, onChange, top, width, height}) {
   const locationItems = React.useContext(LocationsInfoContext);
   const userSettings = React.useContext(UserSettingsContext);  // User display settings
   const [layerCollection, setLayerCollection] = React.useState(null); // The array of layers to display
@@ -39,9 +41,8 @@ export default function MapsEsri({center, mapName, mapChoices, onChange, width, 
   /**
    * Handle converting the locations for use with the maps
    * @function
-   * @param {object} locationItems Array of locations
+   * @param {object} Array of locations
    * @param {string} measurementFormat A measurement format of 'feet' or 'meters'
-   * @returns {Array} The array of configured elevations
    */
   function configureLocations(locationItems, measurementFormat) {
     if (measurementFormat === 'meters') {
@@ -50,19 +51,15 @@ export default function MapsEsri({center, mapName, mapChoices, onChange, width, 
 
     let newLocations = JSON.parse(JSON.stringify(locationItems));
 
-    return newLocations.map((item) => 
-        ({...item, elevationProperty:Math.trunc(meters2feet(item.elevationProperty)) + 'ft'})
+    return newLocations.map((item) => {
+        item.elevationProperty = Math.trunc(meters2feet(item.elevationProperty)) + 'ft';
+        return item;}
     );
   }
 
-  const measurementFormat = userSettings['measurementFormat'];
-  const displayLocations = React.useMemo(
-            () => configureLocations(locationItems, measurementFormat), 
-            [locationItems, measurementFormat]
-          );
+  const displayLocations = React.useMemo(() => configureLocations(locationItems, userSettings['measurementFormat']), [locationItems, userSettings['measurementFormat']]);
 
-  const coordinateDisplay = userSettings['coordinatesDisplay'];
-  const popupFields = React.useMemo(() => {return coordinateDisplay === 'LATLON' ?
+  let popupFields = userSettings['coordinatesDisplay'] === 'LATLON' ?
                 [ {
                     fieldName: 'nameProperty',
                     label: 'Name',
@@ -110,13 +107,11 @@ export default function MapsEsri({center, mapName, mapChoices, onChange, width, 
                   visible: true,
                 }
               ]
-            }, [coordinateDisplay]);
 
 
   /**
    * Generates the locations layer for display
    * @function
-   * @returns {Array} The array of GraphicsLayer for display
    */
   const getLocationLayer = React.useCallback(() => {
     let curCollection = layerCollection || [];
@@ -138,7 +133,7 @@ export default function MapsEsri({center, mapName, mapChoices, onChange, width, 
                       color: 'darkblue',// item.activeProperty ? "darkblue" : "grey"
                     }
                   },
-                  attributes: {...item, objectId: idx},
+                  attributes: {...item, ...{objectId: idx}},
                   popupTemplate: {
                     title: item.idProperty,
                     content: [{
@@ -158,18 +153,15 @@ export default function MapsEsri({center, mapName, mapChoices, onChange, width, 
     setLayerCollection(curCollection);
 
     return curCollection;
-  }, [layerCollection, displayLocations, popupFields])
+  }, [layerCollection, locationItems])
 
   // When the map div is available, setup the map
   React.useLayoutEffect(() => {
-    let view = null;
-    let watchHandle = null;
     const mapEl = document.getElementById('viewDiv');
-
     if (mapEl && !generatedMap) {
       setGeneratedMap(true);
       const layers = getLocationLayer();                      // Displayed layers
-      const map = new Map({basemap:mapName, layers:layers});  // Create the map of desired type
+      const map = new Map({basemap:mapName, layers:layers});  // Create the map of desired ty[e]
 
       // Get the value of the selected map for initial choice on map chooser
       const curMapName = mapChoices.find((item) => item.config.mapName === mapName);
@@ -193,13 +185,13 @@ export default function MapsEsri({center, mapName, mapChoices, onChange, width, 
       });
 
       // Add a watcher for when the map choice changes
-      watchHandle = reactiveUtils.watch(
+      reactiveUtils.watch(
         () => valuePicker.values,
         (values) => onChange(values[0])
       );
 
       // Create the view onto the map
-      view = new MapView({
+      const view = new MapView({
         map: map,
         container: 'viewDiv',
         center: center,
@@ -210,48 +202,40 @@ export default function MapsEsri({center, mapName, mapChoices, onChange, width, 
       view.ui.add(valuePicker, "top-right");
 
     }
+  } ,[center, getLocationLayer, mapChoices, mapName, onChange]);
 
-    // Return cleanup handler
-    return () => {
-      watchHandle?.remove();
-      view?.destroy();
-    };
-  }, [center, getLocationLayer, mapChoices, mapName, onChange]);
+  /**
+   * Handles the popover for locations
+   * @function
+   * @param {object} event The event data to check
+   */
+  function onMouseOverPopup(event) { 
+    // See: https://support.esri.com/en-us/knowledge-base/how-to-display-pop-ups-using-a-mouse-hover-in-arcgis-ap-000024297
+    /*
+         view.hitTest(event).then(function (response) { 
+           if (response.results.length) { 
+             var graphic = response.results.filter(function (result) { 
+               // check if the graphic belongs to the layer of interest 
+               return result.graphic.layer === featureLayer; 
+             })[0].graphic; 
+             view.popup.open({ 
+               location: graphic.geometry.centroid, 
+               features: [graphic] 
+             }); 
+           } else { 
+             view.popup.close(); 
+           } 
+         }); 
+       }); 
+     }); 
+    */
+  }
 
   // Return the UI
   return (
-    <div id="viewDiv" style={{width:width, maxWidth:width, height:height, maxHeight:height}} >
-    </div>
+    <React.Fragment>
+      <div id="viewDiv" style={{width:width+'px', maxWidth:width+'px', height:height+'px', maxHeight:height+'px'}} >
+      </div>
+    </React.Fragment>
   );
 }
-
-MapsEsri.propTypes = {
-  // An object with x/y coordinates for the map center, e.g. { x: -110.5, y: 32.1 }
-  center: PropTypes.oneOfType([
-    PropTypes.arrayOf(PropTypes.number),
-    PropTypes.shape({
-      x: PropTypes.number.isRequired,
-      y: PropTypes.number.isRequired,
-    }),
-  ]).isRequired,
-
-  // The ESRI basemap name string, e.g. 'topo-vector'
-  mapName: PropTypes.string.isRequired,
-
-  // Each choice needs a name for display, a value for selection,
-  // and a config object containing the mapName to match against
-  mapChoices: PropTypes.arrayOf(
-    PropTypes.shape({
-      name: PropTypes.string.isRequired,
-      value: PropTypes.string.isRequired,
-      config: PropTypes.shape({
-        mapName: PropTypes.string.isRequired,
-      }).isRequired,
-    })
-  ).isRequired,
-
-  onChange: PropTypes.func.isRequired,
-
-  width: PropTypes.number.isRequired,
-  height: PropTypes.number.isRequired,
-};
