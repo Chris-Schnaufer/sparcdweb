@@ -38,6 +38,7 @@ export default function UserMessages({onAdd, onDelete, onRefresh, onRead, onClos
   const uiSizes = React.useContext(SizeContext);  // UI Dimensions
   const userMessages = React.useContext(UserMessageContext); // The user's messages
   const contentRef = React.useRef();
+  const userMessagesRef = React.useRef();
   const [curMessages, setCurMessages] = React.useState(userMessages ? userMessages.messages : []);
   const [readMessage, setReadMessage] = React.useState(null);   // Contains the ID of the message to read
   const [newMessage, setNewMessage] = React.useState(false);    // User wants to compose a message
@@ -56,9 +57,10 @@ export default function UserMessages({onAdd, onDelete, onRefresh, onRead, onClos
       const curRect = contentRef.current.getBoundingClientRect();
       const curOffsetX = (uiSizes.window.width / 2.0) - (curRect.width / 2.0);
 
-      let el = document.getElementById('messages-wrapper');
-      el.style.left = curOffsetX +'px';
-      el.style.right = (curOffsetX + curRect.width) +'px';
+      if (userMessagesRef.current) {
+        userMessagesRef.current.style.left = curOffsetX +'px';
+        userMessagesRef.current.style.right = (curOffsetX + curRect.width) +'px';
+      }
     }
   }, [uiSizes.window.width]);
 
@@ -360,7 +362,7 @@ export default function UserMessages({onAdd, onDelete, onRefresh, onRead, onClos
 
   return (
   <React.Fragment>
-    <Grid id='messages-wrapper'
+    <Grid id='user-messages-wrapper' ref={userMessagesRef}
          sx={{position:'absolute', top:(workingRect.y+20)+'px', right:'20px'}}
     >
       <Card id="messages-content" ref={contentRef} sx={{minWidth:'700px', backgroundColor:'ghostwhite', border:'1px solid lightgrey', borderRadius:'20px'}} >

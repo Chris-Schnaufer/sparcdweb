@@ -921,6 +921,15 @@ export default function Home() {
   }, [curActionData, editCollectionUpload, setCurActionData]);
 
   /**
+   * Updates the metadata on the current upload
+   * @function
+   * @param {object} uploadMetadata The updated metadata
+   */
+  const uploadUpdate = React.useCallback(() => {
+    loadCollections(lastToken)
+  }, [lastToken, loadCollections]);
+
+  /**
    * Calls the callback to perform a search
    * @function
    * @param {string} searchTerm The search term to pass to the callback
@@ -1471,6 +1480,7 @@ export default function Home() {
                             onCancel={() => setCurrentAction(UserActions.Upload, curActionData, false)} 
                             searchSetup={setupSearch}
                             uploadReload={uploadReload}
+                            uploadUpdateMetadata={uploadUpdate}
                     />
                   </SpeciesInfoContext.Provider>
                 </LocationsInfoContext.Provider>
@@ -1657,7 +1667,7 @@ export default function Home() {
             messages.length > 0 && 
               <Grid id="messages-wrapper" container direction="row" alignItems="start" justifyContent="center"
                     sx={{...theme.palette.messages_wrapper, top: workspaceTop}}>
-                <Messages messages={messages} close_cb={handleCloseMessage}/>
+                <Messages messages={messages} closeCb={handleCloseMessage}/>
               </Grid>
           }
         </UserSettingsContext.Provider>

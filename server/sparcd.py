@@ -2474,16 +2474,29 @@ def images_all_edited():
             image_with_species += 1
 
     # Update the upload metadata with an editing comment
-    S3Connection.update_upload_metadata(s3_url, user_info.name,
+    updated, _ = S3Connection.update_upload_metadata(s3_url, user_info.name,
                                         get_password(token, db),
-                                        s3_bucket,s3_path,
+                                        s3_bucket, s3_path,
                                         f'Edited by {user_info.name} on ' + \
                                                 datetime.datetime.fromisoformat(timestamp).\
                                                         strftime("%Y.%m.%d.%H.%M.%S"),
                                         image_with_species)
 
-    return {'success': True, 'message': "The images have been successfully updated", \
-                                                                    'imagesReloaded': not kept_urls}
+    if updated:
+        # Update the collection to reflect the changes
+        updated_collection = S3Connection.get_collection_info(s3_url, user_info.name,
+                                                get_password(token, db), s3_bucket)
+        if updated_collection:
+            updated_collection = sdu.normalize_collection(updated_collection)
+
+            # Update the collection entry in the database
+            sdc.collection_update(db, hash2str(s3_url), updated_collection)
+
+    return {'success': True,
+            'message': "The images have been successfully updated", \
+            'updatedUpload': True if updated else False,
+            'imagesReloaded': not kept_urls,
+            }
 
 
 @app.route('/speciesKeybind', methods = ['POST'])

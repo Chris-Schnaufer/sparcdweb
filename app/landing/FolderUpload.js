@@ -1274,32 +1274,36 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
       </FolderUploadConfirm>
     }
     { finishingUpload && 
-      <Box id="query-running-query-wrapper"  sx={{...theme.palette.screen_overlay}} >
+      <Grid container direction="row" alignItems="center" justifyContent="center" 
+            sx={{...theme.palette.screen_overlay_grey, zIndex:11111}}
+      >
         <div style={{backgroundColor:'rgb(212, 230, 241, 0.95)', border:'1px solid grey', borderRadius:'15px', padding:'25px 10px'}} >
           <Grid container direction="column" alignItems="center" justifyContent="center" >
-              <Typography gutterBottom variant="body2">
-                Please wait while the upload finishes up ...
-              </Typography>
-              <CircularProgress variant="indeterminate" />
+            <Typography gutterBottom variant="body2">
+              Please wait while the upload finishes up ...
+            </Typography>
+            <CircularProgress variant="indeterminate" />
           </Grid>
         </div>
-      </Box>
+      </Grid>
     }
     { notificationMessage && 
-      <Box id="query-running-query-wrapper" sx={{...theme.palette.screen_overlay, zIndex:11111}}>
+      <Grid container direction="row" alignItems="center" justifyContent="center" 
+            sx={{...theme.palette.screen_overlay_grey, zIndex:11111}}
+      >
         <div style={{backgroundColor:'rgb(212, 230, 241, 0.95)', border:'1px solid grey', borderRadius:'15px', padding:'25px 10px'}}>
           <Grid container direction="column" alignItems="center" justifyContent="center" >
-              <Typography gutterBottom variant="body2" color="black">
-                {notificationMessage.message}
-              </Typography>
-              <Button size="small" onClick={() => {setNotificationMessage(null);notificationMessage.action();} }
-                      sx={{paddingTop:'20px'}}
-              >
-                Done
-              </Button>
+            <Typography gutterBottom variant="body2" color="black">
+              {notificationMessage.message}
+            </Typography>
+            <Button size="small" onClick={() => {setNotificationMessage(null);notificationMessage.action();} }
+                    sx={{paddingTop:'20px'}}
+            >
+              Done
+            </Button>
           </Grid>
         </div>
-      </Box>
+      </Grid>
     }
     </React.Fragment>
   );

@@ -1364,7 +1364,7 @@ class S3Connection:
 
     @staticmethod
     def update_upload_metadata(url: str, user: str, password: str, bucket: str, upload_path: str, \
-                                    new_comment: str=None, images_species_count: int=None) -> bool:
+                                    new_comment: str=None, images_species_count: int=None) -> tuple:
         """ Update the upload's metadata on the S3 instance with a new count
         Arguments:
             url: the URL to the s3 instance
@@ -1375,7 +1375,8 @@ class S3Connection:
             new_comment: the comment to add to the metadata
             images_species_count: The count of images that have species
         Return:
-            Returns True if no problem was found and False otherwise
+            Returns a tuple of: True if no problem was found and False otherwise, and the updated
+            upload information if True is the first element
         """
         minio = Minio(url, access_key=user, secret_key=password)
 
@@ -1391,11 +1392,11 @@ class S3Connection:
             except json.JSONDecodeError:
                 print('update_upload_metadata_comment: Unable to load JSON information: ' \
                       f'{upload_info_path}')
-                return False
+                return False, None
         else:
             print('update_upload_metadata_comment: Unable to get upload information: ' \
                  f'{upload_info_path}')
-            return False
+            return False, None
 
         # Update and save the upload information
         if new_comment is not None:
@@ -1407,7 +1408,7 @@ class S3Connection:
                                                                     content_type='application/json')
 
         os.unlink(temp_file[1])
-        return True
+        return True, data
 
     @staticmethod
     def needs_repair(url: str, user: str, password: str) -> tuple:

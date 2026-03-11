@@ -34,9 +34,10 @@ import styles from './page.module.css'
  * @param {function} onCancel Call when finished with the the upload edit
  * @param {function} searchSetup Call when settting up or clearing search elements
  * @param {function} uploadReload Call when the current upload information needs to be reloaded
+ * @param {function} uploadUpdateMetadata The function to refresh the upload metadata
  * @returns {object} The UI to render
  */
-export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploadReload}) {
+export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploadReload, uploadUpdateMetadata}) {
   const theme = useTheme();
   const imageEditRef = React.useRef(null); // Used to signal the ImageEdit child control about a keypress
   const navigationIndicatorTimerId = React.useRef(null); // Used to manage navigation indicator timeout IDs
@@ -792,6 +793,9 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
                 setPendingMessage(null);
                 setChangesMade(false);
                 setCurImageModified(false);
+                if (respData.updatedUpload) {
+                  uploadUpdateMetadata();
+                }
                 if (respData.imagesReloaded !== undefined && respData.imagesReloaded) {
                   // Cause the images to be reloaded
                   uploadReload();
@@ -838,9 +842,10 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
                 } else {
                   setPendingMessage(null);
                 }
-              }
+              },
+        (err) => {addMessage(Level.Error, err);setPendingMessage(null);}
     );
-  }, [curImageModified, curUpload, editingStates, finishImageEdits, handleImageSearch, lastSpeciesRequestId, searchSetup,
+  }, [addMessage, curImageModified, curUpload, editingStates, finishImageEdits, handleImageSearch, lastSpeciesRequestId, searchSetup,
       setCurEditState, setPendingMessage, submitAllImageEdited]);
 
   /**
