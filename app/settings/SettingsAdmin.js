@@ -29,7 +29,7 @@ import EditSpecies from './EditSpecies';
 import EditUser from './EditUser';
 import { Level } from '../components/Messages';
 import { AddMessageContext, CollectionsInfoContext, TokenExpiredFuncContext, LocationsInfoContext, 
-         SizeContext, SpeciesInfoContext, TokenContext } from '../serverInfo';
+         SizeContext, TokenContext } from '../serverInfo';
 import * as utils from '../utils';
 
 const EditingStates = {
@@ -72,7 +72,6 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
   const [detailsHeight, setDetailsHeight] = React.useState(500); // Height for displaying details
   const [editingState, setEditingState] = React.useState({type:EditingStates.None, data:null})
   const [masterSpecies, setMasterSpecies] = React.useState(null); // Contains information on species
-  const [serverURL, setServerURL] = React.useState(utils.getServer());  // The server URL to use
   const [locationsModified, setLocationsModified] = React.useState(false); // Indicates the location was modified and needs to be updated on S3
   const [serverModificationsChecked, setServerModificationsChecked] = React.useState(false); // Did we check the server for stored changes?
   const [speciesModified, setSpeciesModified] = React.useState(false); // Indicates the species was modified and needs to be updated on S3
@@ -85,13 +84,16 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
   const [sortColumn, setSortColumn] = React.useState(1);  // Used to indicate which column is sorted (1 represents the first column)
   const [sortDirection, setSortDirection] = React.useState(SortDirection.Ascending);  // Used to indicate which way a column is sorted
 
+  // Other variables
+  const serverURL = React.useMemo(() => utils.getServer(), []);
+
   // Check if we have stored changes on the server
   React.useEffect(() => {
     if (!serverModificationsChecked) {
       const adminCheckUrl = serverURL + '/adminCheckChanges?t=' + encodeURIComponent(settingsToken);
 
       try {
-        const resp = fetch(adminCheckUrl, {
+        fetch(adminCheckUrl, {
           credentials: 'include',
           method: 'GET',
         }).then(async (resp) => {
@@ -123,11 +125,11 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
           .catch(function(err) {
             console.log('Admin Location/Species Check Error: ',err);
         });
-      } catch (error) {
+      } catch (err) {
         console.log('Admin Location/Species Check Unknown Error: ',err);
       }
     }
-  }, [addMessage, locationsModified, serverModificationsChecked, serverURL, setServerModificationsChecked, settingsToken, speciesModified])
+  }, [addMessage, serverModificationsChecked, serverURL, settingsToken])
 
   // Recalcuate available space in the window
   React.useLayoutEffect(() => {
@@ -207,7 +209,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
     const adminUsersUrl = serverURL + '/adminUsers?t=' + encodeURIComponent(settingsToken);
 
     try {
-      const resp = fetch(adminUsersUrl, {
+      fetch(adminUsersUrl, {
         credentials: 'include',
         method: 'GET',
       }).then(async (resp) => {
@@ -230,7 +232,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
           console.log('Admin Users Error: ',err);
           addMessage(Level.Warning, 'An error ocurred when attempting to load user information');
       });
-    } catch (error) {
+    } catch (err) {
       console.log('Admin Users Unknown Error: ',err);
       addMessage(Level.Warning, 'An unknown error ocurred when attempting to load user information');
     }    
@@ -244,7 +246,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
     const adminSpeciesUrl = serverURL + '/adminSpecies?t=' + encodeURIComponent(settingsToken);
 
     try {
-      const resp = fetch(adminSpeciesUrl, {
+      fetch(adminSpeciesUrl, {
         credentials: 'include',
         method: 'GET',
       }).then(async (resp) => {
@@ -267,7 +269,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
           console.log('Admin Species Error: ',err);
           addMessage(Level.Warning, 'An error ocurred when attempting to load species information');
       });
-    } catch (error) {
+    } catch (err) {
       console.log('Admin Species Unknown Error: ',err);
       addMessage(Level.Warning, 'An unknown error ocurred when attempting to load species information');
     }
@@ -293,7 +295,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
     formData.append('allPermissions', JSON.stringify(collectionNewInfo.allPermissions));
 
     try {
-      const resp = fetch(userUpdateCollUrl, {
+      fetch(userUpdateCollUrl, {
         credentials: 'include',
         method: 'POST',
         body: formData
@@ -329,7 +331,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
           console.log('Admin Update Collection Error: ',err);
           addMessage(Level.Warning, 'An error ocurred when attempting to update collection information');
       });
-    } catch (error) {
+    } catch (err) {
       console.log('Admin Update Collection Unknown Error: ',err);
       addMessage(Level.Warning, 'An unknown error ocurred when attempting to update collection information');
     }
@@ -354,7 +356,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
     formData.append('allPermissions', JSON.stringify(collectionNewInfo.allPermissions));
 
     try {
-      const resp = fetch(userUpdateCollUrl, {
+      fetch(userUpdateCollUrl, {
         credentials: 'include',
         method: 'POST',
         body: formData
@@ -386,7 +388,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
           console.log('Admin Update Collection Error: ',err);
           addMessage(Level.Warning, 'An error ocurred when attempting to update collection information');
       });
-    } catch (error) {
+    } catch (err) {
       console.log('Admin Update Collection Unknown Error: ',err);
       addMessage(Level.Warning, 'An unknown error ocurred when attempting to update collection information');
     }
@@ -424,7 +426,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
     formData.append('admin', userNewInfo.admin);
 
     try {
-      const resp = fetch(userUpdateUrl, {
+      fetch(userUpdateUrl, {
         credentials: 'include',
         method: 'POST',
         body: formData
@@ -458,7 +460,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
           console.log('Admin Update User Error: ',err);
           addMessage(Level.Warning, 'An error ocurred when attempting to update user information');
       });
-    } catch (error) {
+    } catch (err) {
       console.log('Admin Update User Unknown Error: ',err);
       addMessage(Level.Warning, 'An unknown error ocurred when attempting to update user information');
     }
@@ -485,7 +487,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
     formData.append('iconURL', newInfo.speciesIconURL);
 
     try {
-      const resp = fetch(speciesUpdateUrl, {
+      fetch(speciesUpdateUrl, {
         credentials: 'include',
         method: 'POST',
         body: formData
@@ -541,7 +543,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
           console.log('Admin Update Species Error: ',err);
           addMessage(Level.Warning, 'An error ocurred when attempting to update species information');
       });
-    } catch (error) {
+    } catch (err) {
       console.log('Admin Update Species Unknown Error: ',err);
       addMessage(Level.Warning, 'An unknown error ocurred when attempting to update species information');
     }
@@ -576,7 +578,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
     formData.append('description', newInfo.descriptionProperty);
 
     try {
-      const resp = fetch(locationsUpdateUrl, {
+      fetch(locationsUpdateUrl, {
         credentials: 'include',
         method: 'POST',
         body: formData
@@ -640,7 +642,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
           console.log('Admin Update Location Error: ',err);
           addMessage(Level.Warning, 'An error ocurred when attempting to update location information');
       });
-    } catch (error) {
+    } catch (err) {
       console.log('Admin Update Location Unknown Error: ',err);
       addMessage(Level.Warning, 'An unknown error ocurred when attempting to update location information');
     }
@@ -654,7 +656,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
     const adminCompleteUrl = serverURL + '/adminCompleteChanges?t=' + encodeURIComponent(settingsToken);
 
     try {
-      const resp = fetch(adminCompleteUrl, {
+      fetch(adminCompleteUrl, {
         credentials: 'include',
         method: 'PUT',
       }).then(async (resp) => {
@@ -677,7 +679,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
           console.log('Admin Save Location/Species Error: ',err);
           addMessage(Level.Warning, 'An error ocurred when attempting to complete saving the changed settings information');
       });
-    } catch (error) {
+    } catch (err) {
       console.log('Admin Save Location/Species Unknown Error: ',err);
       addMessage(Level.Warning, 'An unknown error ocurred when attempting to complete saving the changed settings information');
     }
@@ -691,7 +693,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
     const adminCompleteUrl = serverURL + '/adminAbandonChanges?t=' + encodeURIComponent(settingsToken);
 
     try {
-      const resp = fetch(adminCompleteUrl, {
+      fetch(adminCompleteUrl, {
         credentials: 'include',
         method: 'PUT',
       }).then(async (resp) => {
@@ -714,7 +716,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
           console.log('Admin Abandon Location/Species Error: ',err);
           addMessage(Level.Warning, 'An error ocurred when attempting to abandon the changed settings information');
       });
-    } catch (error) {
+    } catch (err) {
       console.log('Admin Abandon Location/Species Unknown Error: ',err);
       addMessage(Level.Warning, 'An unknown error ocurred when attempting to abandon the changed settings information');
     }
@@ -753,7 +755,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
     formData.append('bucket', collection.bucket);
 
     try {
-      const resp = fetch(adminCollectionUrl, {
+      fetch(adminCollectionUrl, {
         credentials: 'include',
         method: 'POST',
         body: formData,
@@ -776,7 +778,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
           console.log('Admin Collection Details Error: ',err);
           addMessage(Level.Warning, 'An error ocurred when attempting to get collection details');
       });
-    } catch (error) {
+    } catch (err) {
       console.log('Admin Collection Details Unknown Error: ',err);
       addMessage(Level.Warning, 'An unknown error ocurred when attempting to get collection details');
     }
@@ -816,7 +818,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
     formData.append('id', location.idProperty);
 
     try {
-      const resp = fetch(adminLocationnUrl, {
+      fetch(adminLocationnUrl, {
         credentials: 'include',
         method: 'POST',
         body: formData,
@@ -839,7 +841,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
           console.log('Admin Location Details Error: ',err);
           addMessage(Level.Warning, 'An error ocurred when attempting to get location details');
       });
-    } catch (error) {
+    } catch (err) {
       console.log('Admin Location Details Unknown Error: ',err);
       addMessage(Level.Warning, 'An unknown error ocurred when attempting to get location details');
     }
@@ -954,7 +956,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
         setSelectedCollections(curSortInfo.sort((a, b) => direction === SortDirection.Ascending ? a.email.localeCompare(b.email) : b.email.localeCompare(a.email)));
         break;
     }
-  }, [selectedCollections, setSelectedCollections]);
+  }, [selectedCollections]);
 
   /**
    * Sorts species records by the specified column
@@ -980,7 +982,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
                           );
         break;
     }
-  }, [selectedSpecies, setSelectedSpecies]);
+  }, [selectedSpecies]);
 
   /**
    * Sorts Locations records by the specified column
@@ -992,18 +994,18 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
     const curSortInfo = selectedLocations || [];
     switch(sortColumn) {
       case 'name':
-        setSelectedSpecies(curSortInfo.sort((a, b) => direction === SortDirection.Ascending ? a.nameProperty.localeCompare(b.nameProperty) : 
+        setSelectedLocations(curSortInfo.sort((a, b) => direction === SortDirection.Ascending ? a.nameProperty.localeCompare(b.nameProperty) : 
                                                                                                                   b.nameProperty.localeCompare(a.nameProperty)));
         break;
       case 'id':
-        setSelectedSpecies(curSortInfo.sort((a, b) => direction === SortDirection.Ascending ? a.idProperty.localeCompare(b.idProperty) :
+        setSelectedLocations(curSortInfo.sort((a, b) => direction === SortDirection.Ascending ? a.idProperty.localeCompare(b.idProperty) :
                                                                                                                 b.idProperty.localeCompare(a.idProperty)));
         break;
       case 'active':
-        setSelectedSpecies(curSortInfo.sort((a, b) => direction === SortDirection.Ascending ? (a.active === b.active ? 0 : 1) : (a.active === b.active ? 1 : 0) ));
+        setSelectedLocations(curSortInfo.sort((a, b) => direction === SortDirection.Ascending ? (a.active === b.active ? 0 : 1) : (a.active === b.active ? 1 : 0) ));
         break;
     }
-  }, [selectedSpecies, setSelectedSpecies]);
+  }, [selectedLocations]);
 
   /**
    * Generates the UI for a column heading
@@ -1021,7 +1023,8 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
     titleStyle = titleStyle || {};
 
     return (
-          <Grid container direction="row" justifyContent="space-between" alignItems="start" wrap="nowrap" size={size} sx={{paddingLeft:"2px", borderRight:"1px solid grey"}} 
+          <Grid container direction="row" justifyContent="space-between" alignItems="start" size={size} 
+                sx={{flexWrap:'nowrap', paddingLeft:"2px", borderRight:"1px solid grey"}} 
                 onClick={() => {
                                 const oldSC = sortColumn;
                                 const newSortDirection = oldSC === selectId ? (sortDirection===SortDirection.Ascending?SortDirection.Descending:SortDirection.Ascending) : SortDirection.Ascending;
@@ -1034,7 +1037,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
                         }
             >
             <Grid sx={{...titleStyle}} >
-              <Typography nowrap="true" variant="body" sx={{fontWeight:'bold'}}>
+              <Typography noWrap variant="body1" sx={{fontWeight:'bold'}}>
                 {title}
               </Typography>
             </Grid>
@@ -1077,22 +1080,22 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
           { generateSettingHeader(4, sortColumn === 4, sortDirection, 1, 'Admin', {marginLeft:"auto"}, (dir)=>sortUsers('admin', dir) )}
           { generateSettingHeader(5, sortColumn === 5, sortDirection, 1, 'Auto', {marginLeft:"auto", paddingRight:"5px"}, (dir)=>sortUsers('auto', dir) )}
         </Grid>
-        <Grid id='admin-settings-details' sx={{overflowX:'scroll',width:'100%', maxHeight:detailsHeight+'px' }}>
+        <Grid id='admin-settings-details' sx={{overflowX:'auto',width:'100%', maxHeight:detailsHeight+'px' }}>
         { curUserInfo.map((item,idx) => 
-            <Grid container direction="row" id={"admin-user-"+idx} key={item.name+'-'+idx} direction="row" justifyContent="space-between" alignItems="start"
+            <Grid container direction="row" id={"admin-user-"+idx} key={item.name+'-'+idx} justifyContent="space-between" alignItems="start"
                   sx={{width:'100%', '&:hover':{backgroundColor:'rgba(0,0,0,0.05)'} }} onDoubleClick={(event) => dblClickFunc(event,item)} >
               <Grid size={2}>
-                <Typography nowrap="true" variant="body2">
+                <Typography noWrap variant="body2">
                   {item.name}
                 </Typography>
               </Grid>
               <Grid size={3}>
-                <Typography nowrap="true" variant="body2">
+                <Typography noWrap variant="body2">
                   {item.email}
                 </Typography>
               </Grid>
               <Grid size={5}>
-                <Typography nowrap="true" variant="body2">
+                <Typography noWrap variant="body2">
                   { item.collections.map((colItem, colIdx) => 
                       <React.Fragment key={colItem.name+'-'+colIdx}>
                         {colIdx > 0 && ', '}
@@ -1109,12 +1112,12 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
                 </Typography>
               </Grid>
               <Grid size={1}>
-                <Typography nowrap="true" variant="body2" align="center">
+                <Typography noWrap variant="body2" align="center">
                   {item.admin ? 'Y' : ' '}
                 </Typography>
               </Grid>
               <Grid size={1} sx={{paddingRight:"5px"}} >
-                <Typography nowrap="true" variant="body2" align="right">
+                <Typography noWrap variant="body2" align="right">
                   {item.autoAdded ? 'Y' : 'N'}
                 </Typography>
               </Grid>
@@ -1149,22 +1152,22 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
           { generateSettingHeader(2, sortColumn === 2, sortDirection, 4, 'ID', {marginRight:"auto"}, (dir)=>sortCollections('id', dir) )}
           { generateSettingHeader(3, sortColumn === 3, sortDirection, 3, 'email', {marginLeft:"auto", paddingRight:"5px"}, (dir)=>sortCollections('email', dir) )}
         </Grid>
-        <Grid id='admin-settings-details' sx={{overflowX:'scroll',width:'100%', maxHeight:detailsHeight+'px' }}>
+        <Grid id='admin-settings-details' sx={{overflowX:'auto',width:'100%', maxHeight:detailsHeight+'px' }}>
         { selectedCollections.map((item, idx) => 
-            <Grid container direction="row" id={"admin-species-"+idx} key={item.name+'-'+idx} direction="row" justifyContent="space-between" alignItems="start"
+            <Grid container direction="row" id={"admin-species-"+idx} key={item.name+'-'+idx} justifyContent="space-between" alignItems="start"
                   sx={{width:'100%', '&:hover':{backgroundColor:'rgba(0,0,0,0.05)'} }} onDoubleClick={(event) => dblClickFunc(event,item)} >
               <Grid size={5}>
-                <Typography nowrap="true" variant="body2">
+                <Typography noWrap variant="body2">
                   {item.name}
                 </Typography>
               </Grid>
               <Grid size={4} sx={{marginRight:'auto'}}>
-                <Typography nowrap="true" variant="body2">
+                <Typography noWrap variant="body2">
                   {item.id}
                 </Typography>
               </Grid>
-              <Grid sizeo={3} sx={{leftMargin:'auto'}}>
-                <Typography nowrap="true" variant="body2">
+              <Grid size={3} sx={{marginLeft:'auto'}}>
+                <Typography noWrap variant="body2">
                   {item.email}
                 </Typography>
               </Grid>
@@ -1183,7 +1186,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
    */
   function generateSpecies(dblClickFunc) {
     let curSpecies = selectedSpecies || [];
-    if (masterSpecies == null) {
+    if (masterSpecies === null) {
       getMasterSpecies();
       setMasterSpecies([]);
       setSelectedSpecies([]);
@@ -1205,22 +1208,22 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
           { generateSettingHeader(2, sortColumn === 2, sortDirection, 5, 'Scientific Name', {marginRight:"auto"}, (dir)=>sortSpecies('sciName', dir) )}
           { generateSettingHeader(3, sortColumn === 3, sortDirection, 2, 'Key Binding', {marginLeft:"auto", paddingRight:"5px"}, (dir)=>sortSpecies('key', dir) )}
         </Grid>
-        <Grid id='admin-settings-details' sx={{overflowX:'scroll',width:'100%', maxHeight:detailsHeight+'px' }}>
+        <Grid id='admin-settings-details' sx={{overflowX:'auto',width:'100%', maxHeight:detailsHeight+'px' }}>
         { curSpecies.map((item, idx) => 
-              <Grid container direction="row" id={"admin-species-"+idx} key={item.name+'-'+idx} direction="row" justifyContent="space-between" alignItems="start"
+              <Grid container direction="row" id={"admin-species-"+idx} key={item.name+'-'+idx} justifyContent="space-between" alignItems="start"
                     sx={{width:'100%', '&:hover':{backgroundColor:'rgba(0,0,0,0.05)'}}} onDoubleClick={(event) => dblClickFunc(event,item)} >
                 <Grid size={5}>
-                  <Typography nowrap="true" variant="body2">
+                  <Typography noWrap variant="body2">
                     {item.name}
                   </Typography>
                 </Grid>
                 <Grid size={5} sx={{marginRight:'auto'}}>
-                  <Typography nowrap="true" variant="body2">
+                  <Typography noWrap variant="body2">
                     {item.scientificName}
                   </Typography>
                 </Grid>
-                <Grid sizeo={2} sx={{leftMargin:'auto'}}>
-                  <Typography nowrap="true" variant="body2">
+                <Grid size={2} sx={{marginLeft:'auto'}}>
+                  <Typography noWrap variant="body2">
                     {item.keyBinding}
                   </Typography>
                 </Grid>
@@ -1256,28 +1259,28 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
           { generateSettingHeader(3, sortColumn === 3, sortDirection, 2, 'Active', {marginRight:"auto"}, (dir)=>sortLocations('active', dir) )}
           { generateSettingHeader(4, false,            sortDirection, 2, 'Location', {marginLeft:"auto", paddingRight:"5px"} )}
         </Grid>
-        <Grid id='admin-settings-details' sx={{overflowX:'scroll',width:'100%', maxHeight:detailsHeight+'px' }}>
+        <Grid id='admin-settings-details' sx={{overflowX:'auto',width:'100%', maxHeight:detailsHeight+'px' }}>
         { selectedLocations.map((item, idx) => {
             const extraAttribs = item.activeProperty ? {} : {color:'grey'};
             return (<Grid container direction="row" id={"admin-species-"+idx} key={item.name+'-'+idx} justifyContent="space-between" alignItems="start"
                     sx={{width:'100%', '&:hover':{backgroundColor:'rgba(0,0,0,0.05)'}, ...extraAttribs }} onDoubleClick={(event) => dblClickFunc(event,item)} >
                 <Grid size={5}>
-                  <Typography nowrap="true" variant="body2" >
+                  <Typography noWrap variant="body2" >
                     {item.nameProperty}
                   </Typography>
                 </Grid>
                 <Grid size={3} sx={{marginRight:'auto'}}>
-                  <Typography nowrap="true" variant="body2">
+                  <Typography noWrap variant="body2">
                     {item.idProperty}
                   </Typography>
                 </Grid>
                 <Grid size={2} sx={{marginRight:'auto'}}>
-                  <Typography nowrap="true" variant="body2" align="center">
+                  <Typography noWrap variant="body2" align="center">
                     {item.activeProperty ? 'Y' : ' '}
                   </Typography>
                 </Grid>
                 <Grid size={2} sx={{marginLeft:'auto'}} >
-                  <Typography nowrap="true" variant="body2" align="right">
+                  <Typography noWrap variant="body2" align="right">
                     {item.latProperty + ', ' + item.lngProperty}
                   </Typography>
                 </Grid>
@@ -1402,7 +1405,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
                               {item.name}
                             </Typography>
                          }
-                   key={idx} {...a11yPropsTabPanel(idx)} sx={{'&:hover':{backgroundColor:'rgba(0,0,0,0.05)'} }}
+                   {...a11yPropsTabPanel(idx)} sx={{'&:hover':{backgroundColor:'rgba(0,0,0,0.05)'} }}
                 />
               )
             }
