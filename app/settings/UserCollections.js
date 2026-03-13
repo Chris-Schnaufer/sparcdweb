@@ -13,7 +13,7 @@ import PropTypes from 'prop-types';
 /**
  * Returns the UI for changing collections
  * @function
- * @param {ARray} collections The array of collections to display
+ * @param {Array} collections The array of collections to display
  * @return {object} The UI for changing collections
  */
 export default function UserCollections({collections}) {

@@ -25,6 +25,7 @@ import PropTypes from 'prop-types';
 
 import { AddMessageContext, geographicCoordinates, LocationsInfoContext, UserSettingsContext } from '../serverInfo';
 import { Level } from '../components/Messages';
+import { meters2feet } from '../utils';
 
 /**
  * Handles editing a location's entry
@@ -52,8 +53,8 @@ export default function EditLocation({data, onUpdate, onClose}) {
   const locationUTMYRef = React.useRef(null);
   const [canEditId, setCanEditId] = React.useState(false);        // Used to allow editing of location ID
   const [isModified, setIsModified] = React.useState(false);
-  const [selectedCoordinate, setSelectedCoordinate] = React.useState(userSettings['coordinatesDisplay']);
-  const [selectedMeasure, setSelectedMeasure] = React.useState(userSettings['measurementFormat']);
+  const [selectedCoordinate, setSelectedCoordinate] = React.useState(userSettings['coordinatesDisplay'] ?? 'LATLON');
+  const [selectedMeasure, setSelectedMeasure] = React.useState(userSettings['measurementFormat'] ?? 'meters');
   const [curData, setCurData] = React.useState(data || {
                                                         elevationProperty: 0,
                                                         idProperty: '',
@@ -64,6 +65,7 @@ export default function EditLocation({data, onUpdate, onClose}) {
                                                         utm_x: 0,
                                                         utm_y: 0
                                                       });
+  const [displayElevation, setDisplayElevation] = React.useState(selectedMeasure === 'feet' ? meters2feet(curData.elevationProperty) : curData.elevationProperty);
 
   /**
    * Handles a change in the user's measurement selection
@@ -72,6 +74,7 @@ export default function EditLocation({data, onUpdate, onClose}) {
    */
   function handleMeasureChange(event) {
     setSelectedMeasure(event.target.value);
+    setDisplayElevation(event.target.value === 'feet' ? Math.round(meters2feet(curData.elevationProperty)) : curData.elevationProperty);
   }
 
   /**
@@ -372,7 +375,7 @@ export default function EditLocation({data, onUpdate, onClose}) {
           <TextField 
                 id='edit-location-elevation'
                 label={"Elevation" + (selectedMeasure === 'feet' ? ' (feet)' : ' (meters)')}
-                defaultValue={curData.elevationProperty}
+                value={displayElevation}
                 size='small'
                 sx={{margin:'10px'}}
                 onChange={() => setIsModified(true)}

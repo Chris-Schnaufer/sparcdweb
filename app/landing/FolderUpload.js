@@ -700,36 +700,37 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
       setUploadingFileCounts({total:allowedFiles.length, uploaded:0});
       setDisableDetails(true);
       window.setTimeout(() => {
-                  const success = Server.updateUploadRecovery(serverURL,
-                                                    uploadToken,
-                                                    recovery.coll_info.id,
-                                                    recovery.upload_info.location,
-                                                    recovery.upload_info.key,
-                                                    relativePath,
-                                                    allowedFiles,
-                                                    tokenExpiredFunc,
-                                                    (respData) => {haveUploadRecoverySuccess(respData, allowedFiles)}, // Success
-                                                    (err) => {    // Failure
-                                                      if (folderUploadRef.current) {
-                                                        folderUploadRef.current.disabled = false;
-                                                      }
-                                                      if (folderCancelRef.current) {
-                                                        folderCancelRef.current.disabled = false;
-                                                      }
-                                                      const msg = `A problem occurred while preparing for upload. Upload ID: ${uploadId}`;
-                                                      console.log('ERROR', msg);
-                                                      addMessage(Level.Error, msg);
-                                                      setUploadState(uploadingState.error);
-                                                      cancelUpload();
-                                                    });
-                  // Check for an error
-                  if (!success) {
-                    const msg = `An unknown problem occurred while preparing for recovery of an upload. Upload ID: ${uploadId}`;
-                    console.log('ERROR', msg);
-                    addMessage(Level.Error, msg);
-                    setUploadState(uploadingState.error);
-                    cancelUpload();
-                  }
+              const success = Server.updateUploadRecovery(
+                                  serverURL,
+                                  uploadToken,
+                                  recovery.coll_info.id,
+                                  recovery.upload_info.location,
+                                  recovery.upload_info.key,
+                                  relativePath,
+                                  allowedFiles,
+                                  tokenExpiredFunc,
+                                  (respData, missingFiles) => haveUploadRecoverySuccess(respData, missingFiles), // Success
+                                  (err) => {    // Failure
+                                    if (folderUploadRef.current) {
+                                      folderUploadRef.current.disabled = false;
+                                    }
+                                    if (folderCancelRef.current) {
+                                      folderCancelRef.current.disabled = false;
+                                    }
+                                    const msg = `A problem occurred while preparing for upload recovery. Upload ID: ${uploadId}`;
+                                    console.log('ERROR', msg);
+                                    addMessage(Level.Error, msg);
+                                    setUploadState(uploadingState.error);
+                                    cancelUpload();
+                                  });
+              // Check for an error
+              if (!success) {
+                const msg = `An unknown problem occurred while preparing for recovery of an upload. Upload ID: ${uploadId}`;
+                console.log('ERROR', msg);
+                addMessage(Level.Error, msg);
+                setUploadState(uploadingState.error);
+                cancelUpload();
+              }
       }, 100);
     }
   }, [addMessage, setDisableDetails, setNewUpload, setUploadingFileCounts, setUploadState]);
@@ -821,26 +822,25 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
    * @function
    */
   const failedUploadRetry = React.useCallback(() => {
-  }, []);
-//    disableIdleCheckFunc(true);    // Disable the checks for idle until we're done
-//
-//    setUploadState(uploadingState.retryingFailed);
-//    handleFailedUploads(uploadId, uploadFiles, 
-//        () => {   // Success function
-//              setUploadState(uploadingState.none);
-//              disableIdleCheckFunc(false);    // Enable checking for idle
-//              },
-//        () => {   // Failure function
-//              console.log('ERROR: Unable to find failed files in list of files to upload');
-//              addMessage(Level.Error, 'An error occurred while trying to fetch list of failed files from the server');
-//              setUploadState(uploadingState.uploadFailure);
-//              disableIdleCheckFunc(false);    // Enable checking for idle
-//              }
-//      );
-//    // Start checking the upload counts
-//    window.setTimeout(() => internalGetUploadCounts(uploadId, uploadFiles), 2000);
-//
-//  }, [disableIdleCheckFunc, handleFailedUploads, uploadFiles, uploadId]);
+    disableIdleCheckFunc(true);    // Disable the checks for idle until we're done
+
+    setUploadState(uploadingState.retryingFailed);
+    handleFailedUploads(uploadId, uploadFiles, 
+        () => {   // Success function
+              setUploadState(uploadingState.none);
+              disableIdleCheckFunc(false);    // Enable checking for idle
+              },
+        () => {   // Failure function
+              console.log('ERROR: Unable to find failed files in list of files to upload');
+              addMessage(Level.Error, 'An error occurred while trying to fetch list of failed files from the server');
+              setUploadState(uploadingState.uploadFailure);
+              disableIdleCheckFunc(false);    // Enable checking for idle
+              }
+      );
+    // Start checking the upload counts
+    window.setTimeout(() => internalGetUploadCounts(uploadId, uploadFiles), 2000);
+
+  }, [disableIdleCheckFunc, handleFailedUploads, uploadFiles, uploadId]);
 
   /**
    * Mark the failed upload as completed
@@ -1206,6 +1206,11 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
           <Typography gutterBottom variant="body1">
             { getUploadStateString(uploadState) }
           </Typography>
+          { uploadState === uploadingState.error && 
+            <Typography gutterBottom variant="body1" sx={{paddingTop:'15px'}} >
+              You can retry to upload the remaining images at a later time if you choose not to proceed now
+            </Typography>
+          }
         </Stack>
       </Grid>
     );
@@ -1246,7 +1251,7 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
         return (
           <React.Fragment>
             <Button id="folder_upload_fail_retry" sx={{flex:1}} size="small" onClick={failedUploadRetry}>Retry failed files</Button>
-            <Button id="folder_upload_fail_done" sx={{flex:1, whiteSpace:"nowrap"}} size="small" onClick={failedDone}>Mark Completed</Button>
+            <Button id="folder_upload_fail_done" sx={{flex:1, whiteSpace:"nowrap"}} size="small" onClick={failedDone}>Done</Button>
           </React.Fragment>
         );
       }

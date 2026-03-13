@@ -1474,9 +1474,8 @@ def sandbox_recovery_update():
     upload_key = request.form.get('key', None)
     loc_id = request.form.get('loc', None)
     source_path = request.form.get('path', None)
-    all_files = request.form.get('files', None)
 
-    if not all(item for item in [token, source_path, upload_key, coll_id, all_files]):
+    if not all(item for item in [token, source_path, upload_key, coll_id]):
         return "Not Found", 406
 
     s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
@@ -1517,22 +1516,23 @@ def sandbox_recovery_update():
         return "Not Found", 404
 
     # Update the upload in the database
-    upload_id = db.sandbox_upload_recovery_update(hash2str(s3_url),
+    result = db.sandbox_upload_recovery_update(hash2str(s3_url),
                                                 user_info.name,
                                                 coll['bucket'],
                                                 upload['key'],
                                                 source_path,
-                                                json.loads(all_files),
                                                 our_location['idProperty'],
                                                 our_location['nameProperty'],
                                                 our_location['latProperty'],
                                                 our_location['lngProperty'],
                                                 our_location['elevationProperty'])
-    if upload_id is None:
+    if result is None:
         return jsonify({'success': False,
                             'message': 'Unable to update the upload to receive the files'})
 
-    return jsonify({'success': True, 'id': upload_id,
+    print('HACK: RECOVER:',type(result[0]), result[0],flush=True);
+    print('HACK:        :',type(result[1]), result[1][1],flush=True);
+    return jsonify({'success': True, 'id': result[0], 'files': result[1],
                         'message': 'Successfully updated for the file upload'})
 
 
@@ -1609,7 +1609,7 @@ def sandbox_check_continue_upload():
                     print(ex, flush=True)
                     all_match = 'Missing'
                     message = 'The uploaded file is not found on the server ' \
-                                                                f'{request.files[one_file].filename}'
+                                                            f'{request.files[one_file].filename}'
                 else:
                     print('ERROR: Unexpected exception while comparing continue upload files ' \
                                     f'against already uploaded files: {s3_bucket} {s3_comp_path} ',
@@ -2210,7 +2210,7 @@ def image_location():
         for one_obs in obs_info[one_file]:
             one_obs[camtrap.CAMTRAP_OBSERVATION_DEPLOYMENT_ID_IDX] = deployment_id
 
-    row_groups = [obs_info[one_key] for one_key in obs_info.keys()]
+    row_groups = [obs_info[one_key] for one_key in obs_info]
     S3Connection.upload_camtrap_data(s3_url, user_info.name,
                                 get_password(token, db),
                                 bucket, make_s3_path((upload_path, OBSERVATIONS_CSV_FILE_NAME)),
@@ -2498,7 +2498,7 @@ def images_all_edited():
 
     return {'success': True,
             'message': "The images have been successfully updated", \
-            'updatedUpload': True if updated else False,
+            'updatedUpload': bool(updated),
             'imagesReloaded': not kept_urls,
             }
 
@@ -3909,7 +3909,7 @@ def message_add():
 
     # Check the parameters
     if not message:
-        message = "";
+        message = ""
     if priority is None:
         priority = "normal"
 

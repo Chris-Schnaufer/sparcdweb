@@ -182,7 +182,7 @@ export default function EditCollection({data, onUpdate, onClose}) {
    * @return {object} The UI for editing permissions
    */
   function generatePermissions() {
-    if (allPermissions.length === 0) {
+    if (newPermissions.length === 0) {
       return (
         <Typography gutterBottom variant="body3" noWrap sx={{paddingLeft:'10px'}} >
           No permissions available to edit

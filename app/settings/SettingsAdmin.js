@@ -23,10 +23,14 @@ import { useTheme } from '@mui/material/styles';
 import PropTypes from 'prop-types';
 
 import CheckIncompleteUploads from './CheckIncompleteUploads';
+import CollectionList from './CollectionList';
 import EditCollection from './EditCollection';
 import EditLocation from './EditLocation';
 import EditSpecies from './EditSpecies';
 import EditUser from './EditUser';
+import LocationList from './LocationList';
+import SpeciesList from './SpeciesList';
+import UserList from './UserList';
 import { Level } from '../components/Messages';
 import { AddMessageContext, CollectionsInfoContext, TokenExpiredFuncContext, LocationsInfoContext, 
          SizeContext, TokenContext } from '../serverInfo';
@@ -236,7 +240,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
       console.log('Admin Users Unknown Error: ',err);
       addMessage(Level.Warning, 'An unknown error occurred when attempting to load user information');
     }    
-  }, [addMessage, serverURL, settingsToken, setSelectedUsers, setTokenExpired, setUserInfo]);
+  }, [addMessage, serverURL, settingsToken, setTokenExpired]);
 
   /**
    * Gets the master species information from the server (not the per-user species)
@@ -273,7 +277,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
       console.log('Admin Species Unknown Error: ',err);
       addMessage(Level.Warning, 'An unknown error occurred when attempting to load species information');
     }
-  }, [addMessage, serverURL, settingsToken, setMasterSpecies, setSelectedSpecies, setTokenExpired]);
+  }, [addMessage, serverURL, settingsToken, setTokenExpired]);
 
   /**
    * Updates the collection information on the server
@@ -621,9 +625,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
                 }
               } else if (!oldEditingState.data) {
                 // We have a new location
-                let newLocationItems = locationItems;
-                newLocationItems.push(respData.data);
-                locationItems.push(curLocation);
+                locationItems.push(respData.data);
                 setLocationsModified(true);
                 if (typeof(onSuccess) === 'function') {
                   onSuccess();
@@ -1056,11 +1058,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
    */
   function generateUsers(dblClickFunc) {
     let curUserInfo = selectedUsers || [];
-    if (userInfo === null) {
-      getUserInfo();
-      setUserInfo([]);
-      setSelectedUsers([]);
-    }
+
     if (userInfo === null && curUserInfo.length <= 0) {
       return (
         <Grid container justifyContent="center" alignItems="center" sx={{...theme.palette.screen_overlay}} >
@@ -1071,60 +1069,14 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
 
     dblClickFunc = dblClickFunc ? dblClickFunc : () => {};
     return (
-      <Box id='admin-settings-users-details-wrapper' sx={{width:'100%', padding:'0px 5px 0 5px'}} >
-        <Grid id="admin-settings-collection-header" container direction="row" justifyContent="space-between" alignItems="start"
-              sx={{width:'100%', backgroundColor:'lightgrey', borderBottom:'1px solid black'}} >
-          { generateSettingHeader(1, sortColumn === 1, sortDirection, 2, 'Name', {marginRight:"auto"}, (dir)=>sortUsers('name', dir) )}
-          { generateSettingHeader(2, sortColumn === 2, sortDirection, 3, 'Email', {marginRight:"auto"}, (dir)=>sortUsers('email', dir) )}
-          { generateSettingHeader(3, false,            sortDirection, 5, 'Collections', {marginRight:"auto"})}
-          { generateSettingHeader(4, sortColumn === 4, sortDirection, 1, 'Admin', {marginLeft:"auto"}, (dir)=>sortUsers('admin', dir) )}
-          { generateSettingHeader(5, sortColumn === 5, sortDirection, 1, 'Auto', {marginLeft:"auto", paddingRight:"5px"}, (dir)=>sortUsers('auto', dir) )}
-        </Grid>
-        <Grid id='admin-settings-details' sx={{overflowX:'auto',width:'100%', maxHeight:detailsHeight+'px' }}>
-        { curUserInfo.map((item,idx) => 
-            <Grid container direction="row" id={"admin-user-"+idx} key={item.name+'-'+idx} justifyContent="space-between" alignItems="start"
-                  sx={{width:'100%', '&:hover':{backgroundColor:'rgba(0,0,0,0.05)'} }} onDoubleClick={(event) => dblClickFunc(event,item)} >
-              <Grid size={2}>
-                <Typography noWrap variant="body2">
-                  {item.name}
-                </Typography>
-              </Grid>
-              <Grid size={3}>
-                <Typography noWrap variant="body2">
-                  {item.email}
-                </Typography>
-              </Grid>
-              <Grid size={5}>
-                <Typography noWrap variant="body2">
-                  { item.collections.map((colItem, colIdx) => 
-                      <React.Fragment key={colItem.name+'-'+colIdx}>
-                        {colIdx > 0 && ', '}
-                        {colItem.name}
-                        <span style={{fontWeight:'bold', fontSize:'small'}}>
-                          &nbsp;(
-                          {colItem.owner && 'O'}
-                          {colItem.read && 'R'}
-                          {colItem.write && 'W'}
-                          )
-                        </span>
-                      </React.Fragment>
-                  )}
-                </Typography>
-              </Grid>
-              <Grid size={1}>
-                <Typography noWrap variant="body2" align="center">
-                  {item.admin ? 'Y' : ' '}
-                </Typography>
-              </Grid>
-              <Grid size={1} sx={{paddingRight:"5px"}} >
-                <Typography noWrap variant="body2" align="right">
-                  {item.autoAdded ? 'Y' : 'N'}
-                </Typography>
-              </Grid>
-            </Grid>
-        )}
-          </Grid>
-      </Box>
+      <UserList users={curUserInfo}
+                sortColumn={sortColumn} 
+                sortDirection={sortDirection}
+                maxHeight={detailsHeight}
+                getSettingsHeader={generateSettingHeader} 
+                onSort={sortUsers} 
+                onDblClick={dblClickFunc} 
+      />
     );
   }
 
@@ -1145,36 +1097,14 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
 
     dblClickFunc = dblClickFunc ? dblClickFunc : () => {};
     return (
-      <Box id='admin-settings-collections-details-wrapper' sx={{width:'100%', padding:'0px 5px 0 5px'}} >
-        <Grid id="admin-settings-collection-details-header" container direction="row" justifyContent="space-between" alignItems="start"
-              sx={{width:'100%', backgroundColor:'lightgrey', borderBottom:'1px solid black'}} >
-          { generateSettingHeader(1, sortColumn === 1, sortDirection, 5, 'Name', {marginRight:"auto"}, (dir)=>sortCollections('name', dir) )}
-          { generateSettingHeader(2, sortColumn === 2, sortDirection, 4, 'ID', {marginRight:"auto"}, (dir)=>sortCollections('id', dir) )}
-          { generateSettingHeader(3, sortColumn === 3, sortDirection, 3, 'email', {marginLeft:"auto", paddingRight:"5px"}, (dir)=>sortCollections('email', dir) )}
-        </Grid>
-        <Grid id='admin-settings-details' sx={{overflowX:'auto',width:'100%', maxHeight:detailsHeight+'px' }}>
-        { selectedCollections.map((item, idx) => 
-            <Grid container direction="row" id={"admin-species-"+idx} key={item.name+'-'+idx} justifyContent="space-between" alignItems="start"
-                  sx={{width:'100%', '&:hover':{backgroundColor:'rgba(0,0,0,0.05)'} }} onDoubleClick={(event) => dblClickFunc(event,item)} >
-              <Grid size={5}>
-                <Typography noWrap variant="body2">
-                  {item.name}
-                </Typography>
-              </Grid>
-              <Grid size={4} sx={{marginRight:'auto'}}>
-                <Typography noWrap variant="body2">
-                  {item.id}
-                </Typography>
-              </Grid>
-              <Grid size={3} sx={{marginLeft:'auto'}}>
-                <Typography noWrap variant="body2">
-                  {item.email}
-                </Typography>
-              </Grid>
-          </Grid>
-        )}
-        </Grid>
-      </Box>
+      <CollectionList collections={selectedCollections} 
+                      sortColumn={sortColumn} 
+                      sortDirection={sortDirection}
+                      maxHeight={detailsHeight}
+                      getSettingsHeader={generateSettingHeader} 
+                      onSort={sortCollections} 
+                      onDblClick={dblClickFunc} 
+      />
     );
   }
 
@@ -1186,11 +1116,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
    */
   function generateSpecies(dblClickFunc) {
     let curSpecies = selectedSpecies || [];
-    if (masterSpecies === null) {
-      getMasterSpecies();
-      setMasterSpecies([]);
-      setSelectedSpecies([]);
-    }
+
     if (curSpecies.length <= 0) {
       return (
         <Grid container justifyContent="center" alignItems="center" sx={{...theme.palette.screen_overlay}} >
@@ -1201,36 +1127,14 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
 
     dblClickFunc = dblClickFunc ? dblClickFunc : () => {};
     return (
-      <Box id='admin-settings-species-details-wrapper' sx={{width:'100%', padding:'0px 5px 0 5px'}} >
-        <Grid id="admin-settings-species-header" container direction="row" justifyContent="space-between" alignItems="start"
-              sx={{width:'100%', backgroundColor:'lightgrey', borderBottom:'1px solid black'}} >
-          { generateSettingHeader(1, sortColumn === 1, sortDirection, 5, 'Name', {marginRight:"auto"}, (dir)=>sortSpecies('name', dir) )}
-          { generateSettingHeader(2, sortColumn === 2, sortDirection, 5, 'Scientific Name', {marginRight:"auto"}, (dir)=>sortSpecies('sciName', dir) )}
-          { generateSettingHeader(3, sortColumn === 3, sortDirection, 2, 'Key Binding', {marginLeft:"auto", paddingRight:"5px"}, (dir)=>sortSpecies('key', dir) )}
-        </Grid>
-        <Grid id='admin-settings-details' sx={{overflowX:'auto',width:'100%', maxHeight:detailsHeight+'px' }}>
-        { curSpecies.map((item, idx) => 
-              <Grid container direction="row" id={"admin-species-"+idx} key={item.name+'-'+idx} justifyContent="space-between" alignItems="start"
-                    sx={{width:'100%', '&:hover':{backgroundColor:'rgba(0,0,0,0.05)'}}} onDoubleClick={(event) => dblClickFunc(event,item)} >
-                <Grid size={5}>
-                  <Typography noWrap variant="body2">
-                    {item.name}
-                  </Typography>
-                </Grid>
-                <Grid size={5} sx={{marginRight:'auto'}}>
-                  <Typography noWrap variant="body2">
-                    {item.scientificName}
-                  </Typography>
-                </Grid>
-                <Grid size={2} sx={{marginLeft:'auto'}}>
-                  <Typography noWrap variant="body2">
-                    {item.keyBinding}
-                  </Typography>
-                </Grid>
-              </Grid>
-        )}
-        </Grid>
-      </Box>
+      <SpeciesList species={curSpecies} 
+                    sortColumn={sortColumn} 
+                    sortDirection={sortDirection}
+                    maxHeight={detailsHeight}
+                    getSettingsHeader={generateSettingHeader} 
+                    onSort={sortSpecies} 
+                    onDblClick={dblClickFunc} 
+      />
     );
   }
 
@@ -1251,44 +1155,14 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
 
     dblClickFunc = dblClickFunc ? dblClickFunc : () => {};
     return (
-      <Box id='admin-settings-locations-details-wrapper' sx={{width:'100%', padding:'0px 5px 0 5px'}} >
-        <Grid id="admin-settings-species-header" container direction="row" justifyContent="space-between" alignItems="start"
-              sx={{width:'100%', backgroundColor:'lightgrey', borderBottom:'1px solid black'}} >
-          { generateSettingHeader(1, sortColumn === 1, sortDirection, 5, 'Name', {marginRight:"auto"}, (dir)=>sortLocations('name', dir) )}
-          { generateSettingHeader(2, sortColumn === 2, sortDirection, 3, 'ID', {marginRight:"auto"}, (dir)=>sortLocations('id', dir) )}
-          { generateSettingHeader(3, sortColumn === 3, sortDirection, 2, 'Active', {marginRight:"auto"}, (dir)=>sortLocations('active', dir) )}
-          { generateSettingHeader(4, false,            sortDirection, 2, 'Location', {marginLeft:"auto", paddingRight:"5px"} )}
-        </Grid>
-        <Grid id='admin-settings-details' sx={{overflowX:'auto',width:'100%', maxHeight:detailsHeight+'px' }}>
-        { selectedLocations.map((item, idx) => {
-            const extraAttribs = item.activeProperty ? {} : {color:'grey'};
-            return (<Grid container direction="row" id={"admin-species-"+idx} key={item.name+'-'+idx} justifyContent="space-between" alignItems="start"
-                    sx={{width:'100%', '&:hover':{backgroundColor:'rgba(0,0,0,0.05)'}, ...extraAttribs }} onDoubleClick={(event) => dblClickFunc(event,item)} >
-                <Grid size={5}>
-                  <Typography noWrap variant="body2" >
-                    {item.nameProperty}
-                  </Typography>
-                </Grid>
-                <Grid size={3} sx={{marginRight:'auto'}}>
-                  <Typography noWrap variant="body2">
-                    {item.idProperty}
-                  </Typography>
-                </Grid>
-                <Grid size={2} sx={{marginRight:'auto'}}>
-                  <Typography noWrap variant="body2" align="center">
-                    {item.activeProperty ? 'Y' : ' '}
-                  </Typography>
-                </Grid>
-                <Grid size={2} sx={{marginLeft:'auto'}} >
-                  <Typography noWrap variant="body2" align="right">
-                    {item.latProperty + ', ' + item.lngProperty}
-                  </Typography>
-                </Grid>
-              </Grid>
-            );}
-        )}
-        </Grid>
-      </Box>
+      <LocationList locations={selectedLocations} 
+                    sortColumn={sortColumn} 
+                    sortDirection={sortDirection}
+                    maxHeight={detailsHeight}
+                    getSettingsHeader={generateSettingHeader} 
+                    onSort={sortLocations} 
+                    onDblClick={dblClickFunc} 
+      />
     );
   }
 
@@ -1358,6 +1232,24 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
       </Grid>
     );
   }
+
+  // Check on getting user information
+  React.useEffect(() => {
+    if (userInfo === null) {
+      getUserInfo();
+      setUserInfo([]);
+      setSelectedUsers([]);
+    }
+  }, [getUserInfo, setSelectedUsers, setUserInfo, userInfo]);
+
+  // Check on getting species information
+  React.useEffect(() => {
+    if (masterSpecies === null) {
+      getMasterSpecies();
+      setMasterSpecies([]);
+      setSelectedSpecies([]);
+    }
+  }, [getMasterSpecies, masterSpecies, setMasterSpecies, setSelectedSpecies]);
 
   // Setup the tab and page generation
   const adminTabs = [
@@ -1496,3 +1388,11 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
     </Grid>
   );
 }
+
+SettingsAdmin.propTypes = {
+  loadingCollections: PropTypes.bool,
+  loadingLocations:   PropTypes.bool,
+  onConfirmPassword:  PropTypes.func.isRequired,
+  onSandboxRefresh:   PropTypes.func.isRequired,
+  onClose:            PropTypes.func.isRequired,
+};

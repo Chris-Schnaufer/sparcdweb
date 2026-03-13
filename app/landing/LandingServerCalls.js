@@ -86,21 +86,6 @@ export function updateUploadRecovery(serverURL, token, collId, locId, uploadKey,
   formData.append('loc', locId);
   formData.append('path', path);
 
-  // Break the upload into pieces if it's too large
-  if (files.length < LIMIT_FORM_FILE_CHUNK) {
-    formData.append('files', JSON.stringify(files.map((item) => item.webkitRelativePath)));
-  } else {
-    formData.append('files', JSON.stringify(files.slice(0,LIMIT_FORM_FILE_CHUNK).map((item) => item.webkitRelativePath)));
-    let index = 1;
-    let start = LIMIT_FORM_FILE_CHUNK;
-    while (start < files.length) {
-      let end = Math.min(start + LIMIT_FORM_FILE_CHUNK, files.length);
-      formData.append('files'+index, JSON.stringify(files.slice(start,end).map((item) => item.webkitRelativePath)));
-      start += LIMIT_FORM_FILE_CHUNK;
-      index += 1;
-    };
-  }
-
   try {
     fetch(sandboxRecoveryUrl, {
       credentials: 'include',
@@ -118,7 +103,8 @@ export function updateUploadRecovery(serverURL, token, collId, locId, uploadKey,
           }
         })
       .then((respData) => {
-        onSuccess(respData);
+        const missingFiles = files.filter((item) => respData.files.filter((name) => item.webkitRelativePath.includes(name))[0]);
+        onSuccess(respData, missingFiles);
       })
       .catch(function(err) {
         console.log('Previous Upload Error: ',err);
