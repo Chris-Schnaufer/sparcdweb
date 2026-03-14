@@ -673,7 +673,7 @@ export default function Queries({loadingCollections}) {
       </Grid>
       { loadingCollections && 
           <Grid id="query-loading-collections-wrapper" container direction="row" alignItems="center" justifyContent="center" 
-                sx={{position:'absolute', top:0, left:0, width:'100vw', height:'100vh', backgroundColor:'rgb(0,0,0,0.5)', zIndex:11111}}
+                sx={{position:'absolute', top:0, left:0, width:'100vw', height:uiSizes.workspace.height, backgroundColor:'rgb(0,0,0,0.5)', zIndex:11111}}
           >
             <div style={{backgroundColor:'rgb(0,0,0,0.8)', border:'1px solid grey', borderRadius:'15px', padding:'25px 10px'}}>
               <Grid container direction="column" alignItems="center" justifyContent="center" >
