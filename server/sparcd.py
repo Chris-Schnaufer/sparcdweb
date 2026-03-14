@@ -85,6 +85,9 @@ QUERY_RESULTS_TIMEOUT_SEC = 24 * 60 * 60
 DEFAULT_SETTINGS_PATH = os.environ.get(ENV_DEFAULT_SETTINGS_PATH,
                                                         os.path.join(os.getcwd(),"defaultSettings"))
 
+# Timeout for login page cache
+LOGIN_PAGE_BROWSER_CACHE_TIMEOUT_SEC = 10800
+
 # Timeout for image browser cache
 IMAGE_BROWSER_CACHE_TIMEOUT_SEC = 10800
 
@@ -248,7 +251,10 @@ def index():
     client_user_agent =  request.environ.get('HTTP_USER_AGENT', None)
     if not client_ip or client_ip is None or not client_user_agent or client_user_agent == '-':
         return 'Resource not found', 404
-    return render_template(DEFAULT_TEMPLATE_PAGE)
+
+    response = make_response(render_template(DEFAULT_TEMPLATE_PAGE))
+    response.headers.set('Cache-Control', f'public, max-age={LOGIN_PAGE_BROWSER_CACHE_TIMEOUT_SEC}')
+    return response
 
 
 @app.route('/favicon.ico', methods = ['GET'])
@@ -966,7 +972,7 @@ def image():
                        allow_redirects=False)
 
     response = make_response(res.content)
-    response.headers.set('Cache-Control', IMAGE_BROWSER_CACHE_TIMEOUT_SEC)
+    response.headers.set('Cache-Control', f'public, max-age={IMAGE_BROWSER_CACHE_TIMEOUT_SEC}')
     return response
 
 
@@ -1099,6 +1105,8 @@ def query():
                                             s3_url,user_info.name, lambda: get_password(token, db))
     cur_locations = sdu.load_locations(s3_url, user_info.name, lambda: get_password(token, db),
                                             hash2str(s3_url))
+
+    # TODO: 
 
     results = Results(all_results, cur_species, cur_locations,
                         s3_url, user_info.name, get_password(token, db),
@@ -1530,8 +1538,6 @@ def sandbox_recovery_update():
         return jsonify({'success': False,
                             'message': 'Unable to update the upload to receive the files'})
 
-    print('HACK: RECOVER:',type(result[0]), result[0],flush=True);
-    print('HACK:        :',type(result[1]), result[1][1],flush=True);
     return jsonify({'success': True, 'id': result[0], 'files': result[1],
                         'message': 'Successfully updated for the file upload'})
 
