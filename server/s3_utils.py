@@ -42,9 +42,12 @@ def web_to_s3_url(url: str, decrypt: Callable) -> str:
         return url
 
     parsed = urlparse(url)
-    port = '80'
-    if parsed.scheme.lower() == 'https':
-        port = '443'
+    if not parsed.port:
+        port = '80'
+        if parsed.scheme.lower() == 'https':
+            port = '443'
+    else:
+        port = str(parsed.port)
 
     return parsed.hostname + ':' + port
 
