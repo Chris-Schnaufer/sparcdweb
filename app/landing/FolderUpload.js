@@ -825,7 +825,7 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
     disableIdleCheckFunc(true);    // Disable the checks for idle until we're done
 
     setUploadState(uploadingState.retryingFailed);
-    handleFailedUploads(WorkingUploadId, newUploadFiles, 
+    handleFailedUploads(workingUploadId, workingUploadFiles, 
         () => {   // Success function
               setUploadState(uploadingState.none);
               disableIdleCheckFunc(false);    // Enable checking for idle
