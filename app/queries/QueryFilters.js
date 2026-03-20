@@ -204,7 +204,7 @@ export default function QueryFilters({actionsRef, workingWidth, workingHeight, f
 }
 
 QueryFilters.propTypes = {
-  actionsRef:      PropTypes.shape({ current: PropTypes.instanceOf(Element) }),
+  actionsRef:      PropTypes.shape({ current: PropTypes.object }),
   workingWidth:    PropTypes.number.isRequired,
   workingHeight:   PropTypes.number.isRequired,
   filters:         PropTypes.arrayOf(PropTypes.shape({
