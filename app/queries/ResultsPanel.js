@@ -3,7 +3,8 @@
 /** @module queries/ResultsPanel */
 
 import * as React from 'react';
-import { DataGrid } from '@mui/x-data-grid';
+import { DataGrid, useGridApiRef } from '@mui/x-data-grid';
+import { useTheme } from '@mui/material/styles';
 
 import PropTypes from 'prop-types';
 
@@ -17,7 +18,9 @@ import { UserSettingsContext } from '../serverInfo';
  * @returns {object} The panel UI to render
  */ 
 export default function ResultsPanel({results, tabName}) {
+  const theme = useTheme();
   const userSettings = React.useContext(UserSettingsContext);  // User display settings
+  const apiRef = useGridApiRef(); // TODO: Auto size columns of grids using this api
 
   // Perform processing heavy assignments
   const { curTitles, curData, keys, columnGroupings } = React.useMemo(() => {

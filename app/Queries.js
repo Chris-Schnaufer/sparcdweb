@@ -4,14 +4,7 @@ import * as React from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import CircularProgress from '@mui/material/CircularProgress';
-import { DataGrid, useGridApiRef } from '@mui/x-data-grid';
-import DownloadForOfflineOutlinedIcon from '@mui/icons-material/DownloadForOfflineOutlined';
-import ExpandLessOutlinedIcon from '@mui/icons-material/ExpandLessOutlined';
-import ExpandMoreOutlinedIcon from '@mui/icons-material/ExpandMoreOutlined';
 import Grid from '@mui/material/Grid';
-import Tab from '@mui/material/Tab';
-import Tabs from '@mui/material/Tabs';
-import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
 
@@ -34,7 +27,7 @@ import * as utils from './utils';
 
 import { Level } from './components/Messages';
 import { AddMessageContext, TokenExpiredFuncContext, LocationsInfoContext, SizeContext, SpeciesInfoContext, 
-         SpeciesOtherNamesContext, TokenContext, UserSettingsContext } from './serverInfo';
+         SpeciesOtherNamesContext, TokenContext } from './serverInfo';
 
 const QUERY_RESULTS_SHOW_DELAY_SEC = 5;   // Minimum delay before showing the results
 
@@ -46,10 +39,12 @@ const QUERY_RESULTS_SHOW_DELAY_SEC = 5;   // Minimum delay before showing the re
  */
 export default function Queries({loadingCollections}) {
   const theme = useTheme();
-  const apiRef = useGridApiRef(); // TODO: Auto size columns of grids using this api
   const dividerRef = React.useRef();   // Used for sizeing
   const expandCollapseRef = React.useRef();   // Used for sizeing
-  const queryInterval = React.useRef(60);   // The current interval value
+  const queryActionsRef = React.useRef(null);         // For access to the query actions element
+  const queryCancelledRef = React.useRef(false);        // Indicates the user want to cancel the query
+  const queryIntervalRef = React.useRef(60);   // The current interval value
+  const serverURLRef = React.useRef(utils.getServer());
   const addMessage = React.useContext(AddMessageContext); // Function adds messages for display
   const locationItems = React.useContext(LocationsInfoContext); // Locations
   const queryToken = React.useContext(TokenContext);  // Login token
@@ -57,21 +52,13 @@ export default function Queries({loadingCollections}) {
   const speciesItems = React.useContext(SpeciesInfoContext);  // Species
   const speciesOtherItems = React.useContext(SpeciesOtherNamesContext); // Unofficial species
   const uiSizes = React.useContext(SizeContext);  // UI Dimensions
-  const userSettings = React.useContext(UserSettingsContext);  // User display settings
   const actionScrollTimeoutRef = React.useRef(null);    // Used to make sure the add filter is alawys in view
   const [dividerHeight, setDividerHeight] = React.useState(20); // Used to size controls
   const [expandCollapseWidth, setExpandCollapseWidth] = React.useState(24);
   const [filters, setFilters] = React.useState([]); // Stores filter information
-  const [filterHeight, setFilterHeight] = React.useState(240); // Used to force redraw when new filter added
   const [isExpanded, setIsExpanded] = React.useState(false); // Used to indicate the filters are expanded
-  const [queryCancelled, setQueryCancelled] = React.useState(false); // Used to indicate the user cancelled the query
-  const [queryRedraw, setQueryRedraw] = React.useState(null); // Used to force redraw when new filter added
   const [queryResults, setQueryResults] = React.useState(null); // Used to store query results
-  const [serverURL, setServerURL] = React.useState(utils.getServer());  // The server URL to use
-  const [totalHeight, setTotalHeight] = React.useState(null);  // Default value is recalculated at display time
   const [waitingOnQuery, setWaitingOnQuery] = React.useState(null);  // Used for managing queries and the UI
-  const [windowSize, setWindowSize] = React.useState({width: 640, height: 480});  // Default values are recalculated at display time
-  const [workingTop, setWorkingTop] = React.useState(null);    // Default value is recalculated at display time
   const [workspaceWidth, setWorkspaceWidth] = React.useState(640);  // Default value is recalculated at display time
 
   const activeQueryRef = React.useRef(null);
@@ -80,10 +67,7 @@ export default function Queries({loadingCollections}) {
 
   // Recalcuate available space in the window
   React.useLayoutEffect(() => {
-    setWindowSize(uiSizes.window);
     setWorkspaceWidth(uiSizes.workspace.width);
-    setTotalHeight(uiSizes.workspace.height);
-    setWorkingTop(uiSizes.workspace.top);
 
     if (expandCollapseRef && expandCollapseRef.current) {
       const curRect = expandCollapseRef.current.getBoundingClientRect();
@@ -94,7 +78,7 @@ export default function Queries({loadingCollections}) {
       const curRect = dividerRef.current.getBoundingClientRect();
       setDividerHeight(curRect.height);
     }
-  }, [uiSizes, expandCollapseRef, dividerRef]);
+  }, [uiSizes]);
 
   /**
    * Adds a new filter to the list of filters
@@ -104,17 +88,15 @@ export default function Queries({loadingCollections}) {
    */
   const addFilter = React.useCallback((filterChoice, onComplete) => {
 
-    // Add the new filter to the array of filters
-    const newFilter = {type:filterChoice, id:uuidv4(), data:null}
-    const allFilters = [...filters, newFilter];
-
-    // Set the timeout to remove the spinner and update the UI
     window.setTimeout(() => {
-                  setFilters(allFilters);
-                  setQueryRedraw(newFilter.id);
-                  onComplete?.();
-                });
-  }, [filters]);
+      // Add the new filter to the array of filters
+      const newFilter = {type:filterChoice, id:uuidv4(), data:null}
+
+      // Set the timeout to remove the spinner and update the UI
+      setFilters(prev => [...prev, newFilter]);
+      onComplete?.();
+    });
+}, []);
 
   /**
    * Removes a filter from the list
@@ -122,11 +104,9 @@ export default function Queries({loadingCollections}) {
    * @param {string} filterId The unique ID of the filter to remove
    */
   const removeFilter = React.useCallback((filterId) => {
-    const remainingFilters = filters.filter((item) => item.id != filterId);
-    setFilters(remainingFilters);
+    setFilters(prev => prev.filter((item) => item.id !== filterId));
 
-    setQueryRedraw(uuidv4());
-  }, [filters, setFilters, setQueryRedraw]);
+  }, []);
 
   /**
    * Called when the data for a filter is changed
@@ -135,13 +115,11 @@ export default function Queries({loadingCollections}) {
    * @param {object} filterData The new filter data to save
    */
   const handleFilterChange = React.useCallback((filterId, filterData) => {
-    const filterIdx = filters.findIndex((item) => item.id === filterId);
-    if (filterIdx > -1) {
-      const curFilters = filters;
-      curFilters[filterIdx].data = filterData;
-      setFilters(curFilters);
-    }
-  }, [filters, setFilters]);
+    setFilters(prev => {
+      const filterIdx = prev.findIndex((item) => item.id === filterId);
+      return filterIdx > -1 ? prev.map((item, idx) => idx === filterIdx ? {...item, data:filterData} : item) : prev;
+    });
+  }, []);
 
   /**
    * Handles adding a new filter when a filter is double-clicked
@@ -162,9 +140,9 @@ export default function Queries({loadingCollections}) {
    * Handles the expansion and collapse of the filter and results areas
    * @function
    */
-  function handleExpandCollapse() {
-    setIsExpanded(!isExpanded);
-  }
+  const handleExpandCollapse = React.useCallback(() => {
+    setIsExpanded(prev => !prev);
+  }, []);
 
   /**
    * Fills in the form data for all of the user's filters
@@ -175,8 +153,7 @@ export default function Queries({loadingCollections}) {
   const getQueryFormData = React.useCallback((queryFilters) => {
     let formData = new FormData();
 
-    for (const filterIdx in queryFilters) {
-      const filter = queryFilters[filterIdx];
+    for (const filter of queryFilters) {
       switch(filter.type) {
         case 'Species Filter':
           FilterSpeciesFormData(filter.data, formData, mergedSpecies);
@@ -212,14 +189,14 @@ export default function Queries({loadingCollections}) {
     }
 
     return formData;
-  }, [mergedSpecies, locationItems, userSettings]);
+  }, [mergedSpecies, locationItems]);
 
   /**
    * Makes the call to get the query data and saves the results
    * @function
    */
   const handleQuery = React.useCallback(() => {
-    const queryUrl = serverURL + '/query?t=' + encodeURIComponent(queryToken) + "&i=" + "60";
+    const queryUrl = serverURLRef.current + '/query?t=' + encodeURIComponent(queryToken) + "&i=" + "60";
     const formData = getQueryFormData(filters);
     const queryId = Date.now();
 
@@ -227,7 +204,7 @@ export default function Queries({loadingCollections}) {
 
     // Setup the UI for the query 
     setWaitingOnQuery(queryId);
-    setQueryRedraw(queryId);
+    queryCancelledRef.current = false;
     activeQueryRef.current = queryId;
 
     // Make the query
@@ -250,8 +227,8 @@ export default function Queries({loadingCollections}) {
       })
       .then((respData) => {
         // Check if this has been cancelled
-        if (queryCancelled === true) {
-          setQueryCancelled(false);
+        if (queryCancelledRef.current === true) {
+          queryCancelledRef.current = false;
           return;
         }
         // TODO: handle no results
@@ -263,7 +240,8 @@ export default function Queries({loadingCollections}) {
             setIsExpanded(false);
             setWaitingOnQuery(null);
           } else  {
-            window.setTimeout(() => {setQueryResults(respData);setIsExpanded(false);setWaitingOnQuery(null);}, time_diff_sec * 1000);
+            const remaining = QUERY_RESULTS_SHOW_DELAY_SEC - time_diff_sec;
+            window.setTimeout(() => {setQueryResults(respData);setIsExpanded(false);setWaitingOnQuery(null);}, remaining * 1000);
           }
           activeQueryRef.current = null;
         } else {
@@ -290,7 +268,7 @@ export default function Queries({loadingCollections}) {
         addMessage(Level.Error, 'An error occurred while executing the query', 'Query Error');
       }
     }
-  }, [addMessage, filters, getQueryFormData, queryToken, queryCancelled, serverURL]);
+  }, [addMessage, filters, getQueryFormData, queryToken]);
 
   /**
    * Handles cancelling a query
@@ -298,8 +276,17 @@ export default function Queries({loadingCollections}) {
    */
   const cancelQuery = React.useCallback(() => {
     setWaitingOnQuery(null);
-    setQueryCancelled(true);
-  }, [setQueryCancelled, setWaitingOnQuery]);
+    queryCancelledRef.current = true;
+  }, []);
+
+  /**
+   * Function to handle the change to the query interval
+   * @function
+   * @param {string} val The updated value
+   */
+  const handleIntervalChanged = React.useCallback((val) => {
+    queryIntervalRef.current = val;
+  }, []);
 
   /**
    * Handles the user downloading information
@@ -307,9 +294,9 @@ export default function Queries({loadingCollections}) {
    * @param {string} tabId The tab name to download
    */
   const handleDownload = React.useCallback((tabId) => {
-    const downloadUrl =  serverURL + '/query_dl?t=' + encodeURIComponent(queryToken) + '&q=' + encodeURIComponent(tabId) + 
+    const downloadUrl =  serverURLRef.current + '/query_dl?t=' + encodeURIComponent(queryToken) + '&q=' + encodeURIComponent(tabId) + 
                                                                 '&d=' + encodeURIComponent(queryResults['downloads'][tabId]);
-    var element = document.createElement('a');
+    const element = document.createElement('a');
     element.setAttribute('href', downloadUrl);
     element.setAttribute('download', queryResults['downloads'][tabId]);
     element.setAttribute('rel','noopener');
@@ -321,31 +308,31 @@ export default function Queries({loadingCollections}) {
     element.click();
 
     document.body.removeChild(element);
-  }, [queryResults, queryToken, serverURL]);
+  }, [queryResults, queryToken]);
 
   // Set a timer to have new panels scroll into view
   React.useLayoutEffect(() => {
-    const elActions = document.getElementById('queries-actions');
-    if (elActions && filters && actionScrollTimeoutRef.current === null) {
+    if (queryActionsRef.current && actionScrollTimeoutRef.current === null) {
       actionScrollTimeoutRef.current = window.setTimeout(() => {
                                           actionScrollTimeoutRef.current = null;
-                                          elActions.scrollIntoView({ behavior:'smooth', inline:'nearest'})
+                                          queryActionsRef.current.scrollIntoView({ behavior:'smooth', inline:'nearest'})
                                         }, 10);
     }
   }, [filters]);
 
   // Return the UI
-  const curHeight = queryResults && isExpanded === false ? 100 : Math.max(320, uiSizes.workspace.height * 0.80);//((totalHeight || 480) / 2.0) + 'px';
+  const curHeight = queryResults && isExpanded === false ? 100 : Math.max(320, uiSizes.workspace.height * 0.80);
   return (
     <Box id='queries-workspace-wrapper' sx={{ flexGrow: 1, 'width': '100vw', position:'relative'}} >
-      <QueryFilters workingWidth={workspaceWidth}
+      <QueryFilters actionsRef={queryActionsRef}
+                    workingWidth={workspaceWidth}
                     workingHeight={curHeight}
                     filters={filters}
                     filterChanged={handleFilterChange}
                     filterRemove={removeFilter} 
                     filterAdd={handleFilterAccepted}
-                    queryInterval={queryInterval.current}
-                    intervalChanged={(val) => queryInterval.current = val}
+                    queryInterval={queryIntervalRef.current}
+                    intervalChanged={handleIntervalChanged}
                     onQuery={handleQuery}
       />
       <Grid id="queries-workspace-divider" ref={dividerRef} container direction="row" sx={{justifyContent:'start', alignItems:'center', spacing:2, paddingLeft:'10px'}} >
@@ -405,3 +392,7 @@ export default function Queries({loadingCollections}) {
     </Box>
   );
 }
+
+Queries.propTypes = {
+  loadingCollections: PropTypes.bool.isRequired,
+};

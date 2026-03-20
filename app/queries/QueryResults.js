@@ -10,6 +10,7 @@ import Tab from '@mui/material/Tab';
 import Tabs from '@mui/material/Tabs';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
+import { useTheme } from '@mui/material/styles';
 
 import PropTypes from 'prop-types';
 
@@ -70,6 +71,7 @@ function a11yPropsTabPanel(index) {
  * @returns {object} The UI of the query results
  */
 export default function QueryResults({results, maxHeight, onDownload}) {
+  const theme = useTheme();
   const userSettings = React.useContext(UserSettingsContext);  // User display settings
   const [activeTab, setActiveTab] = React.useState(0);
 
