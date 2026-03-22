@@ -1074,23 +1074,25 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
                       onZoom={(event, speciesItem) => {setSpeciesZoomName(speciesItem.name);setSpeciesKeybindName(null);event.preventDefault();}}
       />
       <Stack id="upload-edit-details" direction={{xs:"column"}} >
-        <Grid id='upload-edit-top-sidebar' ref={sidebarTopRef} container direction='row' alignItems='center' justifyContent='space-between' rows='1'
-            style={{ ...theme.palette.top_sidebar, minWidth:(workspaceWidth-workplaceStartX)+'px', maxWidth:(workspaceWidth-workplaceStartX)+'px',
-                     position:'sticky', verticalAlignment:'middle', visibility:topbarVisiblity }} >
-            <Typography variant="body" sx={{ paddingLeft: '10px'}}>
-              {curUpload.name}
-            </Typography>
-            <Typography variant="body2">
-              {(curUpload.images && curUpload.images.length ? curUpload.images.length : 0) + " Images available"}
-            </Typography>
-            <Typography variant="body" sx={{ paddingLeft: '10px', fontSize:'larger', marginRight:'20px'}}>
-              {displayLocation && displayLocation.nameProperty ? displayLocation.nameProperty : '<location>'}
-              <IconButton aria-label="edit" size="small" color={'lightgrey'} onClick={handleEditLocation}>
-                <BorderColorOutlinedIcon sx={{fontSize:'smaller'}}/>
-              </IconButton>
-            </Typography>
-        </Grid>
-        { curEditState == editingStates.listImages || curEditState == editingStates.editImage ? 
+        { topbarVisiblity &&
+          <Grid id='upload-edit-top-sidebar' ref={sidebarTopRef} container direction='row' alignItems='center' justifyContent='space-between' rows='1'
+              style={{ ...theme.palette.top_sidebar, minWidth:(workspaceWidth-workplaceStartX)+'px', maxWidth:(workspaceWidth-workplaceStartX)+'px',
+                       position:'sticky', verticalAlignment:'middle' }} >
+              <Typography variant="body" sx={{ paddingLeft: '10px'}}>
+                {curUpload.name}
+              </Typography>
+              <Typography variant="body2">
+                {(curUpload.images && curUpload.images.length ? curUpload.images.length : 0) + " Images available"}
+              </Typography>
+              <Typography variant="body" sx={{ paddingLeft: '10px', fontSize:'larger', marginRight:'20px'}}>
+                {displayLocation && displayLocation.nameProperty ? displayLocation.nameProperty : '<location>'}
+                <IconButton aria-label="edit" size="small" color={'lightgrey'} onClick={handleEditLocation}>
+                  <BorderColorOutlinedIcon sx={{fontSize:'smaller'}}/>
+                </IconButton>
+              </Typography>
+          </Grid>
+        }
+        { (curEditState == editingStates.listImages || curEditState == editingStates.editImage) && imageVisibility && 
             <Box id="image-edit-wrapper-box"
                   style={{ marginLeft:'10px',
                            marginRight:'10px',
@@ -1101,14 +1103,13 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
                            minWidth:(workspaceWidth-sidebarWidthLeft-(10*2))+'px',
                            maxWidth:(workspaceWidth-sidebarWidthLeft-(10*2))+'px',
                            width:(workspaceWidth-sidebarWidthLeft-(10*2))+'px', 
-                           overflow:'scroll', 'visibility':imageVisibility }}
+                           overflow:'scroll' }}
             >
               {generateImageTiles(handleEditingImage)}
             </Box>
-          : null
         }
       </Stack>
-      { curEditState === editingStates.editImage ?
+      { curEditState === editingStates.editImage && imageVisibility &&
         <Grid id='image-edit-edit' container direction="column" alignItems="center" justifyContent="center"
               style={{ paddingTop:'10px',
                        paddingLeft:'10px',
@@ -1119,7 +1120,6 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
                        maxWidth:(workspaceWidth-sidebarWidthLeft)+'px',
                        width:(workspaceWidth-sidebarWidthLeft)+'px', 
                        position:'absolute',
-                       visibility:imageVisibility,
                        backgroundColor:'rgb(0,0,0,0.7)' }}>
           <Grid id='image-edit-edit-wrapper' sx={{borderLeft:'4px solid white', borderRight:'4px solid white'}} >
             <ImageEdit url={curImageEdit.url}
@@ -1149,7 +1149,6 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
                                                                   sx={{position:'absolute', top:'0px', letf:'0px', display:'none', visibility:'hidden'}} />}
           </Grid>
         </Grid>
-        : null
       }
       { editingLocation ? 
           <Grid id='image-edit-location' container spacing={0} direction="column" alignItems="center" justifyContent="center"
