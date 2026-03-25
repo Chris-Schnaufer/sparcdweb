@@ -66,7 +66,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
   const [maxTilesDisplay, setMaxTilesDisplay] = React.useState(40);     // Set the maximum number of tiles to display
   const [navigationRedraw, setNavigationRedraw] = React.useState(null); // Forcing redraw on navigation
   const [nextImageEdit, setNextImageEdit] = React.useState(null);       // The next image in array for editing
-  const [observerActive, setObserverActive] = React.useState(false);    // Used to indicate that we've set the observer
+  const [observerActive, setObserverActive] = React.useState(null);    // Used to indicate that we've set the observer
   const [pendingMessage, setPendingMessage] = React.useState(null);     // Used to display a pending message on the UI
   const [serverURL, setServerURL] = React.useState(utils.getServer());  // The server URL to use
   const [sidebarWidthLeft, setSidebarWidthLeft] = React.useState(150);  // Width of left sidebar
@@ -83,7 +83,6 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
 
   // Some local variables
   let curLocationFetchIdx = -1; // Working index of location data to fetch
-  let workingTileCount = 40;
 
   // Update the display location as needed
   React.useLayoutEffect(() => {
@@ -239,8 +238,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
         }
       }
 
-      workingTileCount = workingTileCount + 40;
-      setMaxTilesDisplay(workingTileCount + (workingTileCount % rowTilesCount));
+      setMaxTilesDisplay(prev => prev + 40 + ((prev + 40) % rowTilesCount));
     }
   }, [curUpload, maxTilesDisplay]);
 
@@ -260,54 +258,6 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
       }
     }
   });
-
-  /**
-   * Shows the previous image for editing
-   * @function
-   * @param {bool} imageModified Flag indicating that the current image was modified
-   * @param {string} [requestId] The optional request ID associated with th current image
-   * @return {bool} Returns true when there's a next image to navigate to, and false otherwise
-   */
-  const handlePrevImage = React.useCallback((imageModified, requestId) => {
-    finishImageEdits(imageModified, requestId ? requestId : lastSpeciesRequestId);
-
-    const curImageIdx =  curUpload.images.findIndex((item) => item.name === curImageEdit.name);
-    if (curImageIdx === -1) {
-      console.log("Error: unable to find current image before advancing to previous image");
-      return false;
-    }
-    if (curImageIdx > 0) {
-      const newImage = curUpload.images[curImageIdx-1];
-      const imageEl = document.getElementById(newImage.name);
-      setCurImageEdit(newImage);
-      if (imageEl) {
-        imageEl.scrollIntoView();
-      }
-      setNextImageEdit(curImageIdx > 1 ? curUpload.images[curImageIdx-2] : null);
-      setNavigationRedraw('redraw-image-'+newImage.name);
-      setCurImageModified(false);
-
-      // Set the navigation indicator
-      const el = document.getElementById('image-edit-edit-wrapper');
-      if (el) {
-        el.style.borderLeft = '4px solid MediumSeaGreen';
-        el.style.borderRight = '4px solid white';
-        const prevTimeoutId = navigationIndicatorTimerId.current;
-        if (prevTimeoutId) {
-          navigationIndicatorTimerId.current = null;
-          window.clearTimeout(prevTimeoutId);
-        }
-        navigationIndicatorTimerId.current = window.setTimeout(() => {
-            navigationIndicatorTimerId.current = null;
-            el.style.borderLeft = '4px solid white';
-        }, 5000)
-      }
-
-      return true;
-    }
-
-    return false;
-  }, [curImageEdit, curUpload, finishImageEdits, lastSpeciesRequestId, setCurImageEdit, setCurImageModified, setNavigationRedraw]);
 
   /**
    * Shows the next image for editing
@@ -348,6 +298,54 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
         navigationIndicatorTimerId.current = window.setTimeout(() => {
             navigationIndicatorTimerId.current = null;
             el.style.borderRight = '4px solid white';
+        }, 5000)
+      }
+
+      return true;
+    }
+
+    return false;
+  }, [curImageEdit, curUpload, finishImageEdits, lastSpeciesRequestId, setCurImageEdit, setCurImageModified, setNavigationRedraw]);
+
+  /**
+   * Shows the previous image for editing
+   * @function
+   * @param {bool} imageModified Flag indicating that the current image was modified
+   * @param {string} [requestId] The optional request ID associated with th current image
+   * @return {bool} Returns true when there's a next image to navigate to, and false otherwise
+   */
+  const handlePrevImage = React.useCallback((imageModified, requestId) => {
+    finishImageEdits(imageModified, requestId ? requestId : lastSpeciesRequestId);
+
+    const curImageIdx =  curUpload.images.findIndex((item) => item.name === curImageEdit.name);
+    if (curImageIdx === -1) {
+      console.log("Error: unable to find current image before advancing to previous image");
+      return false;
+    }
+    if (curImageIdx > 0) {
+      const newImage = curUpload.images[curImageIdx-1];
+      const imageEl = document.getElementById(newImage.name);
+      setCurImageEdit(newImage);
+      if (imageEl) {
+        imageEl.scrollIntoView();
+      }
+      setNextImageEdit(curImageIdx > 1 ? curUpload.images[curImageIdx-2] : null);
+      setNavigationRedraw('redraw-image-'+newImage.name);
+      setCurImageModified(false);
+
+      // Set the navigation indicator
+      const el = document.getElementById('image-edit-edit-wrapper');
+      if (el) {
+        el.style.borderLeft = '4px solid MediumSeaGreen';
+        el.style.borderRight = '4px solid white';
+        const prevTimeoutId = navigationIndicatorTimerId.current;
+        if (prevTimeoutId) {
+          navigationIndicatorTimerId.current = null;
+          window.clearTimeout(prevTimeoutId);
+        }
+        navigationIndicatorTimerId.current = window.setTimeout(() => {
+            navigationIndicatorTimerId.current = null;
+            el.style.borderLeft = '4px solid white';
         }, 5000)
       }
 
@@ -513,7 +511,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
     const foundEl = document.getElementById(foundImage.name);
     if (!foundEl) {
       const imageIndex = curUpload.images.findIndex((item) => item.name === foundImage.name);
-      while (workingTileCount < imageIndex && workingTileCount < curUpload.images.length - 1) {
+      while (maxTilesDisplay < imageIndex && maxTilesDisplay < curUpload.images.length - 1) {
         onMoreImages();
       }
 
@@ -530,7 +528,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
             window.setTimeout(() => foundEl.classList.remove(styles.blink), 1500);
         }, 200);
     return true;
-  }, [curUpload, workingTileCount, onMoreImages]);
+  }, [curUpload, maxTilesDisplay, onMoreImages]);
 
   /**
    * Updates the server with a new location for the upload
@@ -583,7 +581,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
             addMessage(Level.Error, 'A problem occurred while updating the collection location');
             setPendingMessage(null);
         });
-      } catch (error) {
+      } catch (err) {
         console.log('Update Location Unknown Error: ',err);
         addMessage(Level.Error, 'An unknown problem occurred while updating the collection location');
         setPendingMessage(null);
@@ -704,7 +702,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
           console.log('Update Location Error: ',err);
           addMessage(Level.Error, 'A problem occurred while updating the keybinding');
       });
-    } catch (error) {
+    } catch (err) {
       console.log('Update Location Unknown Error: ',err);
       addMessage(Level.Error, 'An unknown problem occurred while updating the keybinding');
       return('An error occurred while setting keybinding');
@@ -1134,6 +1132,11 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
                        navigation={{onPrev:handlePrevImage,onNext:handleNextImage}}
                        species={curImageEdit.species}
                        ref={imageEditRef}
+                       onSpeciesAdd={(speciesAdd) =>  { let requestId = Date.now();
+                                                        setLastSpeciesRequestId(requestId);
+                                                        handleSpeciesAdd(requestId, speciesAdd);
+                                                      }
+                                        }
                        onSpeciesChange={(speciesName, speciesCount) => {
                                                           const requestId = Date.now();
                                                           setLastSpeciesRequestId(requestId);

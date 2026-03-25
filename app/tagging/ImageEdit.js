@@ -44,13 +44,13 @@ const DEF_IMG_HEIGHT = 300;
  * @param {boolean} dropable Set truthiness to true to allow species drag-drop to add to existing species
  * @param {object} navigation Set truthiness to true to display the previous and next navigation elements by providing handlers
  * @param {array} species Array of species already available for the image
- * @param {function} onSpeciesChange Function to call when a species is added or a count is modified
+ * @param {function} onSpeciesAdd Function to call when a species is added
+ * @param {function} onSpeciesChange Function to call when a species is modified
  * @param {object} ref Our reference
  * @returns {object} The UI to render
  */
 const ImageEdit = React.forwardRef(({url, type, name, parentId, maxWidth, maxHeight, onClose, adjustments, dropable,
-                                   navigation, species, onSpeciesChange}, ref) => {
-  const curSpecies = React.useRef(!!species ? species : []); // Working species
+                                   navigation, species, onSpeciesAdd, onSpeciesChange}, ref) => {
   const imageTransformWrapperRef = React.useRef(null);
   const navigationLockedRef = React.useRef(false);        // Used to prevent multiple clicks during navigation
   const navigationMaskTimeoutIdRef = React.useRef(null);         // Holds the timeout ID for removing the navigation mask
@@ -58,13 +58,13 @@ const ImageEdit = React.forwardRef(({url, type, name, parentId, maxWidth, maxHei
   const userSettings = React.useContext(UserSettingsContext); // User display settings
   const [brightness, setBrightness] = React.useState(50);    // Image brightness
   const [contrast, setContrast] = React.useState(50);        // Image contrast
+  const [curSpecies, setCurSpecies] = React.useState(!!species ? species : []); // Working species
   const [hue, setHue] = React.useState(50);    // From 360 to -360
   const [imageModified, setImageModified] = React.useState(false); // Used to keep track of when an image is modified
   const [imageSize, setImageSize] = React.useState({width:DEF_IMG_WIDTH,height:DEF_IMG_HEIGHT,top:0,left:0,right:DEF_IMG_WIDTH}); // Adjusted when loaded
   const [lastUrl, setLastUrl] = React.useState(null);  // Used to ensure bightness, et al are reset on a new image
   const [movieSize, setMovieSize] = React.useState({width:'auto', height:'auto', heightRatio:430/640});
   const [saturation, setSaturation] = React.useState(50);              // Image saturation
-  const [speciesRedraw, setSpeciesRedraw] = React.useState(null);       // Forces redraw due to species change
   const [imageId, setImageId] = React.useState('image-edit-image-'+uuidv4()); // Unique image ID
 
   const brightnessRange = {'min':0, 'max':200}; // Can go higher than 200 and that's adjusted below
@@ -81,6 +81,11 @@ const ImageEdit = React.forwardRef(({url, type, name, parentId, maxWidth, maxHei
       }
     }
   }), []);
+
+  // Used to keep our species up to date
+  React.useEffect(() => {
+    setCurSpecies(!!species ? species : []);
+  }, [species])
 
   // Check if the URL is new to us and reset the image manipulations
   React.useLayoutEffect(() => {
@@ -151,34 +156,10 @@ const ImageEdit = React.forwardRef(({url, type, name, parentId, maxWidth, maxHei
     const speciesScientificName = event.dataTransfer.getData("text/plain").toUpperCase();
     const speciesKeyItem = speciesItems.find((item) => item.scientificName.toUpperCase() === speciesScientificName);
     if (speciesKeyItem) {
-      handleSpeciesAdd(speciesKeyItem);
+      onSpeciesAdd(speciesKeyItem);
       if (userSettings.autonext) {
         handleNavigationNext();
       }
-    }
-  }
-
-  /**
-   * Common handler for adding a species to the image
-   * @function
-   * @param {object} speciesAdd The species being added
-   */
-  function handleSpeciesAdd(speciesAdd) {
-    const haveSpeciesIdx = curSpecies.current.findIndex((item) => item.name === speciesAdd.name);
-    if (haveSpeciesIdx > -1) {
-      curSpecies.current[haveSpeciesIdx].count = parseInt(curSpecies.current[haveSpeciesIdx].count) + 1;
-      window.setTimeout(() => {
-        setSpeciesRedraw(name+curSpecies.current[haveSpeciesIdx].name+curSpecies.current[haveSpeciesIdx].count);
-      }, 100);
-      setImageModified(true);
-      onSpeciesChange(speciesAdd.name, curSpecies.current[haveSpeciesIdx].count);
-    } else {
-      curSpecies.current.push({name:speciesAdd.name,scientificName:speciesAdd.scientificName,count:1});
-      window.setTimeout(() => {
-        setSpeciesRedraw(name+speciesAdd.name+'1');
-      }, 100);
-      setImageModified(true);
-      onSpeciesChange(speciesAdd.name, 1);
     }
   }
 
@@ -190,7 +171,7 @@ const ImageEdit = React.forwardRef(({url, type, name, parentId, maxWidth, maxHei
    */
   const handleInputChange = React.useCallback((event, speciesName) => {
     const newValue = event.target.value === '' ? 0 : Number(event.target.value);
-    let workingSpecies = curSpecies.current;
+    let workingSpecies = curSpecies;
     const speciesIdx = workingSpecies.findIndex((item) => item.name === speciesName);
     if (speciesIdx === -1) {
       console.log('Error: unable to find species for updating count', speciesName);
@@ -205,10 +186,8 @@ const ImageEdit = React.forwardRef(({url, type, name, parentId, maxWidth, maxHei
     // Make the change
     setImageModified(true);
     onSpeciesChange(speciesName, newValue);
-    workingSpecies[speciesIdx].count = newValue;
-    curSpecies.current = workingSpecies;
-    setSpeciesRedraw(workingSpecies[speciesIdx].name+workingSpecies[speciesIdx].count);
-  }, [onSpeciesChange]);
+    setCurSpecies(prev => prev.map((item, idx) => idx !== speciesIdx ? item : {...item, count:newValue} ));
+  }, [curSpecies, onSpeciesChange]);
 
   /**
    * Handler for when a species input field no longer has focus
@@ -217,7 +196,7 @@ const ImageEdit = React.forwardRef(({url, type, name, parentId, maxWidth, maxHei
    * @param {string} speciesName The name of the species associated with the event
    */
   const handleBlur = React.useCallback((event, speciesName) => {
-    let workingSpecies = curSpecies.current;
+    let workingSpecies = curSpecies;
     const speciesIdx = workingSpecies.findIndex((item) => item.name === speciesName);
     if (speciesIdx === -1) {
       console.log('Error: unable to find species for final checks', speciesName);
@@ -231,10 +210,8 @@ const ImageEdit = React.forwardRef(({url, type, name, parentId, maxWidth, maxHei
     }
     setImageModified(true);
     onSpeciesChange(speciesName, newValue);
-    workingSpecies[speciesIdx].count = newValue;
-    curSpecies.current = workingSpecies;
-    setSpeciesRedraw(workingSpecies[speciesIdx].name+workingSpecies[speciesIdx].count);
-  }, [onSpeciesChange]);
+    setCurSpecies(prev => prev.map((item, idx) => idx !== speciesIdx ? item : {...item, count:newValue} ));
+  }, [curSpecies, onSpeciesChange]);
 
   /**
    * Handles deleting a species from the image
@@ -242,7 +219,7 @@ const ImageEdit = React.forwardRef(({url, type, name, parentId, maxWidth, maxHei
    * @param {string} speciesName The name of the species to delete
    */
   function handleSpeciesDelete(speciesName) {
-    let workingSpecies = curSpecies.current;
+    let workingSpecies = curSpecies;
     const speciesIdx = workingSpecies.findIndex((item) => item.name === speciesName);
     if (speciesIdx === -1) {
       console.log('Error: unable to find species for deletion', speciesName);
@@ -251,9 +228,7 @@ const ImageEdit = React.forwardRef(({url, type, name, parentId, maxWidth, maxHei
     const removedSpecies = workingSpecies[speciesIdx];
     setImageModified(true);
     onSpeciesChange(speciesName, 0);
-    workingSpecies.splice(speciesIdx, 1);
-    curSpecies.current = workingSpecies;
-    setSpeciesRedraw(removedSpecies.name+'-deleted');
+    setCurSpecies(prev => prev.filter((_, idx) => idx !== speciesIdx));
   }
 
   /**
@@ -601,8 +576,8 @@ const ImageEdit = React.forwardRef(({url, type, name, parentId, maxWidth, maxHei
           <Grid id='edit-image-top-row' container direction="row" alignItems="end" justifyContent="end"
                 sx={{minHeight:rowHeight,maxHeight:rowHeight}}
           >
-            <Grid id="image-edit-species" size={{ xs:6, sm:6, md:6 }} sx={{position:'relative', marginRight:'auto', visibility:(curSpecies.current ? 'visible' : 'hidden'), pointerEvents:"auto"}}>
-              {curSpecies.current.map((curItem) =>
+            <Grid id="image-edit-species" size={{ xs:6, sm:6, md:6 }} sx={{position:'relative', marginRight:'auto', visibility:(curSpecies ? 'visible' : 'hidden'), pointerEvents:"auto"}}>
+              {curSpecies.map((curItem) =>
                 <ImageEditSpecies key={name+curItem.name} name={curItem.name?curItem.name:curItem.scientificName} count={curItem.count} onDelete={handleSpeciesDelete}
                                   onChange={handleInputChange} onBlur={handleBlur} />
               )}
@@ -634,6 +609,7 @@ ImageEdit.propTypes = {
                      onPrev: PropTypes.func.isRequired,
                    }),
   species:         PropTypes.array,
+  onSpeciesAdd:    PropTypes.func.isRequired,
   onSpeciesChange: PropTypes.func.isRequired,
 };
 

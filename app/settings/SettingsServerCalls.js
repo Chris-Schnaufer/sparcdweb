@@ -700,7 +700,7 @@ export function continueCheckIncomplete(serverURL, token, collections, onExpired
   onSuccess ||= () => {};
   onFailure ||= () => {};
 
-  const checkIncompleteUrl = serverURL + '/adminCheckIncomplete?t=' + encodeURIComponent(checkToken);
+  const checkIncompleteUrl = serverURL + '/adminCheckIncomplete?t=' + encodeURIComponent(token);
 
   const formData = new FormData();
   formData.append('collections', JSON.stringify(collections));

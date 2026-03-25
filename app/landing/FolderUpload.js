@@ -402,8 +402,15 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
                                   allowedFiles,
                                   tokenExpiredFunc,
                                   (respData) => { // Success
-                                    const missingFiles = allowedFiles.filter((item) => respData.files.filter((name) => item.webkitRelativePath.includes(name))[0]);
-                                    haveUploadRecoverySuccess(respData, missingFiles)
+                                    if (respData.success) {
+                                      const missingFiles = allowedFiles.filter((item) => respData.files.filter((name) => item.webkitRelativePath.includes(name))[0]);
+                                      haveUploadRecoverySuccess(respData, missingFiles)
+                                    } else {
+                                      console.log('ERROR: filesUpload: ', respData.message);
+                                      addMessage(Level.Error, respData.message);
+                                      setUploadState(uploadingState.error);
+                                      cancelUpload();
+                                    }
                                   }, 
                                   (err) => {      // Failure
                                     if (folderUploadRef.current) {
@@ -412,7 +419,7 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
                                     if (folderCancelRef.current) {
                                       folderCancelRef.current.disabled = false;
                                     }
-                                    const msg = `A problem occurred while preparing for upload recovery. Upload ID: ${workingUploadId}`;
+                                    const msg = `A problem occurred while preparing for upload recovery`;
                                     console.log('ERROR: filesUpload: ', msg);
                                     addMessage(Level.Error, msg);
                                     setUploadState(uploadingState.error);
@@ -420,7 +427,7 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
                                   });
               // Check for an error
               if (!success) {
-                const msg = `An unknown problem occurred while preparing for recovery of an upload. Upload ID: ${workingUploadId}`;
+                const msg = `An unknown problem occurred while preparing for recovery of an upload`;
                 console.log('ERROR: filesUpload: ', msg);
                 addMessage(Level.Error, msg);
                 setUploadState(uploadingState.error);
