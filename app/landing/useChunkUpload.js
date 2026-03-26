@@ -378,7 +378,9 @@ export function useChunkUpload(selectedTimezone) {
       window.setTimeout(() => uploadChunk(chunk, uploadId), 10);
     }
 
-    window.setTimeout(() => getUploadCounts(uploadId, uploadFiles, curSuccess, curFailed), 1000);
+    if (pollingActiveRef.current === false) {
+      window.setTimeout(() => getUploadCounts(uploadId, uploadFiles, curSuccess, curFailed), 1000);
+    }
   }, [addMessage, disableIdleCheck, getUploadCounts, uploadChunk]);
 
   /**

@@ -127,6 +127,22 @@ const idleListenEvents = [
   "scroll"
 ];
 
+/**
+ * Function to compare two uploads for reverse sorting by date (newest on top)
+ * @function
+ */
+function compareUploadDates(first, second) {
+  const toMs = ({ date: { date, time } }) =>
+    new Date(
+      date.year, date.month - 1, date.day,
+      time.hour, time.minute, time.second,
+      Math.floor(time.nano / 1e6)
+    ).getTime();
+
+  return toMs(second) - toMs(first); // Newest first
+};
+
+
 const DEFAULT_IDLE_TIMEOUT_SEC =  20 * 60; // 20 minutes
 const IDLE_LOGOUT_TIMEOUT_SEC =  2 * 60;   // 3 minutes
 const IDLE_NEW_INSTALL_TIMEOUT_SEC =  2 * 60; // 2 minutes
@@ -534,13 +550,7 @@ export default function Home() {
           setLoadingCollections(false);
           const curCollections = respData.sort((first, second) => first.name.localeCompare(second.name, undefined, { sensitivity: "base" }));
           for (let one_coll of curCollections) {
-            one_coll.uploads = one_coll.uploads.sort((first, second) => (first.date.date.year > second.date.date.year ||
-                                                                         first.date.date.month > second.date.date.month ||
-                                                                         first.date.date.day > second.date.date.day || 
-                                                                         first.date.time.hour > second.date.time.hour || 
-                                                                         first.date.time.minute > second.date.time.minute || 
-                                                                         first.date.time.second > second.date.time.second || 
-                                                                         first.date.time.nano > second.date.time.nano) ? -1 : 1);
+            one_coll.uploads = one_coll.uploads.sort((first, second) => compareUploadDates(first, second));
           }
           console.log('HACK: COLLECTIONS',curCollections);
           setCollectionInfo(curCollections);
