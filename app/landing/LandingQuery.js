@@ -22,15 +22,23 @@ export default function LandingQuery() {
   const serverURL = React.useContext(BaseURLContext);
   const queryToken = React.useContext(TokenContext);
   const [animalsNums,setAnimalsNums] = React.useState(null);
+  const speciesServerCallRef = React.useRef(false);        // Used to limit the number of calls to the server for species
 
   /**
    * Retrieves the species stats from the server
    * @function
    */
   const getSpeciesStats = React.useCallback(() => {
+    // Check if we have a call in progress already
+    if (speciesServerCallRef.current) {
+      return;
+    }
+    speciesServerCallRef.current = true;
 
     const success = Server.getSpeciesStats(serverURL, queryToken, tokenExpiredFunc,
           (respData) => {   // Success
+            speciesServerCallRef.current = false;
+
               // Process the results
             setAnimalsNums(respData);
           },
@@ -47,7 +55,8 @@ export default function LandingQuery() {
 
   // Get the statistics to show
   React.useLayoutEffect(() => {
-    if (animalsNums === null) {
+    // Check for an active server call before making another one
+    if (animalsNums === null && !speciesServerCallRef.current) {
       getSpeciesStats();
     }
   }, [animalsNums, getSpeciesStats]);

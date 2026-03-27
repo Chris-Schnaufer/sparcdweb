@@ -46,6 +46,9 @@ from text_formatters.coordinate_utils import DEFAULT_UTM_ZONE,deg2utm, deg2utm_c
 import zip_utils as zu
 
 
+# The allowed origins
+DEFAULT_ALLOWED_ORIGINS="http://localhost:3000"
+
 # Starting point for uploading files from server
 RESOURCE_START_PATH = os.path.abspath(os.path.dirname(__file__))
 
@@ -55,6 +58,8 @@ REQEST_ALLOWED_FILE_EXTENSIONS=['.png','.jpg','.jepg','.ico','.gif','.html','.cs
 # Allowed image extensions
 REQEST_ALLOWED_IMAGE_EXTENSIONS=['.png','.jpg','.jpeg','.ico','.gif']
 
+# Environment allowed origin names
+ENV_ALLOWED_ORIGINS = 'SPARCD_ALLOWED_ORIGINS'
 # Environment variable name for database
 ENV_NAME_DB = 'SPARCD_DB'
 # Environment variable name for passcode
@@ -79,6 +84,9 @@ TIMEOUT_COLLECTIONS_SEC = 12 * 60 * 60
 TIMEOUT_UPLOADS_FILE_SEC = 15 * 60
 # Timeout for query results on disk
 QUERY_RESULTS_TIMEOUT_SEC = 24 * 60 * 60
+
+# Allowed origins
+ALLOWED_ORIGINS = os.environ.get(ENV_ALLOWED_ORIGINS, DEFAULT_ALLOWED_ORIGINS)
 
 # Folder that has the template settings files used to setup a new SPARCd instance or repair an
 # existing one
@@ -241,7 +249,7 @@ def get_password(token: str, db: SPARCdDatabase) -> Optional[str]:
 
 
 @app.route('/', methods = ['GET'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def index():
     """Default page"""
     print("RENDERING TEMPLATE",DEFAULT_TEMPLATE_PAGE,os.getcwd(),flush=True)
@@ -258,7 +266,7 @@ def index():
 
 
 @app.route('/favicon.ico', methods = ['GET'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def favicon():
     """ Return the favicon """
     return send_from_directory(app.root_path,
@@ -266,7 +274,7 @@ def favicon():
 
 
 @app.route('/mapImage.png', methods = ['GET'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def mapimage():
     """ Return the image """
     return send_from_directory(app.root_path,
@@ -274,7 +282,7 @@ def mapimage():
 
 
 @app.route('/badimage.png', methods = ['GET'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def badimage():
     """ Return the image """
     return send_from_directory(app.root_path,
@@ -282,7 +290,7 @@ def badimage():
 
 
 @app.route('/sparcd.png', methods = ['GET'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def sparcdpng():
     """ Return the image """
     return send_from_directory(app.root_path,
@@ -290,7 +298,7 @@ def sparcdpng():
 
 
 @app.route('/wildcatResearch.png', methods = ['GET'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def wildcatresearch():
     """ Return the image """
     return send_from_directory(app.root_path,
@@ -298,7 +306,7 @@ def wildcatresearch():
 
 
 @app.route('/loading.gif', methods = ['GET'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def loading():
     """ Return the image """
     return send_from_directory(app.root_path,
@@ -306,7 +314,7 @@ def loading():
 
 
 @app.route('/sanimalBackground.JPG', methods = ['GET'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def sanimalbackground():
     """ Return the image """
     return send_from_directory(app.root_path,
@@ -314,7 +322,7 @@ def sanimalbackground():
 
 
 @app.route('/_next/static/<path:path_fagment>', methods = ['GET'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def sendnextfile(path_fagment: str):
     """Return files"""
     print("RETURN _next FILENAME:",path_fagment,flush=True)
@@ -335,7 +343,7 @@ def sendnextfile(path_fagment: str):
 
 
 @app.route('/_next/image', methods = ['GET'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def sendnextimage():
     """Return image files"""
     image_path = request.args.get('url')
@@ -406,7 +414,7 @@ def sendnextimage():
 
 
 @app.route('/login', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def login_token():
     """ Returns a token representing the login. No checks are made on the parameters
     Arguments: (POST or GET)
@@ -519,7 +527,7 @@ def login_token():
 
 
 @app.route('/collections', methods = ['GET'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def collections():
     """ Returns the list of collections and their uploads
     Arguments: (GET)
@@ -545,7 +553,7 @@ def collections():
                                                     user_info.name,lambda: get_password(token, db))
 
     if return_colls is None:
-        return 423, 'Unable to load collections'
+        return 'Unable to load collections', 423
 
     # Return the collections
     if not bool(user_info.admin):
@@ -557,7 +565,7 @@ def collections():
 
 
 @app.route('/sandbox', methods = ['GET'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def sandbox():
     """ Returns the list of sandbox uploads
     Arguments: (GET)
@@ -599,7 +607,7 @@ def sandbox():
 
 
 @app.route('/locations', methods = ['GET'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def locations():
     """ Returns the list of locations
     Arguments: (GET)
@@ -630,7 +638,7 @@ def locations():
 
 
 @app.route('/species', methods = ['GET'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def species():
     """ Returns the list of species
     Arguments: (GET)
@@ -700,7 +708,7 @@ def species():
 
 
 @app.route('/speciesStats', methods = ['GET'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def species_stats():
     """ Returns the statistics on species
     Arguments:
@@ -739,7 +747,7 @@ def species_stats():
 
 
 @app.route('/speciesOther', methods = ['GET'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def species_other():
     """ Returns the species that are not part of the official set
     Arguments:
@@ -797,7 +805,7 @@ def species_other():
 
 
 @app.route('/uploadImages', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def upload_images():
     """ Returns the list of images from a collection's upload
     Arguments: (POST)
@@ -892,7 +900,7 @@ def upload_images():
         # Fix up the species if we have some removals
         if have_deletes:
             one_image['species'] = [one_species for one_species in one_image['species'] if \
-                                                                        one_species['count'] > 0]
+                                                                int(one_species['count']) > 0]
 
     # Prepare the return data
     for one_img in all_images:
@@ -912,7 +920,7 @@ def upload_images():
 
 
 @app.route('/image', methods = ['GET'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def image():
     """ Returns the image from the S3 storage
     Arguments: (GET)
@@ -977,7 +985,7 @@ def image():
 
 
 @app.route('/checkChanges', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def check_changes():
     """ Checks if changes have been made to an upload and are stored in the database
     Arguments: POST
@@ -1016,7 +1024,7 @@ def check_changes():
 
 
 @app.route('/query', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def query():
     """ Returns a token representing the login. No checks are made on the parameters
     Arguments: POST
@@ -1239,7 +1247,7 @@ def query_dl():
 
 
 @app.route('/settings', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def set_settings():
     """ Updates the user's settings
     Arguments: (GET)
@@ -1295,7 +1303,7 @@ def set_settings():
 
 
 @app.route('/locationInfo', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def location_info():
     """ Returns details on a location
     Arguments: (GET)
@@ -1352,7 +1360,7 @@ def location_info():
 
 
 @app.route('/sandboxStats', methods = ['GET'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def sandbox_stats():
     """ Returns the upload statistics for display
     Arguments: (GET)
@@ -1417,7 +1425,7 @@ def sandbox_stats():
 
 
 @app.route('/sandboxPrev', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def sandbox_prev():
     """ Checks if a sandbox item has been previously uploaded
     Arguments: (GET)
@@ -1456,7 +1464,7 @@ def sandbox_prev():
 
 
 @app.route('/sandboxRecoveryUpdate', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def sandbox_recovery_update():
     """ Updates the sandbox information in the database upon upload recovery
     Arguments: (GET)
@@ -1543,7 +1551,7 @@ def sandbox_recovery_update():
 
 
 @app.route('/sandboxCheckContinueUpload', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def sandbox_check_continue_upload():
     """ Checks if a sandbox file already uploaded matches what we've just received
     Arguments: (GET)
@@ -1639,7 +1647,7 @@ def sandbox_check_continue_upload():
 
 
 @app.route('/sandboxNew', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def sandbox_new():
     """ Adds a new sandbox upload to the database
     Arguments: (GET)
@@ -1747,7 +1755,7 @@ def sandbox_new():
 
 
 @app.route('/sandboxFile', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def sandbox_file():
     """ Handles the upload for a new image
     Arguments: (GET)
@@ -1876,7 +1884,7 @@ def sandbox_file():
 
 
 @app.route('/sandboxCounts', methods = ['GET'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def sandbox_counts():
     """ Returns the counts of the sandbox upload
     Arguments: (GET)
@@ -1909,7 +1917,7 @@ def sandbox_counts():
 
 
 @app.route('/sandboxUnloadedFiles', methods = ['GET'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def sandbox_unloaded_files():
     """ Returns the list of files that are not loaded
     Arguments: (GET)
@@ -1940,7 +1948,7 @@ def sandbox_unloaded_files():
     return jsonify(db.sandbox_files_not_uploaded(user_info.name, upload_id))
 
 @app.route('/sandboxReset', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def sandbox_reset():
     """ Resets the sandbox to start an upload from the beginning
     Arguments: (GET)
@@ -1981,7 +1989,7 @@ def sandbox_reset():
 
 
 @app.route('/sandboxAbandon', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def sandbox_abandon():
     """ Removes the sandbox and any uploaded files
     Arguments: (GET)
@@ -2026,7 +2034,7 @@ def sandbox_abandon():
 
 
 @app.route('/sandboxCompleted', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def sandbox_completed():
     """ Marks a sandbox as completely uploaded
     Arguments: (GET)
@@ -2127,7 +2135,7 @@ def sandbox_completed():
 
 
 @app.route('/uploadLocation', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def image_location():
     """ Handles the location for images changing
     Arguments: (GET)
@@ -2236,7 +2244,7 @@ def image_location():
 
 
 @app.route('/imageSpecies', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def image_species():
     """ Handles the species and counts for an image changing
     Arguments: (GET)
@@ -2287,7 +2295,7 @@ def image_species():
 
 
 @app.route('/imageEditComplete', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def image_edit_complete():
     """ Handles updating one image with the changes made
     Arguments: (GET)
@@ -2374,7 +2382,7 @@ def image_edit_complete():
 
 
 @app.route('/imagesAllEdited', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def images_all_edited():
     """ Handles completing changes after all images have been edited
     Arguments: (GET)
@@ -2510,7 +2518,7 @@ def images_all_edited():
 
 
 @app.route('/speciesKeybind', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def species_keybind():
     """ Handles the adding/changing a species keybind
     Arguments: (GET)
@@ -2570,7 +2578,7 @@ def species_keybind():
 
 
 @app.route('/adminCheck', methods = ['GET'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def admin_check():
     """ Checks if the user might be an admin
     Arguments: (GET)
@@ -2594,7 +2602,7 @@ def admin_check():
     return {'value': bool(user_info.admin)}
 
 @app.route('/adminCheckChanges', methods = ['GET'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def admin_check_changes():
     """ Checks if the user might be an admin
     Arguments: (GET)
@@ -2629,7 +2637,7 @@ def admin_check_changes():
 
 
 @app.route('/settingsAdmin', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def settings_admin():
     """ Confirms the password is correct for admin editing
     Arguments: (GET)
@@ -2675,7 +2683,7 @@ def settings_admin():
 
 
 @app.route('/settingsOwner', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def settings_owner():
     """ Confirms the password is correct for collection editing
     Arguments: (GET)
@@ -2720,7 +2728,7 @@ def settings_owner():
 
 
 @app.route('/adminCollectionDetails', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def admin_collection_details():
     """ Returns detailed collection information for admin editing
     Arguments: (GET)
@@ -2772,7 +2780,7 @@ def admin_collection_details():
 
 
 @app.route('/ownerCollectionDetails', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def owner_collection_details():
     """ Returns detailed collection information for owner editing
     Arguments: (GET)
@@ -2828,7 +2836,7 @@ def owner_collection_details():
 
 
 @app.route('/adminLocationDetails', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def admin_location_details():
     """ Returns detailed location for admin editing
     Arguments: (GET)
@@ -2874,7 +2882,7 @@ def admin_location_details():
     return jsonify(location)
 
 @app.route('/adminUsers', methods = ['GET'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def admin_users():
     """ Returns user information for admin editing
     Arguments: (GET)
@@ -2939,7 +2947,7 @@ def admin_users():
     return jsonify(return_users)
 
 @app.route('/adminSpecies', methods = ['GET'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def admin_species():
     """ Returns "official" species for admin editing (not user-specific)
     Arguments: (GET)
@@ -2973,7 +2981,7 @@ def admin_species():
     return jsonify(cur_species)
 
 @app.route('/adminUserUpdate', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def admin_user_update():
     """ Confirms the password is correct for admin editing
     Arguments: (GET)
@@ -3021,7 +3029,7 @@ def admin_user_update():
             'email': sdu.secure_email(new_email)}
 
 @app.route('/adminSpeciesUpdate', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def admin_species_update():
     """ Adds/updates a species entry
     Arguments: (GET)
@@ -3085,7 +3093,7 @@ def admin_species_update():
 
 
 @app.route('/adminLocationUpdate', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def admin_location_update():
     """ Adds/updates a location information
     Arguments: (GET)
@@ -3218,7 +3226,7 @@ def admin_location_update():
 
 
 @app.route('/adminCollectionUpdate', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def admin_collection_update():
     """ Updates a collection information
     Arguments: (GET)
@@ -3311,7 +3319,7 @@ def admin_collection_update():
 
 
 @app.route('/adminCollectionAdd', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def admin_collection_add():
     """ Adds a collection information
     Arguments: (GET)
@@ -3384,7 +3392,7 @@ def admin_collection_add():
 
 
 @app.route('/ownerCollectionUpdate', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def ownercollection_update():
     """ Adds/updates a collection information
     Arguments: (GET)
@@ -3477,7 +3485,7 @@ def ownercollection_update():
 
 
 @app.route('/adminCheckIncomplete', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def admin_check_incomplete():
     """ Looks for incomplete updated in collections
     Arguments: (GET)
@@ -3541,7 +3549,7 @@ def admin_check_incomplete():
 
 
 @app.route('/adminCompleteChanges', methods = ['PUT'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def admin_complete_changes():
     """ Adds/updates a saved location and species information
     Arguments: (GET)
@@ -3599,7 +3607,7 @@ def admin_complete_changes():
     return {'success': True, 'message': "All changes were successully applied"}
 
 @app.route('/adminAbandonChanges', methods = ['PUT'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def admin_abandon_changes():
     """ Adds/updates a saved location and species information
     Arguments: (GET)
@@ -3635,7 +3643,7 @@ def admin_abandon_changes():
     return {'success': True, 'message': "All changes were successully abandoned"}
 
 @app.route('/installCheck', methods = ['GET'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def new_install_check():
     """ Checks if the S3 endpoint can support a new installation
     Arguments: (GET)
@@ -3713,7 +3721,7 @@ def new_install_check():
     return jsonify(return_data)
 
 @app.route('/installNew', methods = ['GET'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def install_new():
     """ Attempts to create a new SPARCd installation
     Arguments: (GET)
@@ -3767,7 +3775,7 @@ def install_new():
     return jsonify({'success': True})
 
 @app.route('/installRepair', methods = ['GET'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def install_repair():
     """ Attempts to repair an existing SPARCd installation
     Arguments: (GET)
@@ -3812,7 +3820,7 @@ def install_repair():
     return jsonify({'success': True})
 
 @app.route('/setUploadComplete', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def set_upload_complete():
     """ Marks an incomplete upload as completed
     Arguments: (GET)
@@ -3881,7 +3889,7 @@ def set_upload_complete():
 
 
 @app.route('/messageAdd', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def message_add():
     """ Adds a message to the database
     Arguments: (GET)
@@ -3932,7 +3940,7 @@ def message_add():
 
 
 @app.route('/messageGet', methods = ['GET'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def message_get():
     """ Gets messages for the user
     Arguments: (GET)
@@ -3962,7 +3970,7 @@ def message_get():
 
 
 @app.route('/messageRead', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def message_read():
     """ Marks messages are read
     Arguments: (GET)
@@ -4001,7 +4009,7 @@ def message_read():
 
 
 @app.route('/messageDelete', methods = ['POST'])
-@cross_origin(origins="http://localhost:3000", supports_credentials=True)
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def message_delete():
     """ Gets messages for the user
     Arguments: (GET)

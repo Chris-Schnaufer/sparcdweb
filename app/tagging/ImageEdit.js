@@ -576,12 +576,20 @@ const ImageEdit = React.forwardRef(({url, type, name, parentId, maxWidth, maxHei
           <Grid id='edit-image-top-row' container direction="row" alignItems="end" justifyContent="end"
                 sx={{minHeight:rowHeight,maxHeight:rowHeight}}
           >
-            <Grid id="image-edit-species" size={{ xs:6, sm:6, md:6 }} sx={{position:'relative', marginRight:'auto', visibility:(curSpecies ? 'visible' : 'hidden'), pointerEvents:"auto"}}>
+          { curSpecies && 
+            <Grid id="image-edit-species" size={{ xs:6, sm:6, md:6 }} sx={{position:'relative', marginRight:'auto', pointerEvents:"auto"}}>
               {curSpecies.map((curItem) =>
-                <ImageEditSpecies key={name+curItem.name} name={curItem.name?curItem.name:curItem.scientificName} count={curItem.count} onDelete={handleSpeciesDelete}
-                                  onChange={handleInputChange} onBlur={handleBlur} />
+                curItem.count && 
+                        <ImageEditSpecies key={name+curItem.name}
+                                          name={curItem.name?curItem.name:curItem.scientificName}
+                                          count={curItem.count}
+                                          onDelete={handleSpeciesDelete}
+                                          onChange={handleInputChange}
+                                          onBlur={handleBlur}
+                        />
               )}
             </Grid>
+          }
           </Grid>
           { navigation &&
             <Box id="image-edit-navigate-mask" sx={{position:"absolute", left:"0px", top:"0px", minWidth:imageSize.width, minHeight:imageSize.height,

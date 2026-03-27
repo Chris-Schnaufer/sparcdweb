@@ -12,6 +12,16 @@ import PropTypes from 'prop-types';
 // Width of the input field
 const Input = styled(MuiInput)`
   width: 42px;
+
+  input[type=number] {
+    -moz-appearance: textfield;
+  }
+
+  input[type=number]::-webkit-outer-spin-button,
+  input[type=number]::-webkit-inner-spin-button {
+    -webkit-appearance: inner-spin-button;
+    opacity: 1;
+  }
 `;
 
 /**
@@ -45,16 +55,14 @@ export default function ImageEditSpecies({name, count, onDelete, onChange, onBlu
                 size="small"
                 onChange={(event) => onChange(event, name)}
                 onBlur={(event) => onBlur(event, name)}
-                slotProps={{
-                  htmlInput: {
-                    step: 1,
-                    min: 0,
-                    max: 100,
-                    type: 'number',
-                    'aria-labelledby':"species-name-"+name,
-                  }
+                inputProps={{
+                  step: 1,
+                  min: 0,
+                  max: 100,
+                  type: 'number',
+                  'aria-labelledby':"species-name-"+name,
                 }}
-                sx={{flex:6, position:'relative', marginLeft:'auto', color:'inherit'}}
+                sx={{flex:'6', position:'relative', marginLeft:'auto', color:'inherit'}}
               />
           </Grid>
       <Grid sx={{marginLeft:'auto'}} size={1}>

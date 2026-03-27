@@ -137,7 +137,7 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
       workingUploadId,
       uploadFolder,
       restartFailedUploads,
-      setUploadState,           // CThe state shard by this module and the hook (values defined in hook)
+      setUploadState,           // The state shard by this module and the hook (values defined in hook)
       setUploadingFileCount,
     } = useChunkUpload(selectedTimezone);
 
@@ -975,7 +975,7 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
         return (
           <React.Fragment>
             <Button id="folder_upload_error_retry" sx={{flex:1}} size="small" onClick={failedUploadRetry}>Retry failed files</Button>
-            <Button id="folder_upload_error_done" sx={{flex:1, whiteSpace:"nowrap"}} size="small" onClick={failedDone}>Done</Button>
+            <Button id="folder_upload_error_done" sx={{flex:1, whiteSpace:"nowrap"}} size="small" onClick={failedIgnore}>Done</Button>
           </React.Fragment>
         );
       }

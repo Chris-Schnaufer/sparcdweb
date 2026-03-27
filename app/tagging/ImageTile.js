@@ -84,7 +84,7 @@ export default function ImageTile({name, type, species, onClick}) {
                   sx={{width:'100%'}}>
               <Grid container direction="row" alignItems="center" justifyContent="space-between"
                     sx={{width:'100%'}}>
-              { species.map((curSpecies,idxSpecies) => 
+              { species.map((curSpecies,idxSpecies) => curSpecies.count > 0 &&
                       <Box key={name+curSpecies.name+idxSpecies} sx={{width:'50%', marginRight:'auto'}} >
                         <Typography variant="body3" sx={{textTransform:'capitalize'}}>
                           {curSpecies.name + ': ' + curSpecies.count}

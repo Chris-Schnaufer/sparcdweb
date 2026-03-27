@@ -8,7 +8,7 @@ from typing import Callable, Optional
 from camtrap.v016 import camtrap
 from s3_access import S3Connection, make_s3_path, DEPLOYMENT_CSV_FILE_NAME, MEDIA_CSV_FILE_NAME, \
                       OBSERVATIONS_CSV_FILE_NAME
-from sparcd_file_utils import load_timed_info, save_timed_info
+#from sparcd_file_utils import load_timed_info, save_timed_info
 
 def load_camtrap_info(url: str, user: str, get_password: Callable, bucket: str, \
                         s3_path: str, filename: str, temp_to_disk: bool=False) -> Optional[tuple]:
@@ -28,21 +28,21 @@ def load_camtrap_info(url: str, user: str, get_password: Callable, bucket: str, 
         Looks on the local file system to see if the contents are available. If not found there,
         the file is downloaded from S3
     """
-    # First try the local file system
-    load_path = os.path.join(tempfile.gettempdir(),
-                    bucket+'_'+os.path.basename(s3_path)+'_'+filename)
-    if os.path.exists(load_path):
-        camtrap_data = load_timed_info(load_path)
-        if camtrap_data is not None:
-            return camtrap_data
+   ## First try the local file system
+   #load_path = os.path.join(tempfile.gettempdir(),
+   #                bucket+'_'+os.path.basename(s3_path)+'_'+filename)
+   #if os.path.exists(load_path):
+   #    camtrap_data = load_timed_info(load_path)
+   #    if camtrap_data is not None:
+   #        return camtrap_data
 
     # Try S3 since we don't have the data
     camtrap_data = S3Connection.get_camtrap_file(url, user, get_password(),
                                     bucket, make_s3_path((s3_path, filename)))
 
     # Check if we need to save it to disk
-    if temp_to_disk is True:
-        save_timed_info(load_path, camtrap_data)
+    #if temp_to_disk is True:
+    #    save_timed_info(load_path, camtrap_data)
 
     return camtrap_data
 
@@ -250,7 +250,6 @@ def update_observations(s3_path: str, observations: dict, \
 
         # Add a new entry if needed
         if not added:
-
             observations[one_species['filename']].append((
                 os.path.basename(one_species['filename']),           # Observation ID
                 deployment_id,                                       # Deployment ID
