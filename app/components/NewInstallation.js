@@ -268,7 +268,7 @@ export default function NewInstallation({newInstallToken, isRepair, onCancel}) {
                 <Typography variant="body1" >
                 You can now install SPARCd on the new server
                 </Typography>
-                <Grid container direction="row" alignItems="center" justifyContent="space-between" sx={{minWidth:"50%", padding:"40px 20px 0px 20px"}}>
+                <Grid container direction="row" alignItems="center" justifyContent="space-between" sx={{width:'100%', padding:"40px 20px 0px 20px"}}>
                   <Button size="small" onClick={() => setInstallStep(InstallStep.start)}>Cancel Install</Button>
                   <Button size="small" onClick={handleContinueInstall}>Continue Installation</Button>
                 </Grid>
@@ -318,7 +318,7 @@ export default function NewInstallation({newInstallToken, isRepair, onCancel}) {
                 <Typography variant="h4" component="h4" sx={{padding:"20px 0px"}}>
                   {installStep === InstallStep.installCompleted ? "Install" : "Repair"} has completed successfully
                 </Typography>
-                <Grid container direction="row" alignItems="center" justifyContent="space-between" sx={{minWidth:"50%", padding:"40px 20px 0px 20px"}}>
+                <Grid container direction="row" alignItems="center" justifyContent="center" sx={{padding:"40px 20px 0px 20px"}}>
                   <Button size="small" onClick={() => {setInstallStep(InstallStep.start);onCancel();}}>OK</Button>
                 </Grid>
               </Grid>

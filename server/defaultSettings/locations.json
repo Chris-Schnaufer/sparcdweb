@@ -7,10 +7,10 @@
     "elevationProperty": 92.96
   },
   {
-    "nameProperty": "Ney York City",
+    "nameProperty": "New York City",
     "idProperty": "NYC01",
     "latProperty": 40.730610,
     "lngProperty": -73.935242,
     "elevationProperty": 10.06
-  },
+  }
 ]

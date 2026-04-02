@@ -118,7 +118,7 @@ def load_collections(db: SPARCdDatabase, s3_id: str, admin: bool, s3_url: str=No
         loaded_colls = __get_loaded_collections(db, s3_id, s3_url, user_name, fetch_password)
 
     # Make sure we have something
-    if not loaded_colls:
+    if loaded_colls is None:
         return None
 
     # Make sure we have a boolean value for admin and not Truthiness

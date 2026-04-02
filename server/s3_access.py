@@ -16,6 +16,7 @@ from typing import Optional, Callable
 import uuid
 from minio import Minio, S3Error
 
+from s3_connect import s3_connect
 from camtrap.v016 import camtrap
 
 # Prefix for SPARCd things
@@ -556,7 +557,7 @@ class S3Connection:
         """
         found_buckets = []
 
-        minio = Minio(url, access_key=user, secret_key=password)
+        minio = s3_connect(url, access_key=user, secret_key=password)
         all_buckets = minio.list_buckets()
 
         # Get the SPARCd buckets
@@ -579,7 +580,7 @@ class S3Connection:
         """
         found_buckets = []
 
-        minio = Minio(url, access_key=user, secret_key=password)
+        minio = s3_connect(url, access_key=user, secret_key=password)
         all_buckets = minio.list_buckets()
 
         # Get the SPARCd buckets
@@ -604,7 +605,7 @@ class S3Connection:
         Return:
             Returns the information on the collection or None if the collection isn't found
         """
-        minio = Minio(url, access_key=user, secret_key=password)
+        minio = s3_connect(url, access_key=user, secret_key=password)
         all_buckets = minio.list_buckets()
 
         # Get the matching bucket
@@ -641,7 +642,7 @@ class S3Connection:
         Return:
             Returns the information on the collection or None if the collection isn't found
         """
-        minio = Minio(url, access_key=user, secret_key=password)
+        minio = s3_connect(url, access_key=user, secret_key=password)
         all_buckets = minio.list_buckets()
 
         # Get the matching bucket
@@ -710,7 +711,7 @@ class S3Connection:
         bucket = SPARCD_PREFIX + collection_id
         upload_path = make_s3_path(('Collections', collection_id, 'Uploads', upload_name)) + '/'
 
-        minio = Minio(url, access_key=user, secret_key=password)
+        minio = s3_connect(url, access_key=user, secret_key=password)
 
         images = get_s3_images(minio, bucket, [upload_path])
 
@@ -729,7 +730,7 @@ class S3Connection:
         Return:
             True is returned if image files were found and False otherwise
         """
-        minio = Minio(url, access_key=user, secret_key=password)
+        minio = s3_connect(url, access_key=user, secret_key=password)
 
         # Get the sub folders and search those
         loaded_folders = get_uploaded_folders(minio, bucket, path)
@@ -760,7 +761,7 @@ class S3Connection:
         upload_path = make_s3_path(('Collections', collection_id, S3_UPLOADS_PATH_PART, \
                                                                                 upload_name)) + '/'
 
-        minio = Minio(url, access_key=user, secret_key=password)
+        minio = s3_connect(url, access_key=user, secret_key=password)
 
         images = get_s3_images(minio, bucket, [upload_path], need_url)
 
@@ -789,15 +790,16 @@ class S3Connection:
 
                     # Only return items that have data
                     if not csv_info[camtrap.CAMTRAP_OBSERVATION_SCIENTIFIC_NAME_IDX] or not \
-                                                            csv_info[camtrap.CAMTRAP_OBSERVATION_COUNT_IDX]:
+                                                    csv_info[camtrap.CAMTRAP_OBSERVATION_COUNT_IDX]:
                         continue
 
                     cur_img['species'].append({ 'name':common_name, \
                                 'scientificName': \
-                                                csv_info[camtrap.CAMTRAP_OBSERVATION_SCIENTIFIC_NAME_IDX], \
+                                        csv_info[camtrap.CAMTRAP_OBSERVATION_SCIENTIFIC_NAME_IDX], \
                                 'count':csv_info[camtrap.CAMTRAP_OBSERVATION_COUNT_IDX]})
                 else:
-                    print(f'Unable to find collection image: {csv_info[camtrap.CAMTRAP_OBSERVATION_MEDIA_ID_IDX]}')
+                    print('Unable to find collection image: ' \
+                                            f'{csv_info[camtrap.CAMTRAP_OBSERVATION_MEDIA_ID_IDX]}')
         else:
             print(f'Unable to get observations information: {upload_info_path}')
 
@@ -826,7 +828,7 @@ class S3Connection:
         uploads_path = make_s3_path(('Collections', bucket[len(SPARCD_PREFIX):],
                                                                 S3_UPLOADS_PATH_PART)) + '/'
 
-        minio = Minio(url, access_key=user, secret_key=password)
+        minio = s3_connect(url, access_key=user, secret_key=password)
 
         # Get the uploads and their information
         coll_uploads = []
@@ -886,18 +888,20 @@ class S3Connection:
                         if len(csv_info) >= 20:
                             # Get the fields of interest
                             cur_species = {
-                                'name':get_common_name(csv_info[camtrap.CAMTRAP_OBSERVATION_COMMENT_IDX]), \
-                                'scientificName':csv_info[camtrap.CAMTRAP_OBSERVATION_SCIENTIFIC_NAME_IDX],\
+                                'name':get_common_name(\
+                                            csv_info[camtrap.CAMTRAP_OBSERVATION_COMMENT_IDX]), \
+                                'scientificName':\
+                                        csv_info[camtrap.CAMTRAP_OBSERVATION_SCIENTIFIC_NAME_IDX],\
                                 'count':csv_info[camtrap.CAMTRAP_OBSERVATION_COUNT_IDX]}
 
                             image_name = os.path.basename(\
                                                 csv_info[camtrap.CAMTRAP_OBSERVATION_MEDIA_ID_IDX].\
                                                                                     rstrip('/\\'))
                             temp_image = [one_image for one_image in cur_images if \
-                                                one_image['name'] == image_name and \
-                                                one_image['bucket'] == bucket and \
-                                                one_image['s3_path'] == \
-                                                        csv_info[camtrap.CAMTRAP_OBSERVATION_MEDIA_ID_IDX]]
+                                            one_image['name'] == image_name and \
+                                            one_image['bucket'] == bucket and \
+                                            one_image['s3_path'] == \
+                                                csv_info[camtrap.CAMTRAP_OBSERVATION_MEDIA_ID_IDX]]
                             if temp_image and len(temp_image) > 0:
                                 temp_image = temp_image[0]
 
@@ -905,9 +909,11 @@ class S3Connection:
                                 temp_image['species'].append(cur_species)
                             else:
                                 cur_images.append({ 'name':image_name,
-                                            'timestamp':csv_info[camtrap.CAMTRAP_OBSERVATION_TIMESTAMP_IDX],
+                                            'timestamp':\
+                                                csv_info[camtrap.CAMTRAP_OBSERVATION_TIMESTAMP_IDX],
                                             'bucket': bucket,
-                                            's3_path': csv_info[camtrap.CAMTRAP_OBSERVATION_MEDIA_ID_IDX],
+                                            's3_path': \
+                                                csv_info[camtrap.CAMTRAP_OBSERVATION_MEDIA_ID_IDX],
                                             'species':[cur_species]})
                         elif csv_info:
                             print(f'Invalid CSV row ({cur_row}) read from {upload_info_path}')
@@ -932,7 +938,7 @@ class S3Connection:
             user: the name of the user to use when connecting
             password: the user's password
         """
-        minio = Minio(url, access_key=user, secret_key=password)
+        minio = s3_connect(url, access_key=user, secret_key=password)
 
         # Find the name of our settings bucket
         settings_bucket = find_settings_bucket(minio)
@@ -964,7 +970,7 @@ class S3Connection:
             user: the name of the user to use when connecting
             password: the user's password
         """
-        minio = Minio(url, access_key=user, secret_key=password)
+        minio = s3_connect(url, access_key=user, secret_key=password)
 
         # Find the name of our settings bucket
         settings_bucket = find_settings_bucket(minio)
@@ -999,7 +1005,7 @@ class S3Connection:
         Return:
             Returns a tuple containing the S3 URLs for the objects (each url subject to timeout)
         """
-        minio = Minio(url, access_key=user, secret_key=password)
+        minio = s3_connect(url, access_key=user, secret_key=password)
 
         return [minio.presigned_get_object(one_obj[0], one_obj[1]) for one_obj in object_info]
 
@@ -1021,7 +1027,7 @@ class S3Connection:
             If a destination path is not specified for a file, the S3 path is used (starting at the
             root of the dest_path)
         """
-        minio = Minio(url, access_key=user, secret_key=password)
+        minio = s3_connect(url, access_key=user, secret_key=password)
 
         # Download the files one at a time and call the callback
         with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -1052,7 +1058,7 @@ class S3Connection:
             s3_path: the path to the file on S3
             dest_file_path: the location to download the file to
         """
-        minio = Minio(url, access_key=user, secret_key=password)
+        minio = s3_connect(url, access_key=user, secret_key=password)
 
         # Download the files one at a time and call the callback
         minio.fget_object(bucket, s3_path, dest_file_path)
@@ -1073,7 +1079,7 @@ class S3Connection:
         Return:
             The bucket name and the path of the upload folder on the S3 instance
         """
-        minio = Minio(url, access_key=user, secret_key=password)
+        minio = s3_connect(url, access_key=user, secret_key=password)
 
         bucket = SPARCD_PREFIX + collection_id
         upload_folder = timestamp.strftime('%Y.%m.%d.%H.%M.%S') + '_' + user
@@ -1121,7 +1127,7 @@ class S3Connection:
             path: path under the bucket to the object data
             localname: the local filename of the file to upload
         """
-        minio = Minio(url, access_key=user, secret_key=password)
+        minio = s3_connect(url, access_key=user, secret_key=password)
 
         minio.fput_object(bucket, path, localname)
 
@@ -1138,7 +1144,7 @@ class S3Connection:
             data: the data to upload
             content_type: the content type of the upload
         """
-        minio = Minio(url, access_key=user, secret_key=password)
+        minio = s3_connect(url, access_key=user, secret_key=password)
 
         minio.put_object(bucket, path, BytesIO(data.encode()), len(data), content_type=content_type)
 
@@ -1155,7 +1161,7 @@ class S3Connection:
         Return:
             Returns the loaded data or None
         """
-        minio = Minio(url, access_key=user, secret_key=password)
+        minio = s3_connect(url, access_key=user, secret_key=password)
 
         temp_file = tempfile.mkstemp(prefix=SPARCD_PREFIX)
         os.close(temp_file[0])
@@ -1267,7 +1273,7 @@ class S3Connection:
         Return:
             The name of the newly created bucket
         """
-        minio = Minio(url, access_key=user, secret_key=password)
+        minio = s3_connect(url, access_key=user, secret_key=password)
 
         # Try hard to create a collections bucket
         collection_bucket = create_new_bucket(minio, SPARCD_PREFIX)
@@ -1301,7 +1307,7 @@ class S3Connection:
         Return:
             Returns True if no problem was found and False otherwise
         """
-        minio = Minio(url, access_key=user, secret_key=password)
+        minio = s3_connect(url, access_key=user, secret_key=password)
 
         temp_file = tempfile.mkstemp(prefix=SPARCD_PREFIX)
         os.close(temp_file[0])
@@ -1344,7 +1350,7 @@ class S3Connection:
         Return:
             Returns True if no problem was found and False otherwise
         """
-        minio = Minio(url, access_key=user, secret_key=password)
+        minio = s3_connect(url, access_key=user, secret_key=password)
 
         coll_id = bucket[len(SPARCD_PREFIX):]
 
@@ -1401,7 +1407,7 @@ class S3Connection:
             Returns a tuple of: True if no problem was found and False otherwise, and the updated
             upload information if True is the first element
         """
-        minio = Minio(url, access_key=user, secret_key=password)
+        minio = s3_connect(url, access_key=user, secret_key=password)
 
         temp_file = tempfile.mkstemp(prefix=SPARCD_PREFIX)
         os.close(temp_file[0])
@@ -1450,7 +1456,7 @@ class S3Connection:
             none of the elements are there (the first element indicated if only some elements are
             there). None is returned if the install needs repair
         """
-        minio = Minio(url, access_key=user, secret_key=password)
+        minio = s3_connect(url, access_key=user, secret_key=password)
 
         settings_bucket = find_settings_bucket(minio)
 
@@ -1495,7 +1501,7 @@ class S3Connection:
             A tuple with True is returned if the checks pass and False otherwise, and the
             name of the test bucket if it couldn't be removed
         """
-        minio = Minio(url, access_key=user, secret_key=password)
+        minio = s3_connect(url, access_key=user, secret_key=password)
 
         tries = 0
         max_tries = 5
@@ -1504,7 +1510,7 @@ class S3Connection:
             tries += 1
             try:
                 # Our new bucket name
-                new_bucket = "DELETE-TESTING-" + uuid.uuid4().hex
+                new_bucket = "delete-testing-" + uuid.uuid4().hex
 
                 # Make sure it's not up there yet
                 if minio.bucket_exists(new_bucket):
@@ -1523,7 +1529,7 @@ class S3Connection:
 
         # If we can't make a new bucket, we're done
         if created_bucket is None:
-            return False
+            return False, None
 
         # Prepare the temporary file for upload
         temp_file = tempfile.mkstemp(prefix=SPARCD_PREFIX)
@@ -1581,7 +1587,7 @@ class S3Connection:
         Return:
             True is returned if the instance was created and False otherwise
         """
-        minio = Minio(url, access_key=user, secret_key=password)
+        minio = s3_connect(url, access_key=user, secret_key=password)
 
         # Check that there isn't a settings bucket and create one if there isn't one
         if find_settings_bucket(minio) is not None:
@@ -1620,7 +1626,7 @@ class S3Connection:
         Return:
             True is returned if the instance was could be repaired and False otherwise
         """
-        minio = Minio(url, access_key=user, secret_key=password)
+        minio = s3_connect(url, access_key=user, secret_key=password)
 
         # Check if we need and new settings bucket and create one if we do
         settings_bucket = find_settings_bucket(minio)
@@ -1665,7 +1671,7 @@ class S3Connection:
             Information on failed uploads is returned upon success with an empty tuple possible.
             None is returned if a problem is found
         """
-        minio = Minio(url, access_key=user, secret_key=password)
+        minio = s3_connect(url, access_key=user, secret_key=password)
 
         found_incomplete = []
         if len(buckets) > 1:
