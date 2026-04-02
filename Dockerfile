@@ -43,6 +43,7 @@ WORKDIR ${WORKDIR}
 
 # Allow port number overrides
 ENV PORT_NUMBER=3000
+ENV HTTPS_PORT=443
 
 # Allow override of the admin name
 ARG ADMIN_NAME=admin
@@ -71,6 +72,7 @@ RUN apk cache clean
 # Install additional tools and runtimes
 RUN apk add openjdk21
 RUN apk add exiftool
+RUN apk add openssl
 
 # Copy over the Java app
 COPY --from=java-build /javasite/target/ExifWriter-1.0-jar-with-dependencies.jar ./ExifWriter.jar
@@ -92,16 +94,27 @@ RUN rm create_db.py
 RUN rm -f requirements.txt
 RUN rm -f .DS_Store
 
+# Generate a self-signed certificate to work without a domain name
+# This certificate is good for 10 years. Clients will need to accept the
+# certificate
+COPY ./openssl.cnf /tmp/openssl.cnf
+RUN mkdir -p /etc/nginx/certs && \
+    openssl req -x509 -nodes -days 3650 --newkey rsa:2048 \
+            -keyout /etc/nginx/certs/private.key \
+            -out /etc/nginx/certs/public.crt \
+            -config /tmp/openssl.cnf && \
+    rm /tmp/openssl.cnf
+
 # Setup nginx
 RUN mv /etc/nginx/nginx.conf /etc/nginx/nginx.conf.orig
 COPY ./nginx.conf /etc/nginx/nginx.conf
 
 # Expose the port
-EXPOSE ${PORT_NUMBER}
+EXPOSE ${HTTPS_PORT}
 
-# Setup the gunicorn environment
+# Setup the gunicorn environment - gunicorn binds to localhost since nginx handles public facing tasks
 ENV SERVER_DIR=${WORKDIR} \
-    WEB_SITE_URL="0.0.0.0:"${PORT_NUMBER} \
+    WEB_SITE_URL="127.0.0.1:"${PORT_NUMBER} \
     SPARCD_DB=${WORKDIR}/sparcd.sqlite \
     SERVER_WORKERS=4
 
