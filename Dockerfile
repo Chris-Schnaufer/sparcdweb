@@ -85,7 +85,6 @@ RUN rm create_db.py
 # Clean up files we don't want on the server
 RUN rm -f requirements.txt
 RUN rm -f .DS_Store
-RUN find . | grep __pycache__ | xargs rm -r
 
 # Generate a self-signed certificate to work without a domain name
 # This certificate is good for 10 years. Clients will need to accept the
