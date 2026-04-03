@@ -45,14 +45,6 @@ WORKDIR ${WORKDIR}
 ENV PORT_NUMBER=3000
 ENV HTTPS_PORT=443
 
-# Allow override of the admin name
-ARG ADMIN_NAME=admin
-
-# Allow override of the admin email
-ARG ADMIN_EMAIL=admin@arizona.edu
-
-# Allow override of the admin email
-ARG ADMIN_URL=https://S3.endpoint.edu
 
 # Install python stuff
 COPY ./requirements.txt ./
@@ -87,12 +79,13 @@ COPY --exclude=__pycache__ --exclude=.DS_Store ./server/ ./
 
 # Build the default database
 RUN rm *.sqlite    # Clean up any testing databases
-RUN python3 create_db.py --admin ${ADMIN_NAME} --admin_email ${ADMIN_EMAIL} --admin_url ${ADMIN_URL} $PWD sparcd.sqlite
+RUN python3 create_db.py $PWD sparcd.sqlite
 RUN rm create_db.py
 
 # Clean up files we don't want on the server
 RUN rm -f requirements.txt
 RUN rm -f .DS_Store
+RUN find . | grep __pycache__ | xargs rm -r
 
 # Generate a self-signed certificate to work without a domain name
 # This certificate is good for 10 years. Clients will need to accept the

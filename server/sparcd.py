@@ -23,7 +23,7 @@ import requests
 from flask import Flask, jsonify, make_response, render_template, request, Response, send_file, \
                   send_from_directory, url_for
 from flask_cors import cross_origin
-from minio import Minio, S3Error
+from minio import S3Error
 from minio.error import MinioException
 from moviepy import VideoFileClip
 
@@ -40,6 +40,7 @@ import sparcd_utils as sdu
 from s3_access import S3Connection, make_s3_path, DEPLOYMENT_CSV_FILE_NAME, MEDIA_CSV_FILE_NAME, \
                       OBSERVATIONS_CSV_FILE_NAME, CAMTRAP_FILE_NAMES, SPARCD_PREFIX, \
                       S3_UPLOADS_PATH_PART, SPECIES_JSON_FILE_NAME
+from s3_connect import s3_connect
 import s3_utils as s3u
 from text_formatters.results import Results
 from text_formatters.coordinate_utils import DEFAULT_UTM_ZONE,deg2utm, deg2utm_code, utm2deg
@@ -480,7 +481,7 @@ def login_token():
     s3_url = s3u.web_to_s3_url(url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
     s3_hash = hash2str(s3_url)
     try:
-        minio = Minio(s3_url, access_key=user, secret_key=password)
+        minio = s3_connect(s3_url, access_key=user, secret_key=password)
         _ = minio.list_buckets()
     except MinioException as ex:
         print(f'WARNING: Failed login attempt: {url} {user}',flush=True)
@@ -1113,8 +1114,6 @@ def query():
                                             s3_url,user_info.name, lambda: get_password(token, db))
     cur_locations = sdu.load_locations(s3_url, user_info.name, lambda: get_password(token, db),
                                             hash2str(s3_url))
-
-    # TODO: 
 
     results = Results(all_results, cur_species, cur_locations,
                         s3_url, user_info.name, get_password(token, db),
@@ -2671,7 +2670,7 @@ def settings_admin():
     pw_ok = False
     try:
         s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
-        minio = Minio(s3_url, access_key=user_info.name, secret_key=pw)
+        minio = s3_connect(s3_url, access_key=user_info.name, secret_key=pw)
         _ = minio.list_buckets()
         pw_ok = True
     except MinioException as ex:
@@ -2717,7 +2716,7 @@ def settings_owner():
     pw_ok = False
     try:
         s3_url = s3u.web_to_s3_url(user_info.url, lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
-        minio = Minio(s3_url, access_key=user_info.name, secret_key=pw)
+        minio = s3_connect(s3_url, access_key=user_info.name, secret_key=pw)
         _ = minio.list_buckets()
         pw_ok = True
     except MinioException as ex:

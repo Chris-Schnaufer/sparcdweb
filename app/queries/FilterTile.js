@@ -55,7 +55,7 @@ export function FilterTile({filterInfo, parentId, onChanged, onRemove}) {
    */
   const handleChanged = React.useCallback((data) => {
     onChanged(filterInfo.id, data);
-  }, [onChange, filterInfo.id]);
+  }, [onChanged, filterInfo.id]);
 
 
   switch(filterInfo.type) {

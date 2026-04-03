@@ -2159,7 +2159,7 @@ class SPDSQLite:
                                                                                     'connecting')
 
         cursor = self._conn.cursor()
-        cursor.execute('SELECT count(1) FROM users WHERE s3_id=? and name != ?', (s3_id, ))
+        cursor.execute('SELECT count(1) FROM users WHERE s3_id=? and name != ?', (s3_id, user))
 
         res = cursor.fetchone()
         cursor.close()
