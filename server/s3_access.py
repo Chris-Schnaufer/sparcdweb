@@ -767,9 +767,31 @@ class S3Connection:
 
         images_dict = {obj['s3_path']: obj for obj in images}
 
-        # Temp file for getting observations
+        # Temp file for getting media and observations
         temp_file = tempfile.mkstemp(prefix=SPARCD_PREFIX)
         os.close(temp_file[0])
+
+        # Get the media information for each image
+        media_info_path = make_s3_path((upload_path, MEDIA_CSV_FILE_NAME))
+        csv_data = get_s3_file(minio, bucket, upload_info_path, temp_file[1])
+        print('HACK: MEDIA:',media_info_path, flush=True)
+        print('HACK:      :',csv_data, flush=True)
+        print('HACK:      :',temp_file[1],flush=True)
+        if csv_data is not None:
+
+            reader = csv.reader(StringIO(csv_data))
+            for csv_info in reader:
+                cur_img = images_dict.get(csv_info[camtrap.CAMTRAP_MEDIA_ID_IDX])
+                print('HACK: CURIMAGE:',cur_img, csv_info[camtrap.CAMTRAP_MEDIA_ID_IDX], flush=True)
+                if cur_img is not None:
+                    # Add the timestamp
+                    cur_img['timestamp'] = csv_info[camtrap.CAMTRAP_MEDIA_TIMESTAMP_IDX]
+                    print('HACK:         :',csv_info[camtrap.CAMTRAP_MEDIA_TIMESTAMP_IDX], flush=True)
+                else:
+                    print('Unable to find media image: ' \
+                                            f'{csv_info[camtrap.CAMTRAP_MEDIA_ID_IDX]}')
+        else:
+            print(f'Unable to get media information: {upload_info_path}')
 
         # Get the species information for each image
         upload_info_path = make_s3_path((upload_path, OBSERVATIONS_CSV_FILE_NAME))
@@ -783,7 +805,6 @@ class S3Connection:
                 # Update the image with a species if we find it
                 cur_img = images_dict.get(csv_info[camtrap.CAMTRAP_OBSERVATION_MEDIA_ID_IDX])
                 if cur_img is not None:
-
                     # Add the species
                     if cur_img.get('species') is None:
                         cur_img['species'] = []
@@ -796,9 +817,10 @@ class S3Connection:
                     cur_img['species'].append({ 'name':common_name, \
                                 'scientificName': \
                                         csv_info[camtrap.CAMTRAP_OBSERVATION_SCIENTIFIC_NAME_IDX], \
-                                'count':csv_info[camtrap.CAMTRAP_OBSERVATION_COUNT_IDX]})
+                                'count':csv_info[camtrap.CAMTRAP_OBSERVATION_COUNT_IDX],
+                                })
                 else:
-                    print('Unable to find collection image: ' \
+                    print('Unable to find observation image: ' \
                                             f'{csv_info[camtrap.CAMTRAP_OBSERVATION_MEDIA_ID_IDX]}')
         else:
             print(f'Unable to get observations information: {upload_info_path}')

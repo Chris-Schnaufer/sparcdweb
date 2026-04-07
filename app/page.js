@@ -209,7 +209,7 @@ export default function Home() {
       setUserMessages(prev => ({...prev, loading:false, count:0, messages:[]}) );     
     }
 
-  }, [addMessage, setUserLoginAgain]);
+  }, [addMessage]);
 
   /**
    * Function to handle a successful call to login
@@ -340,7 +340,7 @@ export default function Home() {
       addMessage(Level.Error, 'An unknown problem occurred while fetching collection information');
       setLoadingCollections(false);     
     }
-  }, [addMessage, lastToken, setUserLoginAgain]);
+  }, [addMessage, lastToken]);
 
   /**
    * Fetches the locations from the server
@@ -367,7 +367,7 @@ export default function Home() {
       addMessage(Level.Error, 'An unknown problem occurred while fetching locations');
       setLoadingLocations(false);
     }
-  }, [addMessage, lastToken, setUserLoginAgain]);
+  }, [addMessage, lastToken]);
 
   /**
    * Fetches the un-official species from the server
@@ -405,7 +405,7 @@ export default function Home() {
       addMessage(Level.Error, 'An unknown problem occurred while fetching additional species');
       setLoadingOtherSpecies(false);
     }
-  }, [addMessage, lastToken, setUserLoginAgain]);
+  }, [addMessage, lastToken]);
 
   /**
    * Fetches the sandbox entries from the server
@@ -431,7 +431,7 @@ export default function Home() {
       addMessage(Level.Error, 'An unknown problem occurred while fetching sandbox information');
       setLoadingSandbox(false);
     }
-  }, [addMessage, lastToken, setUserLoginAgain]);
+  }, [addMessage, lastToken]);
 
   /**
    * Fetches the species from the server
@@ -459,7 +459,7 @@ export default function Home() {
       addMessage(Level.Error, 'An unknown problem occurred while fetching species');
       setLoadingSpecies(false);
     }
-  }, [addMessage, lastToken, setUserLoginAgain]);
+  }, [addMessage, lastToken]);
 
   /**
    * Performs pos-login actions
@@ -678,6 +678,20 @@ export default function Home() {
   }, [breadcrumbs, curAction, curActionData, editing]);
 
   /**
+   * Function to map successfully loaded images from an upload to
+   * browser relevant fields
+   * @function
+   * @param {Array} images Array of returned image entries from the server
+   */
+  const mapUploadImages = React.useCallback((images) => {
+    return images.map((img) => {
+                img.url = img.url + '&t=' + encodeURIComponent(lastToken);
+                img.timestamp = img.timestamp ? new Date(img.timestamp) : null;
+                return img;
+              })
+  }, [lastToken]);
+
+  /**
    * Logs the user out
    * @function
    */
@@ -717,8 +731,11 @@ export default function Home() {
                                     if (curUpload) {
                                       // Add our token in
                                       if (cbSuccess) {
-                                        const curImages = respData.map((img) => {img['url'] = img['url'] + '&t=' + lastToken; return img;})
-                                        cbSuccess(curUpload, curImages);
+                                        let curImages = respData.map((img) => {
+                                                    img['url'] = img['url'] + '&t=' + lastToken;
+                                                    return img;
+                                                  })
+                                        cbSuccess(curUpload, mapUploadImages(respData));
                                       }
                                     } else {
                                       console.log('ERROR: unable to find upload ID', uploadId, 'for collection ID', collectionId);
@@ -745,7 +762,7 @@ export default function Home() {
         cbFailure();
       }
     }
-  }, [addMessage, collectionInfo, lastToken, setUserLoginAgain]);
+  }, [addMessage, collectionInfo, lastToken, mapUploadImages]);
 
   /**
    * Reloads the information on the current upload
@@ -921,7 +938,7 @@ export default function Home() {
       addMessage(Level.Error, 'An unknown problem occurred while saving your settings');
     }
 
-  }, [addMessage, lastToken, setUserLoginAgain]);
+  }, [addMessage, lastToken]);
 
   /**
    * Handles adding a new message
@@ -949,7 +966,7 @@ export default function Home() {
       addMessage(Level.Error, 'An unknown problem occurred while adding your message');
     }
 
-  }, [addMessage, lastToken, setUserLoginAgain]);
+  }, [addMessage, lastToken]);
 
   /**
    * Handles marking messages as read
@@ -971,7 +988,7 @@ export default function Home() {
       // We ignore the error
     }
 
-  }, [lastToken, setUserLoginAgain]);
+  }, [lastToken]);
 
   /**
    * Handles deleting messages
@@ -993,7 +1010,7 @@ export default function Home() {
       // Do nothing when it doesn't work
     }
 
-  }, [lastToken, setUserLoginAgain]);
+  }, [lastToken]);
 
   /**
    * Sets the remember login information flag to true or false (is it truthy, or not?)

@@ -1,11 +1,13 @@
 """ Utlities for images"""
 
-import os
+import datetime
 import json
+import os
 import subprocess
 from time import sleep
 from typing import Optional
 from dateutil import parser
+from dateutil.parser import ParserError
 
 EXIFTOOL_ORIGINAL_DATE = 'DateTimeOriginal'
 EXIFTOOL_MODIFY_DATE = 'ModifyDate'
@@ -64,6 +66,20 @@ def _parse_exiftool_readout(parse_lines: tuple) -> tuple:
 
     return location_string, species_string, date_string
 
+def __parse_movie_exif_readout(parse_lines: tuple) -> Optional[str]:
+    """ Parses the output from an exiftool listing from a movie
+    Arguments:
+        parse_lines: a tuple of the lines to parse
+    Return:
+        Returns the found date, or None
+    """
+    date_string = None
+    for one_line in parse_lines:
+        if one_line.startswith('Create Date') and ':' in one_line:
+            date_string = one_line.split(':', 1)[1].strip()
+            break
+
+    return date_string
 
 def _split_species_string(species: str) -> tuple:
     """ Splits the EXIF string into an array of species information
@@ -160,6 +176,51 @@ def get_embedded_image_info(image_path: str) -> Optional[tuple]:
 
     return return_species, return_location, parser.parse(date_string)
 
+
+def get_movie_timestamp(movie_path: str) -> Optional[datetime.datetime]:
+    """ Gets the embedded timestamp from a movie file
+    Arguments:
+        movie_path: the path to the movie file
+    Return:
+        Returns the loaded timestamp as a datetime.datetime object, or None when the timestamp
+        isn't found
+    """
+    MAX_TRIES_GEII = 2
+    # Loop through some tries to get the information
+    tries = 0
+    while tries < MAX_TRIES_GEII:
+        try:
+            cmd = ["exiftool", "-createdate", image_path]
+            res = subprocess.run(cmd, capture_output=True, check=True)
+            break
+        except subprocess.CalledProcessError as ex:
+            if tries == MAX_TRIES_GEII - 1:
+                print(f'ERROR: Exception getting exif information on movie {image_path}',flush=True)
+                print(f'       {ex}', flush=True)
+                print(ex.stdout, flush=True)
+                print(ex.stderr, flush=True)
+            sleep(0.5)
+        tries += 1
+
+    if tries >= MAX_TRIES_GEII:
+        return None
+
+    # Get what we are looking for in the output
+    date_string = __parse_movie_exif_readout(res.stdout.decode("utf-8").split('\n'))
+    if not date_string:
+        return None
+
+    # Check for formatting of date string
+    if '-' not in date_string and ' ' in date_string:
+        parts = date_string.split(' ')
+        parts[0] = parts[0].replace(':', '-')
+        date_string = ' '.join(parts)
+
+    # Return the timestamp
+    try:
+        return parser.parse(date_string)
+    except ParserError:
+        return None
 
 
 def write_embedded_image_info(image_path: str, location_json: str, species_json: str) -> bool:

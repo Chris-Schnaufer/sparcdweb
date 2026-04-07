@@ -1804,7 +1804,8 @@ def sandbox_file():
             cur_species, cur_location, cur_timestamp = \
                                                 image_utils.get_embedded_image_info(temp_file[1])
         else:
-            cur_species, cur_location, cur_timestamp = (None, None, None)
+            cur_species, cur_location, cur_timestamp = (None, None, \
+                                                    image_utils.get_movie_timestamp(temp_file[1]))
 
         # Check if we need to apply the timezone to timestamp. Refer to link below
         # https://docs.python.org/3/library/datetime.html#determining-if-an-object-is-aware-or-naive
@@ -1858,7 +1859,10 @@ def sandbox_file():
 
         # Update the database entry to show the file is uploaded
         file_id = db.sandbox_file_uploaded(user_info.name, upload_id,
-                                request.files[one_file].filename, request.files[one_file].mimetype)
+                                request.files[one_file].filename,
+                                request.files[one_file].mimetype,
+                                cur_timestamp
+                                )
 
         if file_id is None:
             print(f'INFO: file {request.files[one_file].filename} with upload ID {upload_id} was ' \
@@ -2070,10 +2074,14 @@ def sandbox_completed():
     media_info = ctu.load_camtrap_media(s3_url, user_info.name,
                                                 lambda: get_password(token, db), s3_bucket, s3_path)
     file_mimetypes = db.get_file_mimetypes(user_info.name, upload_id)
+    file_created_ts = db.get_file_created_timestamp(user_info.name, upload_id)
 
     if media_info:
         for one_key,one_type in file_mimetypes:
             media_info[one_key][camtrap.CAMTRAP_MEDIA_TYPE_IDX] = one_type
+
+        for one_key,one_ts in file_created_ts:
+            media_info[one_key][camtrap.CAMTRAP_MEDIA_TIMESTAMP_IDX] = one_ts
 
         # Upload the MEDIA csv file to the server
         S3Connection.upload_camtrap_data(s3_url, user_info.name,

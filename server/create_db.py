@@ -159,6 +159,7 @@ def build_database(path: str, admin_info: tuple=None) -> None:
                 'source_path TEXT, ' \
                 'uploaded BOOLEAN DEFAULT FALSE, ' \
                 'mimetype TEXT DEFAULT NULL, ' \
+                'created_timestamp TEXT DEFAULT NULL,'
                 'timestamp INTEGER)',
              'CREATE TABLE sandbox_species(id INTEGER PRIMARY KEY ASC, ' \
                 'sandbox_file_id INTEGER NOT NULL, ' \

@@ -212,6 +212,7 @@ def get_upload_images(db: SPARCdDatabase, s3_id: str, bucket:str, collection_id:
         # Get the upload information from the server
         s3_images = S3Connection.get_images(s3_url, user_name, fetch_password(),
                                                     collection_id, upload_name, not keep_image_url)
+        print('HACK: S3IMAGES',s3_images[0],flush=True)
 
     # Check if we're keeping the image URLs after loading all images from S3
     if db_images and keep_image_url:
