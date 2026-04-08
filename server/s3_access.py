@@ -773,20 +773,15 @@ class S3Connection:
 
         # Get the media information for each image
         media_info_path = make_s3_path((upload_path, MEDIA_CSV_FILE_NAME))
-        csv_data = get_s3_file(minio, bucket, upload_info_path, temp_file[1])
-        print('HACK: MEDIA:',media_info_path, flush=True)
-        print('HACK:      :',csv_data, flush=True)
-        print('HACK:      :',temp_file[1],flush=True)
+        csv_data = get_s3_file(minio, bucket, media_info_path, temp_file[1])
         if csv_data is not None:
 
             reader = csv.reader(StringIO(csv_data))
             for csv_info in reader:
                 cur_img = images_dict.get(csv_info[camtrap.CAMTRAP_MEDIA_ID_IDX])
-                print('HACK: CURIMAGE:',cur_img, csv_info[camtrap.CAMTRAP_MEDIA_ID_IDX], flush=True)
                 if cur_img is not None:
                     # Add the timestamp
                     cur_img['timestamp'] = csv_info[camtrap.CAMTRAP_MEDIA_TIMESTAMP_IDX]
-                    print('HACK:         :',csv_info[camtrap.CAMTRAP_MEDIA_TIMESTAMP_IDX], flush=True)
                 else:
                     print('Unable to find media image: ' \
                                             f'{csv_info[camtrap.CAMTRAP_MEDIA_ID_IDX]}')

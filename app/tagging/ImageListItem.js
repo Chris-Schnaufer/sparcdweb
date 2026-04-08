@@ -29,7 +29,7 @@ import PropTypes from 'prop-types';
  */
 export default function ImageListItem({ name, type, timestamp, species, checked, onCheck, onClick }) {
   const speciesSummary = species && species.length > 0
-    ? species.map(s => `${s.name} (${s.count})`).join(', ')
+    ? species.map(s => `${s.name} - ${s.count}`).join(', ')
     : 'No species tagged';
 
   const handleCheckChange = React.useCallback((event) => {
@@ -122,8 +122,8 @@ export default function ImageListItem({ name, type, timestamp, species, checked,
           sx={{
             color: 'text.secondary',
             textAlign: 'right',
-            minWidth: '120px',
-            maxWidth: '120px',
+            minWidth: '130px',
+            maxWidth: '130px',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',

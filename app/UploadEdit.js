@@ -1136,7 +1136,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
             mb: 0.5,
             borderBottom: '1px solid',
             borderColor: 'divider',
-            position: 'sticky',
+            position: curEditState === EDITING_STATES.editImage ? 'revert' : 'sticky',
             top: 0,
             backgroundColor: 'background.paper',
             zIndex: 1,
@@ -1186,12 +1186,12 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
 
           {/* Species column */}
           <ImageListHeader
-            label="Species"
+            label="Species - Count"
             field={SORT_FIELDS.SPECIES_COUNT}
             sortField={sortField}
             sortDir={sortDir}
             onSort={handleSortChange}
-            sx={{ minWidth:'120px', maxWidth:'120px', flexShrink: 0, justifyContent: 'flex-end' }}
+            sx={{ minWidth:'130px', maxWidth:'130px', flexShrink: 0, justifyContent: 'flex-end' }}
           />
         </Stack>
 
@@ -1230,7 +1230,8 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
         }
       </React.Fragment>
     );
-  }, [checkedNames, curUpload, getSortedImages, handleCheckChange, handleDeselectAll, handleSelectAll, handleSortChange, maxTilesDisplay, sortDir, sortField]);
+  }, [checkedNames, curEditState, curUpload, getSortedImages, handleCheckChange, handleDeselectAll, 
+      handleSelectAll, handleSortChange, maxTilesDisplay, sortDir, sortField]);
 
 
   // TODO: Make species bar on top when narrow screen
@@ -1259,16 +1260,23 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
               {totalImages+ " Images available"}
             </Typography>
             <Grid container direction='row' alignItems="center" justifyContent="flex-start">
-              { checkedNames.size > 0 && 
+              { checkedNames.size > 0 ? 
                 <React.Fragment>
                   <Tooltip title={'Edit selected image\'s timestamp'} arrow>
-                    <IconButton size="small" color="black" sx={{padding:0}} >
-                      <EditNoteIcon fontSize="small" onClick={() => onActionEdit(checkedNames)} />
+                    <IconButton size="small" color="black"
+                              sx={{padding:0
+                              }} >
+                      <EditNoteIcon fontSize="small" onClick={() => onActionEdit(checkedNames)} sx={{
+                                '&:hover': {
+                                    transform: 'translate(-1px, -1px)',
+                                    cursor: 'pointer',
+                                },}}/>
                     </IconButton>
                   </Tooltip>
                   <Typography sx={{borderRight:'1px solid black', marginRight:'5px'}}> &nbsp;
                   </Typography>
                 </React.Fragment>
+                : <Box sx={{minWidth:'30px'}} />
               }
               <Tooltip title={'View images as a list'} arrow>
                 <ListAltOutlinedIcon fontSize="small" onClick={handleListViewClick}

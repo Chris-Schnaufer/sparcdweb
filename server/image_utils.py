@@ -190,12 +190,12 @@ def get_movie_timestamp(movie_path: str) -> Optional[datetime.datetime]:
     tries = 0
     while tries < MAX_TRIES_GEII:
         try:
-            cmd = ["exiftool", "-createdate", image_path]
+            cmd = ["exiftool", "-createdate", movie_path]
             res = subprocess.run(cmd, capture_output=True, check=True)
             break
         except subprocess.CalledProcessError as ex:
             if tries == MAX_TRIES_GEII - 1:
-                print(f'ERROR: Exception getting exif information on movie {image_path}',flush=True)
+                print(f'ERROR: Exception getting exif information on movie {movie_path}',flush=True)
                 print(f'       {ex}', flush=True)
                 print(ex.stdout, flush=True)
                 print(ex.stderr, flush=True)
