@@ -25,6 +25,7 @@ import PropTypes from 'prop-types';
 
 import { AddMessageContext, TokenExpiredFuncContext, LocationsInfoContext, NarrowWindowContext, SizeContext, 
           SpeciesInfoContext, TokenContext, UploadEditContext, UserSettingsContext } from './serverInfo';
+import AdjustImageTimestamp, { EDIT_FIELD as ADJUST_TIMESTAMP_FIELDS } from './tagging/AdjustImageTimestamp';
 import ImageEdit from './tagging/ImageEdit';
 import ImageListHeader, { SORT_DIR } from './tagging/ImageListHeader';
 import ImageListItem from './tagging/ImageListItem';
@@ -82,12 +83,14 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
   const checkChangesCalledRef = React.useRef(false);            // Used to prevent multiple server calls
   const curLocationFetchIdxRef = React.useRef(-1);              // Keeping track of which tooltip is getting fetched
   const [changesMade, setChangesMade] = React.useState(false);  // Used to see if there have been changes made
+  const [checkedNames, setCheckedNames] = React.useState(new Set());  // Active sort field and direction
   const [checkedServerChanges, setCheckedServerChanges] = React.useState(false); // Used for checking the server for changes
   const [curEditState, setCurEditState] = React.useState(EDITING_STATES.none); // Working page state
   const [curImageEdit, setCurImageEdit] = React.useState(null);         // The image to edit
   const [curImageModified, setCurImageModified] = React.useState(false);// The image being edited was changed
   const [displayLocation, setDisplayLocation] = React.useState(null);   // The location associated with upload to display
   const [editingLocation, setEditingLocation] = React.useState(true);   // Changing collection locations flag
+  const [editingTimestamp, setEditingTimestamp] = React.useState(false);   // Changing image timestamp flag
   const [lastSpeciesRequestId, setLastSpeciesRequestId] = React.useState(null);  // Use to keep track of what was sent to the server
   const [maxTilesDisplay, setMaxTilesDisplay] = React.useState(40);     // Set the maximum number of tiles to display
   // TODO: Replace navigationRedraw with another state update
@@ -100,6 +103,8 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
   const [sidebarWidthLeft, setSidebarWidthLeft] = React.useState(150);  // Width of left sidebar
   const [sidebarHeightTop, setSidebarHeightTop] = React.useState(50);   // Height of top sidebar
   const [sidebarHeightSpecies, setSidebarHeightSpecies] = React.useState(0);   // Height of species sidebar when on top
+  const [sortDir, setSortDir] = React.useState(SORT_DIR.ASC);
+  const [sortField, setSortField] = React.useState(SORT_FIELDS.NAME);
   const [speciesKeybindName, setSpeciesKeybindName] = React.useState(null); // Name of species for assigning new keybind
   // TODO: Replace speciesRedraw with another state update
   const [speciesRedraw, setSpeciesRedraw] = React.useState(null);       // Force redraw when new species added to image
@@ -108,14 +113,6 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
   const [workspaceWidth, setWorkspaceWidth] = React.useState(150);  // The subtracted value is initial sidebar width
   const [totalHeight, setTotalHeight] = React.useState(null);       // Total available height of workspace
   const [tooltipData, setTooltipData] = React.useState(null);       // Data for tooltip
-
-
-  // ── New state for list view ──────────────────
-  // Set of selected image names in list view
-  const [checkedNames, setCheckedNames] = React.useState(new Set());
-  // Active sort field and direction
-  const [sortField, setSortField] = React.useState(SORT_FIELDS.NAME);
-  const [sortDir, setSortDir] = React.useState(SORT_DIR.ASC);
 
   // Clear selection whenever the upload changes or we switch views
   React.useEffect(() => {
@@ -240,16 +237,13 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
   }, [checkedNames]);
 
   /**
-   * Placeholder bulk-edit handler. Replace with real logic or lift the callback via props.
-   * Receives the array of selected image names.
+   * Function to return the images associated with the checked names
    * @function
-   * @param {string[]} names The selected image names
+   * @returns {Array} The array of checked names mapped to images
    */
-  const handleBulkEdit = React.useCallback((names) => {
-    // TODO: implement bulk-edit logic or pass an onBulkEdit prop from parent
-    console.log('Bulk edit requested for:', names);
-  }, []);
-  // ── END OF NEW LOGIC ───────────────
+  const getCheckedNamedImages = React.useCallback(() => {
+    return getCheckedNames()?.map((item) => curUpload.images?.find((imgItem) => imgItem.name === item));
+  }, [getCheckedNames, curUpload]);
 
   /**
    * Calculates the total available height for the workspace
@@ -332,7 +326,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
     if (!success) {
       addMessage(Level.Error, 'An unknown problem occurred while updating the image species');
     }
-  }, [addMessage, curUpload, editToken, serverURL, speciesItems, setCurImageModified]);
+  }, [addMessage, curUpload, editToken, serverURL, speciesItems, setCurImageModified, setTokenExpired]);
 
   /**
    * Common add a species to the current image function
@@ -458,7 +452,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
     if (!success) {
       failureFunc('An unknown problem occurred while updating the stored image with these changes');
     }
-  }, [addMessage, editToken, serverURL]);
+  }, [addMessage, editToken, serverURL, setTokenExpired]);
 
   /**
    * Updates the currently edited image with any changes made
@@ -781,7 +775,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
     setCurEditState(EDITING_STATES.listImages);
     setEditingLocation(false);
     searchSetup('Image Name', handleImageSearch);
-  }, [addMessage, curUpload, editToken, handleImageSearch, searchSetup, serverURL])
+  }, [addMessage, curUpload, editToken, handleImageSearch, searchSetup, serverURL, setTokenExpired])
 
   /**
    * Setting the drag information when drag starts
@@ -1006,7 +1000,48 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
         // Fail silently - no tooltip for this entry for now
       }
     }
-  }, [editToken, locationItems, serverURL, setTooltipData]);
+  }, [editToken, locationItems, serverURL, setTooltipData, setTokenExpired]);
+
+  /**
+   * Handles sending the updates to the server to make timestamp changes
+   * @function
+   * @param {Array} adjustedFields The adjustment values to make to the checked images
+   * @param {function} [onSuccess] Function to call upon success
+   * @param {function} [onFailure] Function to call upon failure
+   */
+  const handleImageTimestampUpdates = React.useCallback((adjustedFields, onSuccess, onFailure) => {
+    onSuccess ||= () => {};
+    onFailure ||= () => {};
+
+    const toChange = getCheckedNamedImages();
+    if (!toChange || toChange.length <= 0) {
+      onSuccess();
+    }
+
+    const success = Server.imagesAdjustTimestamp(serverURL, editToken,
+                          curUpload.collectionId,
+                          curUpload.uploadId,
+                          toChange.map((item) => item.s3_path),
+                          adjustedFields[ADJUST_TIMESTAMP_FIELDS.YEAR],
+                          adjustedFields[ADJUST_TIMESTAMP_FIELDS.MONTH],
+                          adjustedFields[ADJUST_TIMESTAMP_FIELDS.DAY],
+                          adjustedFields[ADJUST_TIMESTAMP_FIELDS.HOUR],
+                          adjustedFields[ADJUST_TIMESTAMP_FIELDS.MINUTE],
+                          adjustedFields[ADJUST_TIMESTAMP_FIELDS.SECOND],
+                          setTokenExpired,
+                          (respData) => {   // Success
+                            onSuccess(respData);
+                          },
+                          (err) => {   // Failure
+                            onFailure(err);
+                          }
+                      );
+
+    if (!success) {
+      onFailure('An unknown error ocurred while adjusting the image timestamps');
+    }
+
+  }, [checkedNames, curUpload, editToken, getCheckedNamedImages, serverURL, setTokenExpired]);
 
   /**
    * Clears tooltip information when no longer needed. Ensures only the working tooltip is cleared
@@ -1057,8 +1092,58 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
    * @function
    */
   const handleGridViewClick = React.useCallback(() => {
+    handleDeselectAll();
     setShowGrid(true);
+  }, [handleDeselectAll]);
+
+  /**
+   * Handle the user wanting to edit the timestamp of images
+   * @function
+   */
+  const handleTimestampEdit = React.useCallback(() => {
+    if (checkedNames.size > 0) {
+      setEditingTimestamp(true);
+    }
+  }, [checkedNames]);
+
+  /**
+   * Function to handle closing the timestamp adjustment UI
+   * @function
+   */
+  const handleAdjustTimestampClose = React.useCallback(() => {
+    setEditingTimestamp(false);
   }, []);
+
+  /**
+   * Function to handle adjusting the image timestamp
+   * @function
+   * @param {Array} adjustedFields An array of the adjustments for each field
+   */
+  const handleAdjustTimestamp = React.useCallback((adjustedFields) => {
+    // Make sure something has changed
+    const changed = adjustedFields?.filter((item) => item !== 0);
+    if (!changed || changed.length <= 0) {
+      handleAdjustTimestampClose();
+      addMessage(Level.Information, 'No updates were specified. Not timestamps were adjusted');
+      return;
+    }
+
+    // Make the server call
+    handleImageTimestampUpdates(adjustedFields,
+                                (respData) => {     // Success
+                                    handleAdjustTimestampClose();
+                                    addMessage(Level.Information, 'Image timestamps successfully adjusted');
+                                },
+                                (err) => {
+                                    if (type(err) === 'string') {
+                                      addMessage(Level.Error, err)
+                                    } else {
+                                      addMessage(Level.Error, 'An error ocurred while trying to adjust image timestamps');
+                                    }
+                                }
+  );
+
+  }, [addMessage, handleAdjustTimestampClose]);
 
   // Variables to help with generating the UI
   const curHeight = totalHeight;
@@ -1266,7 +1351,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
                     <IconButton size="small" color="black"
                               sx={{padding:0
                               }} >
-                      <EditNoteIcon fontSize="small" onClick={() => onActionEdit(checkedNames)} sx={{
+                      <EditNoteIcon fontSize="small" onClick={() => handleTimestampEdit()} sx={{
                                 '&:hover': {
                                     transform: 'translate(-1px, -1px)',
                                     cursor: 'pointer',
@@ -1442,6 +1527,12 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
               />
           </Grid>
         : null
+      }
+      { editingTimestamp && 
+            <AdjustImageTimestamp images={getCheckedNamedImages()} 
+                                  onUpdate={handleAdjustTimestamp}
+                                  onCancel={handleAdjustTimestampClose}
+            />
       }
       { pendingMessage && 
             <WorkspaceOverlay>

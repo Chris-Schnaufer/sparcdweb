@@ -1188,3 +1188,28 @@ export function locationInfo(serverURL, token, locId, locName, locLat, locLon, l
 
   return true;
 }
+
+/**
+ * Sends image timestamp adjustments to the server
+ * @function
+ * @param {string} serverURL The URL to the server
+ * @param {string} token The authorization token
+ * @param {string} collectionId The ID of the collection the upload belongs to
+ * @param {string} uploadId The ID of the upload the images are a part of
+ * @param {Array} imagePaths The array of image paths of images to update
+ * @param {number} adjYear The adjustment count of years
+ * @param {number} adjMonth The adjustment count of months
+ * @param {number} adjDay The adjustment count of days
+ * @param {number} adjHour The adjustment count of hours
+ * @param {number} adjMinute The adjustment count of minutes
+ * @param {number} adjSecond The adjustment count of seconds
+ * @param {function} onExpiredToken Function to call when we get an expired token return
+ * @param {function} onSuccess The function to call upon success
+ * @param {function} onFailure The function to call upon failure
+ * @return {boolean} Returns true if the call was successfullly made, false if not
+ */
+export function imagesAdjustTimestamp(serverURL, token, collectionId, uploadId, imagePaths, adjYear, adjMonth, adjDay, adjHour, adjMinute, adjSecond,
+                                      onExpiredToken, onSuccess, onFailure) {
+
+  return true;
+}
