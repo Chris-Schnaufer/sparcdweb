@@ -1,6 +1,6 @@
 """ Utility functions for SPARCd server """
 
-from datetime import datetime
+import calendar
 import concurrent.futures
 import hashlib
 import json
@@ -13,6 +13,8 @@ import traceback
 from typing import Optional
 import uuid
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
 
 import image_utils
 import spd_crypt as crypt
@@ -34,7 +36,7 @@ TEMP_LOCATIONS_FILE_NAME = SPARCD_PREFIX + 'locations.json'
 TIMEOUT_UPLOADS_SEC = 3 * 60 * 60
 
 # Allowed movie extensions for upload
-UPLOAD_KNOWN_MOVIE_EXT = ['.mp4', '.mov']
+UPLOAD_KNOWN_MOVIE_EXT = ['.mp4', '.mov', '.avi']
 
 
 def make_boolean(value) -> bool:
@@ -844,3 +846,32 @@ def species_stats(db: SPARCdDatabase, colls: tuple, s3_id: str, s3_info: S3Info)
                                                                     one_species['scientificName']
 
     return ret_stats
+
+def add_to_datetime(dt: datetime, ta: relativedelta) -> datetime:
+    """ Adjusts the datetime according to the offset parameters. Handles leap years
+        correctly. Doesn't adjust time offsets smaller than seconds
+    Arguments:
+        dt:   The starting datetime
+        ta:   Contains the offsets to the various timestamp parts
+    Returns:
+        A new datetime with all offsets applied.
+    """
+    # Apply years + months (calendar arithmetic, with clamping)
+    total_months = dt.month - 1 + ta.month   # convert to 0-based month count
+    total_months += ta.year * 12
+
+    new_year  = dt.year + total_months // 12
+    new_month = total_months % 12 + 1      # back to 1-based
+
+    # Clamp the day to the last valid day of the target month so that e.g.
+    # Jan 31 + 1 month → Feb 28/29 instead of raising an error.
+    max_day = calendar.monthrange(new_year, new_month)[1]
+    new_day = min(dt.day, max_day)
+
+    result = dt.replace(year=new_year, month=new_month, day=new_day)
+    print('HACK:ADDTODATETIME:',ta.year,ta.month,ta.day,ta.hour,ta.minute,ta.second,flush=True)
+
+    # Apply days / hours / minutes / seconds via timedelta
+    result += timedelta(days=ta.day, hours=ta.hour, minutes=ta.minute, seconds=ta.second)
+
+    return result

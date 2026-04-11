@@ -66,7 +66,8 @@ def load_camtrap_deployments(s3_info: S3Info, bucket: str, \
 
 
 def load_camtrap_media(s3_info: S3Info, bucket: str, \
-                                        s3_path: str, temp_to_disk: bool=False) -> Optional[dict]:
+                        s3_path: str, temp_to_disk: bool=False,
+                        key_field: int=camtrap.CAMTRAP_MEDIA_ID_IDX) -> Optional[dict]:
     """ Returns the media camtrap information with the file names as the keys (the filenames are the
         portion of media path after the S3 path)
     Arguments:
@@ -75,20 +76,22 @@ def load_camtrap_media(s3_info: S3Info, bucket: str, \
         s3_path: the S3 path of the CAMTRAP CSV file
         temp_to_disk: If the data needs to be downloaded and this is set to True, a timed-out copy
                     of the data is saved to disk for faster retrieval
+        key_field: the field to use as the key when returning the data (defaults to the ID)
     Return:
         A dict with file names as the keys and its row as the value
     Notes:
         e.g.: assuming the S3 path is "/my/s3/path" and the media path is
         "/my/s3/path/to/media.jpg", the key would be "to/media.jpg"
     """
-    loaded_media = load_camtrap_info(s3_info, bucket, s3_path,
-                                                                MEDIA_CSV_FILE_NAME, temp_to_disk)
+    loaded_media = load_camtrap_info(s3_info, bucket, s3_path, MEDIA_CSV_FILE_NAME, temp_to_disk)
     if loaded_media:
         s3_path_len = len(s3_path)
         if not s3_path.endswith('/'):
             s3_path_len += 1
-        return {one_row[camtrap.CAMTRAP_MEDIA_ID_IDX][s3_path_len:]: one_row for \
-        																	one_row in loaded_media}
+        if key_field == camtrap.CAMTRAP_MEDIA_ID_IDX:
+            return {one_row[key_field][s3_path_len:]: one_row for one_row in loaded_media}
+        else:
+            return {one_row[key_field]: one_row for one_row in loaded_media}
 
     return None
 

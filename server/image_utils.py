@@ -2,18 +2,28 @@
 
 import datetime
 import json
-import os
 import subprocess
 from time import sleep
 from typing import Optional
 from dateutil import parser
 from dateutil.parser import ParserError
+from dateutil.relativedelta import relativedelta
 
 EXIFTOOL_ORIGINAL_DATE = 'DateTimeOriginal'
 EXIFTOOL_MODIFY_DATE = 'ModifyDate'
+EXIFTOOL_CREATE_DATE = 'CreateDate'
+EXIFTOOL_CREATE_DATE_MOVIE = 'Create Date'  # When exiftool is run with -createdate
 EXIF_CODE_SPARCD = "Exif_0x0227"
 EXIF_CODE_SPECIES = "Exif_0x0228"
 EXIF_CODE_LOCATION = "Exif_0x0229"
+
+ADJUST_FILE_TIME_FORMAT = '%Y:%m:%d %H:%M:%S'
+
+# Loop control definitions
+MAX_TRIES_GETTIME = 2
+MAX_TRIES_GEII = 2
+MAX_TRIES_GEMI = 2
+MAX_TRIES_WEII = 2
 
 def _parse_exiftool_readout(parse_lines: tuple) -> tuple:
     """ Parses the output from an exiftool binary listing
@@ -75,11 +85,41 @@ def __parse_movie_exif_readout(parse_lines: tuple) -> Optional[str]:
     """
     date_string = None
     for one_line in parse_lines:
-        if one_line.startswith('Create Date') and ':' in one_line:
+        if one_line.startswith(EXIFTOOL_CREATE_DATE_MOVIE) and ':' in one_line:
             date_string = one_line.split(':', 1)[1].strip()
             break
 
     return date_string
+
+def __parse_exiftool_timestamp(parse_lines: tuple) -> Optional[datetime.datetime]:
+    """ Parses out a datetime value from the exiftool output
+    Arguments:
+        parse_lines: a tuple of the lines to parse
+    Return:
+        The found timestamp
+    """
+    # HACK
+    for one in parse_lines:
+        print('HACK: TSEXIF:', one, flush=True)
+    # HACK
+    cur_dt = None
+    for one_line in parse_lines:
+        try:
+            # First tier date values we want
+            if any(exif_key in one_line for exif_key in \
+                                            [EXIFTOOL_CREATE_DATE, EXIFTOOL_ORIGINAL_DATE]) \
+                                                                                and ':' in one_line:
+                ts_string = one_line.split(' : ', 1)[1].strip()
+                cur_dt = datetime.datetime.strptime(ts_string, ADJUST_FILE_TIME_FORMAT)
+                break
+            if all(val in one_line for val in [EXIFTOOL_MODIFY_DATE, ':']) and not cur_dt:
+                # This will do if it's all we have
+                ts_string = one_line.split(' : ', 1)[1].strip()
+                cur_dt = datetime.datetime.strptime(ts_string, ADJUST_FILE_TIME_FORMAT)
+        except ValueError:
+            pass
+
+    return cur_dt
 
 def _split_species_string(species: str) -> tuple:
     """ Splits the EXIF string into an array of species information
@@ -112,6 +152,41 @@ def _split_species_string(species: str) -> tuple:
     return return_species
 
 
+def get_image_timestamp(image_path: str) -> Optional[datetime.datetime]:
+    """ Attempts to get a creation, or modification, timestamp from the image file
+        (not the file system timestamp)
+    Arguments:
+        image_path: the path to the image
+    Return:
+        The creation timestamp if found, otherwise the modification timestamp. If a valid
+        timestamp isn't found, None is returned
+    """
+    print('HACK: UPDATE_TIMESTAMP', flush=True)
+    # Loop through some tries to get the information
+    tries = 0
+    while tries < MAX_TRIES_GETTIME:
+        try:
+            cmd = ["exiftool", "-time:all", "-a", "-G0:1", "-s", image_path]
+            print('HACK:         CMD:', cmd, flush=True)
+            res = subprocess.run(cmd, capture_output=True, check=True)
+            break
+        except subprocess.CalledProcessError as ex:
+            if tries == MAX_TRIES_GETTIME - 1:
+                print(f'ERROR: Exception getting exif information on image {image_path}',flush=True)
+                print(f'       {ex}', flush=True)
+                print(ex.stdout, flush=True)
+                print(ex.stderr, flush=True)
+            sleep(0.5)
+        tries += 1
+
+    if tries >= MAX_TRIES_GETTIME:
+        print('HACK:     NO TIMESTAMP FOUND:', flush=True)
+        return None
+
+    # Convert the timestamp to a datetime
+    return __parse_exiftool_timestamp(res.stdout.decode("utf-8").split('\n'))
+
+
 def get_embedded_image_info(image_path: str) -> Optional[tuple]:
     """ Loads the embedded SPARCd information
     Arguments:
@@ -120,7 +195,6 @@ def get_embedded_image_info(image_path: str) -> Optional[tuple]:
         Retuns a tuple containing the species and location information that was
         embedded in the image
     """
-    MAX_TRIES_GEII = 2
     # Loop through some tries to get the information
     tries = 0
     while tries < MAX_TRIES_GEII:
@@ -185,16 +259,15 @@ def get_movie_timestamp(movie_path: str) -> Optional[datetime.datetime]:
         Returns the loaded timestamp as a datetime.datetime object, or None when the timestamp
         isn't found
     """
-    MAX_TRIES_GEII = 2
     # Loop through some tries to get the information
     tries = 0
-    while tries < MAX_TRIES_GEII:
+    while tries < MAX_TRIES_GEMI:
         try:
             cmd = ["exiftool", "-createdate", movie_path]
             res = subprocess.run(cmd, capture_output=True, check=True)
             break
         except subprocess.CalledProcessError as ex:
-            if tries == MAX_TRIES_GEII - 1:
+            if tries == MAX_TRIES_GEMI - 1:
                 print(f'ERROR: Exception getting exif information on movie {movie_path}',flush=True)
                 print(f'       {ex}', flush=True)
                 print(ex.stdout, flush=True)
@@ -202,7 +275,7 @@ def get_movie_timestamp(movie_path: str) -> Optional[datetime.datetime]:
             sleep(0.5)
         tries += 1
 
-    if tries >= MAX_TRIES_GEII:
+    if tries >= MAX_TRIES_GEMI:
         return None
 
     # Get what we are looking for in the output
@@ -245,7 +318,6 @@ def write_embedded_image_info(image_path: str, location_json: str, species_json:
         cmd.append(f"-location={location_json}")
 
     # Run the command
-    MAX_TRIES_WEII = 2
     tries = 0
     while tries < MAX_TRIES_WEII:
         try:
@@ -304,3 +376,65 @@ def update_image_file_exif(file_path: str, loc_id: str=None, loc_name: str=None,
                         )
 
     return result
+
+
+def update_timestamp(local_path: str, time_adjust: relativedelta) -> Optional[datetime.datetime]:
+    """ Attempts to update the timestamps by the sepecified relative amounts
+    Arguments:
+        local_path: local path to the file
+        time_adjsut: the time adjustment values
+    Return:
+        Returns the new timestamp, or None if the timestamp can't be changed
+    """
+    # Check to see if we have anything to work with before trying to change the timestamp
+    cur_ts = get_image_timestamp(local_path)
+    if not cur_ts:
+        print('HACK:       NO TIMESTAMP IN FILE')
+        return None
+
+    # Format the adjustment strings
+    print('HACK: UPDATETIMESTAMP:',time_adjust, flush=True)
+    pos_update_str = None
+    if any(val for val in (time_adjust.year,time_adjust.month,time_adjust.day,time_adjust.hour,
+                            time_adjust.minute, time_adjust.second) if val > 0):
+        pos_update_str = ':'.join([f'{val:02d}' if val > 0 else '00' for \
+                                val in (time_adjust.year,time_adjust.month,time_adjust.day)]) + \
+                        ' ' + \
+                        ':'.join([f'{val:02d}' if val > 0 else '00' for \
+                            val in (time_adjust.hour, time_adjust.minute, time_adjust.second)])
+    neg_update_str = None
+    if any(val for val in (time_adjust.year,time_adjust.month,time_adjust.day,time_adjust.hour,
+                            time_adjust.minute, time_adjust.second) if val < 0):
+        neg_update_str = ':'.join([f'{abs(val):02d}' if val < 0 else '00' for \
+                                val in (time_adjust.year,time_adjust.month,time_adjust.day)]) + \
+                        ' ' + \
+                        ':'.join([f'{abs(val):02d}' if val < 0 else '00' for \
+                            val in (time_adjust.hour, time_adjust.minute, time_adjust.second)])
+    # Update the timestamps using the relative values
+    print('HACK:   POS:', pos_update_str, flush=True)
+    print('HACK:   NEG:', neg_update_str, flush=True)
+    try:
+        if pos_update_str:
+            cmd = ["exiftool", f'-time:all+="{pos_update_str}"', local_path]
+            print('HACK:     UPDATECOMMAND:', cmd, flush=True)
+            _ = subprocess.run(cmd, capture_output=True, check=True)
+    except subprocess.CalledProcessError as ex:
+        print(f'ERROR: Exception updating timestamp on image {local_path}',flush=True)
+        print(f'       {ex}', flush=True)
+        print(ex.stdout, flush=True)
+        print(ex.stderr, flush=True)
+
+    try:
+        if neg_update_str:
+            cmd = ["exiftool", f'-time:all-="{neg_update_str}"', local_path]
+            print('HACK:     UPDATECOMMAND:', cmd, flush=True)
+            _ = subprocess.run(cmd, capture_output=True, check=True)
+    except subprocess.CalledProcessError as ex:
+        print(f'ERROR: Exception updating timestamp on image {local_path}',flush=True)
+        print(f'       {ex}', flush=True)
+        print(ex.stdout, flush=True)
+        print(ex.stderr, flush=True)
+
+    cur_ts = get_image_timestamp(local_path)
+    print('HACK:     RETURN:', cur_ts, flush=True)
+    return cur_ts

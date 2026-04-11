@@ -81,8 +81,29 @@ def make_s3_path(parts: tuple) -> str:
     return "/".join([one_part.rstrip('/').rstrip('\\') for one_part in parts])
 
 
-def get_s3_file(minio: Minio, bucket: str, file: str, dest_file: str):
+def download_s3_file(minio: Minio, bucket: str, file: str, dest_file: str) -> bool:
     """Downloads files from S3 server
+    Arguments:
+        minio: the s3 client instance
+        bucket: the bucket to download from
+        file: the S3 file to download and read
+        dest_file: the file to write the download to
+    Return:
+        Returns True if the file was downloaded, and False if there was a problem
+    Notes:
+        It is up to the caller to clean up the downloaded file
+    """
+    try:
+        minio.fget_object(bucket, file, dest_file)
+        return True
+    except S3Error as ex:
+        if ex.code != "NoSuchKey":
+            raise ex
+    return False
+
+
+def get_s3_file(minio: Minio, bucket: str, file: str, dest_file: str):
+    """Downloads files from S3 server and returns the contents
     Arguments:
         minio: the s3 client instance
         bucket: the bucket to download from
@@ -90,6 +111,8 @@ def get_s3_file(minio: Minio, bucket: str, file: str, dest_file: str):
         dest_file: the file to write the download to
     Returns:
         Returns the content of the file or None if there was an error
+    Notes:
+        It is up to the caller to clean up the downloaded file
     """
     try:
         minio.fget_object(bucket, file, dest_file)
@@ -102,7 +125,7 @@ def get_s3_file(minio: Minio, bucket: str, file: str, dest_file: str):
 
 
 def put_s3_file(minio: Minio, bucket: str, file: str, src_file: str, \
-                content_type: str='text/plain'):
+                content_type: str='text/plain') -> None:
     """ Upload files to the S3 server
     Arguments:
         minio: the s3 client instance
@@ -110,8 +133,6 @@ def put_s3_file(minio: Minio, bucket: str, file: str, src_file: str, \
         file: the S3 file to update
         src_file: the location of the file to upload to the server
         content_type: the content type of the upload
-    Returns:
-        Returns the content of the file or None if there was an error
     """
     try:
         minio.fput_object(bucket, file, src_file, content_type=content_type)
