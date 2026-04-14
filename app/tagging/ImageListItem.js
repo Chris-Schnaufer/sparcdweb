@@ -35,7 +35,7 @@ export default function ImageListItem({ name, type, timestamp, species, checked,
   const handleCheckChange = React.useCallback((event) => {
     // Stop propagation so clicking the checkbox doesn't also open the image editor
     event.stopPropagation();
-    onCheck(name, event.target.checked);
+    onCheck(name, event.target.checked, event.nativeEvent.shiftKey);
   }, [name, onCheck]);
 
   return (
