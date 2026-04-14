@@ -66,17 +66,17 @@ export default function AdjustImageTimestamp({images, onUpdate, onCancel}) {
 const earliestTimestamp = React.useMemo(() => {
   // Return the difference if we have two timestamps, otherwise have they empty one be last
   const sorted = [...(images ?? [])].sort((a, b) => a.timestamp && b.timestamp ? a.timestamp - b.timestamp : a ? 1 : -1);
-  return sorted.length > 0 ? sorted[0].timestamp : null;
+  return sorted.length > 0 && sorted[0].timestamp ? sorted[0].timestamp : new Date();
 }, [images]);
 
   // Derive the timestamp from adjustments instead of storing it separately
   const curTimestamp = React.useMemo(() => new Date(
-    earliestTimestamp.getFullYear() + adjustments[EDIT_FIELD.YEAR],
-    earliestTimestamp.getMonth()    + adjustments[EDIT_FIELD.MONTH],
-    earliestTimestamp.getDate()     + adjustments[EDIT_FIELD.DAY],
-    earliestTimestamp.getHours()    + adjustments[EDIT_FIELD.HOUR],
-    earliestTimestamp.getMinutes()  + adjustments[EDIT_FIELD.MINUTE],
-    earliestTimestamp.getSeconds()  + adjustments[EDIT_FIELD.SECOND],
+                earliestTimestamp.getFullYear() + adjustments[EDIT_FIELD.YEAR],
+                earliestTimestamp.getMonth()    + adjustments[EDIT_FIELD.MONTH],
+                earliestTimestamp.getDate()     + adjustments[EDIT_FIELD.DAY],
+                earliestTimestamp.getHours()    + adjustments[EDIT_FIELD.HOUR],
+                earliestTimestamp.getMinutes()  + adjustments[EDIT_FIELD.MINUTE],
+                earliestTimestamp.getSeconds()  + adjustments[EDIT_FIELD.SECOND],
   ), [adjustments, earliestTimestamp]);
 
   /**
