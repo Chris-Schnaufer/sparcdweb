@@ -75,6 +75,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
   const curUpload = React.useContext(UploadEditContext);
   const editToken = React.useContext(TokenContext);  // Login token
   const locationItems = React.useContext(LocationsInfoContext);
+  const lastCheckedIndexRef = React.useRef(null); // For handling shift click selection on list of images
   const narrowWindow = React.useContext(NarrowWindowContext);
   const setTokenExpired = React.useContext(TokenExpiredFuncContext);
   const speciesItems = React.useContext(SpeciesInfoContext);
@@ -194,20 +195,37 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
   /**
    * Toggles the checked state for a single image by name
    * @function
-   * @param {string} name    Image name
-   * @param {bool}   checked New checked state
+   * @param {string} name Image name
+   * @param {bool} checked New checked state
+   * @param {boo} [isShiftClick] Is the shift key pressed while clicking a checkbox
    */
-  const handleCheckChange = React.useCallback((name, checked) => {
-    setCheckedNames(prev => {
-      const next = new Set(prev);
-      if (checked) {
-        next.add(name);
-      } else {
-        next.delete(name);
-      }
-      return next;
-    });
-  }, []);
+  const handleCheckChange = React.useCallback((name, checked, isShiftClick) => {
+    const sortedImages = getSortedImages(curUpload.images);
+    const clickedIndex = sortedImages.findIndex(img => img.name === name);
+
+    if (isShiftClick && lastCheckedIndexRef.current !== null) {
+      const start = Math.min(lastCheckedIndexRef.current, clickedIndex);
+      const end   = Math.max(lastCheckedIndexRef.current, clickedIndex);
+      const rangeNames = sortedImages.slice(start, end + 1).map(img => img.name);
+
+      setCheckedNames(prev => {
+        const next = new Set(prev);
+        rangeNames.forEach(n => checked ? next.add(n) : next.delete(n));
+        return next;
+      });
+    } else {
+        setCheckedNames(prev => {
+          const next = new Set(prev);
+          if (checked) {
+            next.add(name);
+          } else {
+            next.delete(name);
+          }
+          return next;
+        });
+      lastCheckedIndexRef.current = clickedIndex;
+    }
+  }, [curUpload, getSortedImages]);
 
   /**
    * Selects all currently visible (sorted + sliced) images
@@ -224,6 +242,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
    */
   const handleDeselectAll = React.useCallback(() => {
     setCheckedNames(new Set());
+    lastCheckedIndexRef.current = null;
   }, []);
 
   /**
