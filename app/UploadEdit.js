@@ -69,14 +69,13 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
   const theme = useTheme();
   const imageEditRef = React.useRef(null); // Used to signal the ImageEdit child control about a keypress
   const navigationIndicatorTimerIdRef = React.useRef(null); // Used to manage navigation indicator timeout IDs
-  const sidebarSpeciesRef = React.useRef(null); // Used for sizing
-  const sidebarTopRef = React.useRef(null);     // Used for sizing
   const addMessage = React.useContext(AddMessageContext); // Function adds messages for display
   const curUpload = React.useContext(UploadEditContext);
   const editToken = React.useContext(TokenContext);  // Login token
   const locationItems = React.useContext(LocationsInfoContext);
   const lastCheckedIndexRef = React.useRef(null); // For handling shift click selection on list of images
   const narrowWindow = React.useContext(NarrowWindowContext);
+  const observerRef = React.useRef(null);                       // Used to load more images when scrolling to botiom of window
   const setTokenExpired = React.useContext(TokenExpiredFuncContext);
   const speciesItems = React.useContext(SpeciesInfoContext);
   const uiSizes = React.useContext(SizeContext);
@@ -97,13 +96,14 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
   // TODO: Replace navigationRedraw with another state update
   const [navigationRedraw, setNavigationRedraw] = React.useState(null); // Forcing redraw on navigation
   const [nextImageEdit, setNextImageEdit] = React.useState(null);       // The next image in array for editing
-  const [observerActive, setObserverActive] = React.useState(null);    // Used to indicate that we've set the observer
   const [pendingMessage, setPendingMessage] = React.useState(null);     // Used to display a pending message on the UI
   const [serverURL, setServerURL] = React.useState(utils.getServer());  // The server URL to use
   const [showGrid, setShowGrid] = React.useState(true);              // Show grid or list view
   const [sidebarWidthLeft, setSidebarWidthLeft] = React.useState(150);  // Width of left sidebar
   const [sidebarHeightTop, setSidebarHeightTop] = React.useState(50);   // Height of top sidebar
-  const [sidebarHeightSpecies, setSidebarHeightSpecies] = React.useState(0);   // Height of species sidebar when on top
+  const [sidebarHeightSpecies, setSidebarHeightSpecies] = React.useState(0);  // Height of species sidebar when on top
+  const [sidebarSpeciesNode, setSidebarSpeciesNode] = React.useState(null);   // Used to help with calculating element height
+  const [sidebarTopNode, setSidebarTopNode] = React.useState(null);           // Used to help with calculating element height
   const [sortDir, setSortDir] = React.useState(SORT_DIR.ASC);
   const [sortField, setSortField] = React.useState(SORT_FIELDS.NAME);
   const [speciesKeybindName, setSpeciesKeybindName] = React.useState(null); // Name of species for assigning new keybind
@@ -114,6 +114,25 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
   const [workspaceWidth, setWorkspaceWidth] = React.useState(150);  // The subtracted value is initial sidebar width
   const [totalHeight, setTotalHeight] = React.useState(null);       // Total available height of workspace
   const [tooltipData, setTooltipData] = React.useState(null);       // Data for tooltip
+
+  /**
+   * Used to set the top sidebar reference
+   * @function
+   */
+  const sidebarTopRef = React.useCallback((node) => {
+    if (node !== null) {
+      setSidebarTopNode(node);
+    }
+  }, []);
+
+  /**
+   * Used to set the specied sidebar reference
+   * @function
+   */
+  const sidebarSpeciesRef = React.useCallback((node) => {
+    if (node !== null) setSidebarSpeciesNode(node);
+  }, []);
+
 
   // Clear selection whenever the upload changes or we switch views
   React.useEffect(() => {
@@ -274,15 +293,14 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
     setWorkingTop(uiSizes.workspace.top);
 
     // Get the top sidebar and add in the species sidebar if it's on top as well
-    if (sidebarTopRef.current) {
-      const elTopSidebarSize = sidebarTopRef.current.getBoundingClientRect();
-      setSidebarHeightTop(elTopSidebarSize.height);
+    if (sidebarTopNode) {
+      setSidebarHeightTop(sidebarTopNode.getBoundingClientRect().height);
     } else {
       setSidebarHeightTop(0);
     }
 
-    if (sidebarSpeciesRef.current) {
-      const elSpeciesSidebarSize = sidebarSpeciesRef.current.getBoundingClientRect();
+    if (sidebarSpeciesNode) {
+      const elSpeciesSidebarSize = sidebarSpeciesNode.getBoundingClientRect();
       if (narrowWindow) {
         setSidebarHeightSpecies(elSpeciesSidebarSize.height);
         setSidebarWidthLeft(0);
@@ -291,7 +309,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
         setSidebarWidthLeft(elSpeciesSidebarSize.width);
       }
     }
-  }, [narrowWindow, uiSizes])
+  }, [narrowWindow, sidebarTopNode, sidebarSpeciesNode, uiSizes])
 
   /**
    * Updates the server when the species count changes
@@ -397,21 +415,41 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
   }, [curUpload, maxTilesDisplay]);
 
   // Check if we need to setup an interaction observer
-  React.useLayoutEffect(() => {
-    if (!observerActive) {
-      const el = document.getElementById('upload-edit-observer');
-      if (el) {
-        const observerOptions = {
-          root: document.getElementById('image-edit-wrapper-box'),
-          rootMargin: "5px",
-          threshold: 0.0,
-        };
-        const observer = new IntersectionObserver(onMoreImages, observerOptions);
-        observer.observe(el);
-        setObserverActive(observer);
-      }
+  React.useEffect(() => {
+    // Disconnect any existing observer so we don't hold a stale onMoreImages closure
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+      observerRef.current = null;
     }
-  }, [observerActive, onMoreImages]);
+
+    const root = document.getElementById('image-edit-wrapper-box');
+    const sentinel = document.getElementById('upload-edit-observer');
+
+    if (!sentinel || !root) {
+      return;
+    }
+
+    const observer = new IntersectionObserver((entries) => {
+        if (entries.some(e => e.isIntersecting)) {
+          onMoreImages();
+        }
+      },
+      {
+        root: root,
+        rootMargin: "5px",
+        threshold: 0.0,
+      }
+    );
+    observer.observe(sentinel);
+    observerRef.current = observer;
+
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+        observerRef.current = null;
+      }
+    };
+  }, [onMoreImages, curEditState, showGrid]);
 
   /**
    * Makes the call for an image to be finished with editing. Allows for retry events
@@ -598,25 +636,25 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
   React.useLayoutEffect(() => {
     setWorkspaceWidth(uiSizes.workspace.width);
     calcTotalHeight(uiSizes);
-  }, [uiSizes])
+  }, [uiSizes, calcTotalHeight, sidebarTopNode, sidebarSpeciesNode])
 
   // Measurements when resizing the window
   React.useLayoutEffect(() => {
       function onResize () {
         let leftWidth = 0;
+
         // Calculate the top sidebar and add in the species sidebar if it's on top as well
-        if (sidebarTopRef && sidebarTopRef.current) {
-          let topHeight = sidebarTopRef.current.offsetHeight;
-          setSidebarHeightTop(topHeight);
+        if (sidebarTopNode) {
+          setSidebarHeightTop(sidebarTopNode.offsetHeight);
         }
 
-        if (sidebarSpeciesRef && sidebarSpeciesRef.current) {
+        if (sidebarSpeciesNode) {
           if (narrowWindow) {
             leftWidth = 0;
             setSidebarWidthLeft(0);
-            setSidebarHeightSpecies(sidebarSpeciesRef.current.offsetHeight);
+            setSidebarHeightSpecies(sidebarSpeciesNode.offsetHeight);
           } else {
-            leftWidth = sidebarSpeciesRef.current.offsetWidth;
+            leftWidth = sidebarSpeciesNode.offsetWidth;
             setSidebarWidthLeft(leftWidth);
             setSidebarHeightSpecies(0);
           }
@@ -631,8 +669,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
       return () => {
           window.removeEventListener("resize", onResize);
       }
-  }, [narrowWindow, setSidebarHeightSpecies, setSidebarHeightTop, setSidebarWidthLeft, setWorkspaceWidth, sidebarSpeciesRef,
-      sidebarTopRef, uiSizes]);
+  }, [narrowWindow, sidebarTopNode, sidebarSpeciesNode, uiSizes]);
 
   /**
    * Handles user kep presses
@@ -1341,7 +1378,6 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
     );
   }, [checkedNames, curEditState, curUpload, getSortedImages, handleCheckChange, handleDeselectAll, 
       handleSelectAll, handleSortChange, maxTilesDisplay, sortDir, sortField]);
-
 
   // TODO: Make species bar on top when narrow screen
   const topbarVisibility = curEditState === EDITING_STATES.editImage || curEditState === EDITING_STATES.listImages ? true : false;
