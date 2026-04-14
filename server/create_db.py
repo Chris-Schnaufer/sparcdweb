@@ -237,7 +237,7 @@ def build_database(path: str, admin_info: tuple=None) -> None:
                 'timestamp INTEGER)',
             'CREATE TABLE sparcd(version TEXT)'
         )
-    version_stmt = 'INSERT INTO sparcd("1.0")';
+    version_stmt = 'INSERT INTO sparcd(version) VALUES("1.0")';
     add_user_stmt = 'INSERT INTO users(name, email, s3_id, administrator, auto_added) '\
                                                                             'values(?, ?, ?, 1, 0)'
 
@@ -256,7 +256,7 @@ def build_database(path: str, admin_info: tuple=None) -> None:
 
         # If we have a administrator information, we add it to the users table
         if admin_info and len(admin_info) == 3:
-            s3_url = s3u.web_to_s3_url(admin_info[2],
+            s3_url, _ = s3u.web_to_s3_url(admin_info[2],
                                                     lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
             print(f'Adding administrator {admin_info[0]}')
             cursor.execute(add_user_stmt, [admin_info[0], admin_info[1], hash2str(s3_url)])
