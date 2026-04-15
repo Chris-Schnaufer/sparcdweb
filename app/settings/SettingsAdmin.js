@@ -568,7 +568,7 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
       return;
     }
 
-    const success = Server.handleLocationEdit(serverURL, settingsToken, location.id, setTokenExpired,
+    const success = Server.handleLocationEdit(serverURL, settingsToken, location.idProperty, setTokenExpired,
           (respData) => {     // Success
             // Handle the result
               setEditingState({type:EditingStates.Location, data:respData});
