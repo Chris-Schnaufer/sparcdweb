@@ -1242,7 +1242,7 @@ def query_dl():
             dl_name = target if target else 'allimages.gz'
             s3_info = s3u.get_s3_info(user_info.url,
                                       user_info.name,
-                                      lambda: get_password(token, db),
+                                      get_password(token, db),
                                       lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
             read_fd, write_fd = os.pipe()
 
