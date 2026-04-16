@@ -2422,7 +2422,7 @@ def image_edit_complete():
                               lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
 
     # Get any changes
-    edit_files_info = db.get_next_files_info(s3_info, user_info.name, path)
+    edit_files_info = db.get_next_files_info(s3_info.id, user_info.name, path)
 
     if not edit_files_info:
         return {'success': True, 'retry': True, 'message': "No changes found for file", \
