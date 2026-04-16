@@ -274,3 +274,68 @@ def update_observations(s3_path: str, observations: dict, \
                                         if int(one_row[camtrap.CAMTRAP_OBSERVATION_COUNT_IDX]) > 0]
 
     return observations
+
+
+def media_renamed(media_info: dict, renamed_files: tuple) -> tuple:
+    """ Handles updating media information when files are renamed
+    Arguments:
+        media_info: the media information with file names as keys
+        renamed_files: the original and new file names for each renamed file
+    Return:
+        Returns the updated media information
+    """
+    for cur_orig, cur_new in renamed_files:
+        if cur_orig in media_info:
+            new_record = media_info[cur_orig]
+
+            # Get rid of the original data
+            media_info.pop(cur_orig)
+
+            # Update the record
+            idx = new_record[camtrap.CAMTRAP_MEDIA_ID_IDX].index(cur_orig)
+            new_record[camtrap.CAMTRAP_MEDIA_ID_IDX] = \
+                                            new_record[camtrap.CAMTRAP_MEDIA_ID_IDX][:idx] + cur_new
+
+            idx = new_record[camtrap.CAMTRAP_MEDIA_SEQUENCE_ID_IDX].index(cur_orig)
+            new_record[camtrap.CAMTRAP_MEDIA_SEQUENCE_ID_IDX] = \
+                                new_record[camtrap.CAMTRAP_MEDIA_SEQUENCE_ID_IDX][:idx] + cur_new
+
+            idx = new_record[camtrap.CAMTRAP_MEDIA_FILE_PATH_IDX].index(cur_orig)
+            new_record[camtrap.CAMTRAP_MEDIA_FILE_PATH_IDX] = \
+                                    new_record[camtrap.CAMTRAP_MEDIA_FILE_PATH_IDX][:idx] + cur_new
+
+            new_record[camtrap.CAMTRAP_MEDIA_FILE_NAME_IDX] = os.path.split(cur_new)[1]
+
+            # Create the entry under the new name
+            media_info[cur_new] = new_record
+
+    return media_info
+
+
+def observations_renamed(obs_info: dict, renamed_files: tuple) -> tuple:
+    """ Handles updating observation information when files are renamed
+    Arguments:
+        obs_info: the observation information with file names as keys
+        renamed_files: the original and new file names for each renamed file
+    Return:
+        Returns the updated observation data
+    """
+    for cur_orig, cur_new in renamed_files:
+        if cur_orig in obs_info:
+            # Add our entry and assign the updated entries to it
+            obs_info[cur_new] = []
+            for idx in range(0, len(obs_info[cur_orig])):
+                new_record = obs_info[cur_orig][idx]
+
+                new_record[camtrap.CAMTRAP_OBSERVATION_ID_IDX] = os.path.split(cur_new)[1]
+
+                midx = new_record[camtrap.CAMTRAP_OBSERVATION_MEDIA_ID_IDX].index(cur_orig)
+                new_record[camtrap.CAMTRAP_OBSERVATION_MEDIA_ID_IDX] = \
+                            new_record[camtrap.CAMTRAP_OBSERVATION_MEDIA_ID_IDX][:midx] + cur_new
+
+                obs_info[cur_new].append(new_record)
+
+            # Remove the original
+            obs_info.pop(cur_orig)
+
+    return obs_info

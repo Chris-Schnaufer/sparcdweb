@@ -53,31 +53,30 @@ const FIELD_CONFIG = [
 const lang = navigator.language || navigator.languages[0];
 
 /**
- * Function to handle the user wanting to change the timestamp in the images
+ * Function to handle the user wanting to change the timestamp
  * @function
- * @param {array} images The array of images to adjust the timestamp for
+ * @param {object} timestamp The timestamp to work with
+ * @param {number} imageCount The number of images to be modified
+ * @param {function} onUpdate Called to update the timestamp
+ * @param {function} onCancel Called to cancel timestamp adjustment
  * @returns {object} The rendered UI
  */
-export default function AdjustImageTimestamp({images, onUpdate, onCancel}) {
+export default function AdjustImageTimestamp({timestamp, imageCount, onUpdate, onCancel}) {
   const theme = useTheme();
   const [adjustments, setAdjustments] = React.useState([0, 0, 0, 0, 0, 0]);
 
-  // We adjust the timestamp based upon the earliest time
-const earliestTimestamp = React.useMemo(() => {
-  // Return the difference if we have two timestamps, otherwise have they empty one be last
-  const sorted = [...(images ?? [])].sort((a, b) => a.timestamp && b.timestamp ? a.timestamp - b.timestamp : a ? 1 : -1);
-  return sorted.length > 0 && sorted[0].timestamp ? sorted[0].timestamp : new Date();
-}, [images]);
+  onUpdate ||= () => {};
+  onCancel ||= () => {};
 
   // Derive the timestamp from adjustments instead of storing it separately
   const curTimestamp = React.useMemo(() => new Date(
-                earliestTimestamp.getFullYear() + adjustments[EDIT_FIELD.YEAR],
-                earliestTimestamp.getMonth()    + adjustments[EDIT_FIELD.MONTH],
-                earliestTimestamp.getDate()     + adjustments[EDIT_FIELD.DAY],
-                earliestTimestamp.getHours()    + adjustments[EDIT_FIELD.HOUR],
-                earliestTimestamp.getMinutes()  + adjustments[EDIT_FIELD.MINUTE],
-                earliestTimestamp.getSeconds()  + adjustments[EDIT_FIELD.SECOND],
-  ), [adjustments, earliestTimestamp]);
+                timestamp.getFullYear() + adjustments[EDIT_FIELD.YEAR],
+                timestamp.getMonth()    + adjustments[EDIT_FIELD.MONTH],
+                timestamp.getDate()     + adjustments[EDIT_FIELD.DAY],
+                timestamp.getHours()    + adjustments[EDIT_FIELD.HOUR],
+                timestamp.getMinutes()  + adjustments[EDIT_FIELD.MINUTE],
+                timestamp.getSeconds()  + adjustments[EDIT_FIELD.SECOND],
+  ), [adjustments, timestamp]);
 
   /**
    * Function to handle the use wanting to save the changes
@@ -107,7 +106,7 @@ const earliestTimestamp = React.useMemo(() => {
   }, []);
 
   // Make sure we have something for the user interface
-  if (!earliestTimestamp) {
+  if (!timestamp) {
     return null;
   }
   return (
@@ -115,7 +114,7 @@ const earliestTimestamp = React.useMemo(() => {
       <DialogTitle>Editing Image Date</DialogTitle>
       <DialogContent>
         <DialogContentText>
-        Offset the timestamp{images ? 's' : ''} of the <span style={{fontWeight:'bold', fontSize:'larger'}} >{images ? images.length : 0}</span> images
+        Offset the timestamp{imageCount > 1 ? 's':''} of <span style={{fontWeight:'bold', fontSize:'larger'}} >{imageCount}</span> image{imageCount > 1 ? 's':''}
         </DialogContentText>
         <Stack direction='column' alignItems='center' justifyContent='center'>
           <Stack direction='row' alignItems='center' justifyContent='center' sx={{paddingTop:'20px'}} >
@@ -123,7 +122,7 @@ const earliestTimestamp = React.useMemo(() => {
               Example: 
             </Typography>
             <Typography sx={{fontSize:'larger', paddingRight:'20px'}} >
-              {earliestTimestamp?.toLocaleString(lang, { hour12: false })}
+              {timestamp?.toLocaleString(lang, { hour12: false })}
             </Typography>
             <DoubleArrowOutlinedIcon />
             <Typography sx={{fontSize:'larger', paddingLeft:'20px'}} >

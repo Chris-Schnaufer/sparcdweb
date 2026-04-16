@@ -1191,6 +1191,75 @@ export function locationInfo(serverURL, token, locId, locName, locLat, locLon, l
 }
 
 /**
+ * Gets a timestamp from one of the specified images
+ * @function
+ * @param {string} serverURL The URL to the server
+ * @param {string} token The authorization token
+ * @param {Array} files The image files to look up a timestamp
+ * @param {function} onExpiredToken Function to call when we get an expired token return
+ * @param {function} onSuccess The function to call upon success
+ * @param {function} onFailure The function to call upon failure
+ * @return {boolean} Returns true if the call was successfullly made, false if not
+ */
+export function imagesTimestamp(serverURL, token, collectionId, uploadId, files, onExpiredToken, onSuccess, onFailure) {
+  onExpiredToken ||= () => {};
+  onSuccess ||= () => {};
+  onFailure ||= () => {};
+
+  const imageTimestampUrl = serverURL + '/imageTimestamp?t=' + encodeURIComponent(token);
+
+  const formData = new FormData();
+
+  try {
+    formData.append('collection', collectionId);
+    formData.append('upload',     uploadId);
+
+    // We send all the files in case some files don't have valid timestamps
+    if (files.length < LIMIT_FORM_FILE_CHUNK) {
+      formData.append('files', JSON.stringify(files.map((item) => item.s3_path)));
+    } else {
+      formData.append('files', JSON.stringify(files.slice(0,LIMIT_FORM_FILE_CHUNK).map((item) => item.s3_path)));
+      let index = 1;
+      let start = LIMIT_FORM_FILE_CHUNK;
+      while (start < files.length) {
+        let end = Math.min(start + LIMIT_FORM_FILE_CHUNK, files.length);
+        formData.append('files'+index, JSON.stringify(files.slice(start,end).map((item) => item.s3_path)));
+        start += LIMIT_FORM_FILE_CHUNK;
+        index += 1;
+      };
+    }
+
+    fetch(imageTimestampUrl, {
+      credentials: 'include',
+      method: 'POST',
+      body: formData
+    }).then(async (resp) => {
+          if (resp.ok) {
+            return resp.json();
+          } else {
+            if (resp.status === 401) {
+              // User needs to log in again
+              onExpiredToken();
+            }
+            throw new Error(`Failed to get an image timestamp: ${resp.status}: ${await resp.text()}`);
+          }
+        })
+      .then((respData) => {
+        onSuccess(respData);
+      })
+      .catch(function(err) {
+        console.log('Image Timestamp Fetch Error: ',err);
+        onFailure(err);
+    });
+  } catch (err) {
+    console.log('Image Timestamp Fetch Unknown Error: ',err);
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Sends image timestamp adjustments to the server
  * @function
  * @param {string} serverURL The URL to the server
@@ -1255,18 +1324,18 @@ export function imagesAdjustTimestamp(serverURL, token, collectionId, uploadId, 
               // User needs to log in again
               onExpiredToken();
             }
-            throw new Error(`Failed to get location information: ${resp.status}: ${await resp.text()}`);
+            throw new Error(`Failed to adjust image timestamps: ${resp.status}: ${await resp.text()}`);
           }
         })
       .then((respData) => {
         onSuccess(respData);
       })
       .catch(function(err) {
-        console.log('Location tooltip Error: ',err);
+        console.log('Adjust Image Timestamp Error: ',err);
         onFailure(err);
     });
   } catch (err) {
-    console.log('Location tooltip Unknown Error: ',err);
+    console.log('Adjust Image Timestamp Unknown Error: ',err);
     return false;
   }
 
