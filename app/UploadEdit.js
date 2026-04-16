@@ -955,6 +955,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
                             lastRequestId,
                             timestamp,
                             tryHarder,
+                            setTokenExpired,
                             (respData) => {   // Success
                                 // Check for a good response
                                 if (respData.success === true) {
