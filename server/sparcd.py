@@ -2843,66 +2843,12 @@ def adjust_timestamps():
     if not media_info:
         return jsonify({'success':False, 'message':'Unable to get media information from erver'})
 
-#    minio = s3_connect(s3_info)
-#    if not minio:
-#        return 'Not found', 404
-
     # Loop through the file names and update the timestamp both in the file (if possible)
     # and in the media
     time_adjust = relativedelta(year=year, month=month, day=day,
                                                             hour=hour, minute=minute, second=second)
 
     new_media_info = sdu.adjust_timestamps(all_files, time_adjust, s3_bucket, s3_info, media_info)
-
-#    media_map = {os.path.splitext(one_key)[0]: one_key for one_key in media_info.keys()}
-#    for one_file in all_files:
-#        mapped_file = media_map[one_file] if one_file in media_map else None
-#        if mapped_file is None:
-#            continue
-#        if mapped_file in media_info:
-#
-#            # Get the image from the server
-#            temp_file = tempfile.mkstemp(suffix=os.path.splitext(mapped_file)[1],
-#                                            prefix=SPARCD_PREFIX)
-#            os.close(temp_file[0])
-#
-#            if not download_s3_file(minio, s3_bucket,
-#                                    media_info[mapped_file][camtrap.CAMTRAP_MEDIA_FILE_PATH_IDX],
-#                                    temp_file[1]):
-#                print('Warning: Unable to find file to change timestamp', flush=True)
-#                # Clean up the temp file
-#                if os.path.exists(temp_file[1]):
-#                    os.unlink(temp_file[1])
-#                continue
-#
-#            # Try to change the timestamp in the image
-#            new_ts = image_utils.update_timestamp(temp_file[1], time_adjust)
-#
-#            # Update the media entry with the new file timestamp, otherwise adjust what we
-#            # have (if we have a timestamp)
-#            if new_ts:
-#                media_info[mapped_file][camtrap.CAMTRAP_MEDIA_TIMESTAMP_IDX] = new_ts.isoformat()
-#            elif media_info[mapped_file][camtrap.CAMTRAP_MEDIA_TIMESTAMP_IDX]:
-#                # We can adjust the timestamp in the media data
-#                media_ts = datetime.datetime.fromisoformat( \
-#                                    media_info[mapped_file][camtrap.CAMTRAP_MEDIA_TIMESTAMP_IDX])
-#                if media_ts:
-#                    # Adjust the timestamp
-#                    media_ts = sdu.add_to_datetime(media_ts, time_adjust)
-#                    media_info[mapped_file][camtrap.CAMTRAP_MEDIA_TIMESTAMP_IDX] = \
-#                                                                             media_ts.isoformat()
-#
-#            # Put the image back up if we changed the timestamp
-#            if new_ts is not None:
-#                S3Connection.upload_file(s3_info,
-#                                    s3_bucket,
-#                                    media_info[mapped_file][camtrap.CAMTRAP_MEDIA_FILE_PATH_IDX],
-#                                    temp_file[1]
-#                                    )
-#
-#            # Clean up the download
-#            if os.path.exists(temp_file[1]):
-#                os.unlink(temp_file[1])
 
     # Upload the MEDIA csv file to the server
     S3Connection.upload_camtrap_data(s3_info,
