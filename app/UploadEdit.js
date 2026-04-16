@@ -90,7 +90,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
   const [curImageModified, setCurImageModified] = React.useState(false);// The image being edited was changed
   const [displayLocation, setDisplayLocation] = React.useState(null);   // The location associated with upload to display
   const [editingLocation, setEditingLocation] = React.useState(true);   // Changing collection locations flag
-  const [editingTimestamp, setEditingTimestamp] = React.useState(false);   // Changing image timestamp flag
+  const [editingTimestamp, setEditingTimestamp] = React.useState(null);   // Changing image timestamp
   const [lastSpeciesRequestId, setLastSpeciesRequestId] = React.useState(null);  // Use to keep track of what was sent to the server
   const [maxTilesDisplay, setMaxTilesDisplay] = React.useState(40);     // Set the maximum number of tiles to display
   // TODO: Replace navigationRedraw with another state update
@@ -955,6 +955,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
                             lastRequestId,
                             timestamp,
                             tryHarder,
+                            setTokenExpired,
                             (respData) => {   // Success
                                 // Check for a good response
                                 if (respData.success === true) {
@@ -1059,6 +1060,36 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
   }, [editToken, locationItems, serverURL, setTooltipData, setTokenExpired]);
 
   /**
+   * Fetches the timestamp for the specified image
+   * @function
+   * @param {Array} images The image to fetch a timestamp from
+   * @param {function} [onSuccess] Function to call upon success
+   * @param {function} [onFailure] Function to call upon failure
+   */
+  const getImageTimestamp = React.useCallback((images, onSuccess, onFailure) => {
+    onSuccess ||= () => {};
+    onFailure ||= () => {};
+
+    const success = Server.imagesTimestamp(serverURL, editToken,
+                          curUpload.collectionId,
+                          curUpload.uploadId,
+                          images,
+                          setTokenExpired,
+                          (respData) => {   // Success
+                            onSuccess(respData);
+                          },
+                          (err) => {        // Failure
+                            onFailure(err);
+                          }
+                      );
+
+    if (!success) {
+      onFailure('An unknown error ocurred while gettimg image timestamps');
+    }
+
+  }, [curUpload, editToken, serverURL, setTokenExpired]);
+
+  /**
    * Handles sending the updates to the server to make timestamp changes
    * @function
    * @param {Array} adjustedFields The adjustment values to make to the checked images
@@ -1098,7 +1129,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
       onFailure('An unknown error ocurred while adjusting the image timestamps');
     }
 
-  }, [checkedNames, curUpload, editToken, getCheckedNamedImages, serverURL, setTokenExpired]);
+  }, [curUpload, editToken, getCheckedNamedImages, serverURL, setTokenExpired]);
 
   /**
    * Clears tooltip information when no longer needed. Ensures only the working tooltip is cleared
@@ -1159,16 +1190,42 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
    */
   const handleTimestampEdit = React.useCallback(() => {
     if (checkedNames.size > 0) {
-      setEditingTimestamp(true);
+      const images = getCheckedNamedImages();
+      const sorted = [...(images ?? [])].sort((a, b) => a.timestamp && b.timestamp ? a.timestamp - b.timestamp : a ? 1 : -1);
+
+      // We adjust the timestamp based upon the earliest time
+      const earliestTimestamp = sorted.length > 0 && sorted[0].timestamp ? sorted[0].timestamp : null;
+
+      if (earliestTimestamp !== null) {
+        setEditingTimestamp(earliestTimestamp);
+      } else if (sorted.length === 0) {
+        setEditingTimestamp(new Date());
+      } else {
+        setPendingMessage('Preparing to adjust timestamps')
+        getImageTimestamp(sorted,
+              (respData) => {   // Success
+                setPendingMessage(null);
+                if (respData.success) {
+                  setEditingTimestamp(new Date(respData.timestamp));
+                } else {
+                  setEditingTimestamp(new Date());  
+                }
+              },
+              (err) => {        // Failure
+                setPendingMessage(null);
+                setEditingTimestamp(new Date());
+              }
+        );
+      }
     }
-  }, [checkedNames]);
+  }, [checkedNames, getCheckedNamedImages]);
 
   /**
    * Function to handle closing the timestamp adjustment UI
    * @function
    */
   const handleAdjustTimestampClose = React.useCallback(() => {
-    setEditingTimestamp(false);
+    setEditingTimestamp(null);
   }, []);
 
   /**
@@ -1589,7 +1646,8 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
         : null
       }
       { editingTimestamp && 
-            <AdjustImageTimestamp images={getCheckedNamedImages()} 
+            <AdjustImageTimestamp timestamp={editingTimestamp}
+                                  imageCount={checkedNames.size ? checkedNames.size : 0} 
                                   onUpdate={handleAdjustTimestamp}
                                   onCancel={handleAdjustTimestampClose}
             />

@@ -38,6 +38,8 @@ export default function IncompleteUploadItem({upload, collection, highlight, onR
       <Tooltip placement="left"
                 title={
                   <React.Fragment>
+                    <p>Collection: {collection.description}</p>
+                    <p style={{marginLeft:'20px'}}>({collection.id})</p>
                     <p>Source folder: {upload.path ? upload.path : "<unknown>"}</p>
                     <p>User: {upload.uploadUser}</p>
                     <p>Images: {upload.imagesCount}</p>

@@ -246,71 +246,6 @@ def get_password(token: str, db: SPARCdDatabase) -> Optional[str]:
     return crypt.do_decrypt(WORKING_PASSCODE, db.get_password(token))
 
 
-def media_renamed(media_info: dict, renamed_files: tuple) -> tuple:
-    """ Handles updating media information when files are renamed
-    Arguments:
-        media_info: the media information with file names as keys
-        renamed_files: the original and new file names for each renamed file
-    Return:
-        Returns the updated media information
-    """
-    for cur_orig, cur_new in renamed_files:
-        if cur_orig in media_info:
-            new_record = media_info[cur_orig]
-
-            # Get rid of the original data
-            media_info.pop(cur_orig)
-
-            # Update the record
-            idx = new_record[camtrap.CAMTRAP_MEDIA_ID_IDX].index(cur_orig)
-            new_record[camtrap.CAMTRAP_MEDIA_ID_IDX] = \
-                                            new_record[camtrap.CAMTRAP_MEDIA_ID_IDX][:idx] + cur_new
-
-            idx = new_record[camtrap.CAMTRAP_MEDIA_SEQUENCE_ID_IDX].index(cur_orig)
-            new_record[camtrap.CAMTRAP_MEDIA_SEQUENCE_ID_IDX] = \
-                                new_record[camtrap.CAMTRAP_MEDIA_SEQUENCE_ID_IDX][:idx] + cur_new
-
-            idx = new_record[camtrap.CAMTRAP_MEDIA_FILE_PATH_IDX].index(cur_orig)
-            new_record[camtrap.CAMTRAP_MEDIA_FILE_PATH_IDX] = \
-                                    new_record[camtrap.CAMTRAP_MEDIA_FILE_PATH_IDX][:idx] + cur_new
-
-            new_record[camtrap.CAMTRAP_MEDIA_FILE_NAME_IDX] = os.path.split(cur_new)[1]
-
-            # Create the entry under the new name
-            media_info[cur_new] = new_record
-
-    return media_info
-
-
-def observations_renamed(obs_info: dict, renamed_files: tuple) -> tuple:
-    """ Handles updating observation information when files are renamed
-    Arguments:
-        obs_info: the observation information with file names as keys
-        renamed_files: the original and new file names for each renamed file
-    Return:
-        Returns the updated observation data
-    """
-    for cur_orig, cur_new in renamed_files:
-        if cur_orig in obs_info:
-            # Add our entry and assign the updated entries to it
-            obs_info[cur_new] = []
-            for idx in range(0, len(obs_info[cur_orig])):
-                new_record = obs_info[cur_orig][idx]
-
-                new_record[camtrap.CAMTRAP_OBSERVATION_ID_IDX] = os.path.split(cur_new)[1]
-
-                midx = new_record[camtrap.CAMTRAP_OBSERVATION_MEDIA_ID_IDX].index(cur_orig)
-                new_record[camtrap.CAMTRAP_OBSERVATION_MEDIA_ID_IDX] = \
-                            new_record[camtrap.CAMTRAP_OBSERVATION_MEDIA_ID_IDX][:midx] + cur_new
-
-                obs_info[cur_new].append(new_record)
-
-            # Remove the original
-            obs_info.pop(cur_orig)
-
-    return obs_info
-
-
 @app.route('/', methods = ['GET'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def index():
@@ -807,7 +742,7 @@ def species_stats():
 
     s3_info = s3u.get_s3_info(user_info.url,
                               user_info.name,
-                              lambda: get_password(token, db),
+                              get_password(token, db),
                               lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
 
     # Check if we already have the stats
@@ -1307,7 +1242,7 @@ def query_dl():
             dl_name = target if target else 'allimages.gz'
             s3_info = s3u.get_s3_info(user_info.url,
                                       user_info.name,
-                                      lambda: get_password(token, db),
+                                      get_password(token, db),
                                       lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
             read_fd, write_fd = os.pipe()
 
@@ -2222,7 +2157,7 @@ def sandbox_completed():
 
         # Check if we have renamed files
         if len(renamed_files) > 0:
-            media_info = media_renamed(media_info, renamed_files)
+            media_info = ctu.media_renamed(media_info, renamed_files)
 
         for one_key,one_type in file_mimetypes:
             media_info[one_key][camtrap.CAMTRAP_MEDIA_TYPE_IDX] = one_type
@@ -2245,7 +2180,7 @@ def sandbox_completed():
 
         # Check if we have renamed files
         if len(renamed_files) > 0:
-            obs_info = observations_renamed(obs_info, renamed_files)
+            obs_info = ctu.observations_renamed(obs_info, renamed_files)
 
         if file_species:
             obs_info = ctu.update_observations(s3_path, obs_info, file_species,
@@ -2487,7 +2422,7 @@ def image_edit_complete():
                               lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
 
     # Get any changes
-    edit_files_info = db.get_next_files_info(s3_info, user_info.name, path)
+    edit_files_info = db.get_next_files_info(s3_info.id, user_info.name, path)
 
     if not edit_files_info:
         return {'success': True, 'retry': True, 'message': "No changes found for file", \
@@ -2727,6 +2662,105 @@ def species_keybind():
     return jsonify({'success': True})
 
 
+@app.route('/imageTimestamp', methods = ['POST'])
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
+def image_timestamps():
+    """ Fetches the first timestamp found in the list of files
+    Arguments: (POST)
+        t - the session token
+    Return:
+        Returns True if the user is possibly an admin
+    Notes:
+         If the token is invalid, or a problem occurs, a 404 error is returned
+   """
+    db = SPARCdDatabase(DEFAULT_DB_PATH)
+    token = request.args.get('t')
+    print('IMAGE TIMESTAMP', flush=True)
+
+    # Check the credentials
+    token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
+    if token_valid is None or user_info is None:
+        return "Not Found", 404
+    if not token_valid or not user_info:
+        return "Unauthorized", 401
+
+    # Get the rest of the request parameters
+    collection_id = request.form.get('collection', None)
+    upload_id = request.form.get('upload', None)
+    all_files = request.form.get('files', None)
+
+    # Check for mandatory parameters
+    if not all([collection_id, upload_id, all_files]):
+        return "Not Found", 406
+
+    # Get all the file names
+    try:
+        all_files = json.loads(all_files)
+    except json.JSONDecodeError as ex:
+        print('ERROR: Unable to load file list JSON', ex, flush=True)
+        return "Not Found", 406
+
+    # Check if we have additional files to upload
+    req_index = 1
+    while True:
+        more_files = request.form.get(f'files{req_index}', None)
+        if not more_files:
+            break
+
+        req_index += 1
+        try:
+            more_files = json.loads(more_files)
+            all_files = all_files + more_files
+        except json.JSONDecodeError as ex:
+            print('ERROR: Unable to load file list JSON', ex, flush=True)
+            return "Not Found", 406
+
+    # Get our S3 info
+    s3_info = s3u.get_s3_info(user_info.url,
+                              user_info.name,
+                              lambda: get_password(token, db),
+                              lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
+
+    # Setup for getting timestamps
+    s3_bucket = SPARCD_PREFIX + collection_id
+
+    minio = s3_connect(s3_info)
+    if not minio:
+        return 'Not found', 404
+
+    # Keep trying to get a file timestamp
+    file_ts = None
+    for one_file in all_files:
+        s3_file = crypt.do_decrypt(WORKING_PASSCODE, one_file)
+
+        # Get the image from the server
+        temp_file = tempfile.mkstemp(suffix=os.path.splitext(s3_file)[1],
+                                        prefix=SPARCD_PREFIX)
+        os.close(temp_file[0])
+
+        if not download_s3_file(minio, s3_bucket, s3_file, temp_file[1]):
+            print('Warning: Unable to find file to change timestamp', flush=True)
+            # Clean up the temp file
+            if os.path.exists(temp_file[1]):
+                os.unlink(temp_file[1])
+            continue
+
+        # Try to change the timestamp in the image
+        new_ts = image_utils.get_image_timestamp(temp_file[1])
+
+        # Clean up the temp file
+        if os.path.exists(temp_file[1]):
+            os.unlink(temp_file[1])
+
+        if new_ts is not None:
+            file_ts = new_ts
+            break
+
+    return jsonify({'success': file_ts is not None,
+                    'timestamp': file_ts.isoformat() if file_ts else None
+                   })
+
+
 @app.route('/adjustTimestamps', methods = ['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def adjust_timestamps():
@@ -2809,67 +2843,18 @@ def adjust_timestamps():
     if not media_info:
         return jsonify({'success':False, 'message':'Unable to get media information from erver'})
 
-    media_map = {os.path.splitext(one_key)[0]: one_key for one_key in media_info.keys()}
-
-    minio = s3_connect(s3_info)
-    if not minio:
-        return 'Not found', 404
-
     # Loop through the file names and update the timestamp both in the file (if possible)
     # and in the media
     time_adjust = relativedelta(year=year, month=month, day=day,
                                                             hour=hour, minute=minute, second=second)
-    for one_file in all_files:
-        mapped_file = media_map[one_file] if one_file in media_map else None
-        if mapped_file is None:
-            continue
-        if mapped_file in media_info:
 
-            # Get the image from the server
-            temp_file = tempfile.mkstemp(suffix=os.path.splitext(mapped_file)[1],
-                                            prefix=SPARCD_PREFIX)
-            os.close(temp_file[0])
-
-            if not download_s3_file(minio, s3_bucket,
-                                    media_info[mapped_file][camtrap.CAMTRAP_MEDIA_FILE_PATH_IDX],
-                                    temp_file[1]):
-                print('Warning: Unable to find file to change timestamp', flush=True)
-                continue
-
-            # Try to change the timestamp in the image
-            new_ts = image_utils.update_timestamp(temp_file[1], time_adjust)
-
-            # Update the media entry with the new file timestamp, otherwise adjust what we
-            # have (if we have a timestamp)
-            if new_ts:
-                media_info[mapped_file][camtrap.CAMTRAP_MEDIA_TIMESTAMP_IDX] = new_ts.isoformat()
-            elif media_info[mapped_file][camtrap.CAMTRAP_MEDIA_TIMESTAMP_IDX]:
-                # We can adjust the timestamp in the media data
-                media_ts = datetime.datetime.fromisoformat( \
-                                    media_info[mapped_file][camtrap.CAMTRAP_MEDIA_TIMESTAMP_IDX])
-                if media_ts:
-                    # Adjust the timestamp
-                    media_ts = sdu.add_to_datetime(media_ts, time_adjust)
-                    media_info[mapped_file][camtrap.CAMTRAP_MEDIA_TIMESTAMP_IDX] = \
-                                                                                media_ts.isoformat()
-
-            # Put the image back up if we changed the timestamp
-            if new_ts is not None:
-                S3Connection.upload_file(s3_info,
-                                    s3_bucket,
-                                    media_info[mapped_file][camtrap.CAMTRAP_MEDIA_FILE_PATH_IDX],
-                                    temp_file[1]
-                                    )
-
-            # Clean up the download
-            if os.path.exists(temp_file[1]):
-                os.unlink(temp_file[1])
+    new_media_info = sdu.adjust_timestamps(all_files, time_adjust, s3_bucket, s3_info, media_info)
 
     # Upload the MEDIA csv file to the server
     S3Connection.upload_camtrap_data(s3_info,
                                      s3_bucket,
                                      make_s3_path((s3_path, MEDIA_CSV_FILE_NAME)),
-                                     (media_info[one_key] for one_key in media_info.keys()) )
+                                     (new_media_info[one_key] for one_key in new_media_info.keys()))
 
     return jsonify({'success':True})
 

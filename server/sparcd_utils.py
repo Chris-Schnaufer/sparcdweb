@@ -16,12 +16,15 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 
+from camtrap.v016 import camtrap
 import image_utils
 import spd_crypt as crypt
 from sparcd_db import SPARCdDatabase
 import sparcd_file_utils as sdfu
 from spd_types.s3info import S3Info
-from s3_access import S3Connection, SPARCD_PREFIX, LOCATIONS_JSON_FILE_NAME, SPECIES_JSON_FILE_NAME
+from s3_connect import s3_connect
+from s3_access import S3Connection, download_s3_file, SPARCD_PREFIX, LOCATIONS_JSON_FILE_NAME, \
+                      SPECIES_JSON_FILE_NAME
 import s3_utils as s3u
 from text_formatters.coordinate_utils import DEFAULT_UTM_ZONE, deg2utm, deg2utm_code
 
@@ -874,3 +877,124 @@ def add_to_datetime(dt: datetime, ta: relativedelta) -> datetime:
     result += timedelta(days=ta.day, hours=ta.hour, minutes=ta.minute, seconds=ta.second)
 
     return result
+
+
+def adjust_timestamp_thread(s3_info: S3Info, bucket: str, filename: str, mapped_name: str, \
+                            media_info: tuple, time_adjust: relativedelta) -> Optional[tuple]:
+    """ Called to update the timestamp of an image file
+    Arguments:
+        s3_info: the S3 endpoint information
+        bucket: the S3 bucket the image belong to
+        filename: the name of the file to update
+        mapped_name: the mapped filename for the media info
+        media_info: the loaded camtrap media information 
+        time_adjust: the adjustments to make to the timestamps
+    Return:
+        Returns a tuple of the original name, mapped name, and updated timestamp when successful.
+        Otherwise, None is returned
+    """
+    if mapped_name is None:
+        return None
+    if not mapped_name in media_info:
+        return None
+
+    # Connect to S3
+    minio = s3_connect(s3_info)
+    if not minio:
+        return None
+
+    # Get the image from the server
+    temp_file = tempfile.mkstemp(suffix=os.path.splitext(mapped_name)[1],
+                                    prefix=SPARCD_PREFIX)
+    os.close(temp_file[0])
+
+    if not download_s3_file(minio, bucket,
+                            media_info[mapped_name][camtrap.CAMTRAP_MEDIA_FILE_PATH_IDX],
+                            temp_file[1]):
+        print('Warning: Unable to find file to change timestamp',bucket, filename, flush=True)
+        # Clean up the temp file
+        if os.path.exists(temp_file[1]):
+            os.unlink(temp_file[1])
+        return None
+
+    # Try to change the timestamp in the image
+    new_ts = image_utils.update_timestamp(temp_file[1], time_adjust)
+
+    # Put the image back up if we changed the timestamp
+    if new_ts is not None:
+        S3Connection.upload_file(s3_info,
+                            bucket,
+                            media_info[mapped_name][camtrap.CAMTRAP_MEDIA_FILE_PATH_IDX],
+                            temp_file[1]
+                            )
+
+    # Clean up the temporary file
+    if os.path.exists(temp_file[1]):
+        os.unlink(temp_file[1])
+
+    return filename, mapped_name, new_ts
+
+
+def adjust_timestamps(files: tuple, time_adjust: relativedelta, bucket: str, s3_info: S3Info, \
+                        media_info: tuple) -> tuple:
+    """ Adjusts the timestamps of the specified image files
+    Arguments:
+        files: the list of files to change
+        time_adjust: the adjustments to make to the timestamps
+        bucket: the S3 bucket the images belong to
+        s3_info: the S3 endpoint information
+        media_info: the loaded camtrap media information
+    Returns:
+        Returns the media information with any adjustments made
+    """
+    if len(files) == 0:
+        return media_info
+
+    # Map the files names between what we get and the camtrap media
+    media_map = {os.path.splitext(one_key)[0]: one_key for one_key in media_info.keys()}
+
+    # Adjust the timestamps
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        cur_futures = {executor.submit(adjust_timestamp_thread,
+                                        s3_info,
+                                        bucket,
+                                        one_file,
+                                        media_map[one_file],
+                                        media_info, 
+                                        time_adjust):
+                        one_file for one_file in files if one_file in media_map}
+
+        for future in concurrent.futures.as_completed(cur_futures):
+            try:
+                # Handle the result of the thread call
+                timestamp_result = future.result()
+                if timestamp_result is None or len(timestamp_result) < 3 or \
+                                                                        timestamp_result[2] is None:
+                    continue
+                _, mapped_file, new_ts = timestamp_result
+
+                # Update the media entry with the new file timestamp, otherwise adjust what we
+                # have (if we have a timestamp)
+                if new_ts:
+                    media_info[mapped_file][camtrap.CAMTRAP_MEDIA_TIMESTAMP_IDX] = \
+                                                                                new_ts.isoformat()
+                elif media_info[mapped_file][camtrap.CAMTRAP_MEDIA_TIMESTAMP_IDX]:
+                    # We can adjust the timestamp in the media data
+                    try:
+                        media_ts = datetime.fromisoformat( \
+                                    media_info[mapped_file][camtrap.CAMTRAP_MEDIA_TIMESTAMP_IDX])
+                        if media_ts:
+                            # Adjust the timestamp
+                            media_ts = add_to_datetime(media_ts, time_adjust)
+                            media_info[mapped_file][camtrap.CAMTRAP_MEDIA_TIMESTAMP_IDX] = \
+                                                                                media_ts.isoformat()
+                    except ValueError:
+                        # We don't have a timestamp we can work with
+                        pass
+
+            # pylint: disable=broad-exception-caught
+            except Exception as ex:
+                print(f'Generated exception: {ex}', flush=True)
+                traceback.print_exception(ex)
+
+    return media_info
