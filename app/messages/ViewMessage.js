@@ -1,6 +1,6 @@
 'use client';
 
-/** @module components/ViewMessage */
+/** @module messages/ViewMessage */
 
 import * as React from 'react';
 import ArrowBackIosOutlinedIcon from '@mui/icons-material/ArrowBackIosOutlined';
@@ -22,6 +22,9 @@ import { useTheme } from '@mui/material/styles';
 import { Editor } from '@tinymce/tinymce-react';
 
 import PropTypes from 'prop-types';
+
+import UserNames from './UserNames';
+import { UserNamesListContext } from '../serverInfo';
 
 // Different types of messages
 export const MESSAGE_TYPE = {
@@ -53,26 +56,27 @@ const MESSAGE_NAV = {
  */
 export default function ViewMessage({curMessage, messageType, onRead, onAdd, onReply, onReplyAll, onClose}) {
   const theme = useTheme();
+  const userNames = React.useContext(UserNamesListContext);
+  const editorRef = React.useRef(null);
+  const onReadRef = React.useRef(onRead);
   const recipientRef = React.useRef(null);
   const subjectRef = React.useRef(null);
-  const editorRef = React.useRef(null);
+  const [activeSegmentIndex, setActiveSegmentIndex] = React.useState(-1); // Segment the user is editing in the recipients
   const [curReadMessage, setCurReadMessage] = React.useState(messageType !== MESSAGE_TYPE.New && curMessage ? curMessage[0] : null); // Current message being read
   const [curMessageIndex, setCurMessageIndex] = React.useState(messageType !== MESSAGE_TYPE.New ? 0 : -1);
   const [curRecipient, setCurRecipient] = React.useState(''); // Controlled textfield
   const [curSubject, setCurSubject] = React.useState(curMessage ? curMessage[0].subject : '');    // Controlled textfield
+  const [filteredUsers, setFilteredUsers] = React.useState([]);     // The filtered list of users
   const [messageError, setMessageError] = React.useState(false);    // Error with new message
-  const [readMessageIds, setReadMessageIds] = React.useState([]);
+  const [popupOffset, setPopupOffset] = React.useState(0);
+  const [readMessageIds, setReadMessageIds] = React.useState([]);   // IDs of read messages
   const [recipientError, setRecipientError] = React.useState(false);// Error with new recipient
+  const [showUsernames, setShowUserNames] =  React.useState(false); // Popup with user names
   const [subjectError, setSubjectError] = React.useState(false);    // Error with new subject
 
-
-  /**
-   * Wrap onRead to prevent circular logic
-   * @function
-   * @param {Array} msgIds Array of message IDs
-   */
-  const wrappedOnRead = React.useCallback((msgIds) => {
-    onRead(msgIds);
+   // Keep onRead up to date
+  React.useEffect(() => {
+    onReadRef.current = onRead;
   }, [onRead]);
 
   // Determine the correct recipient
@@ -93,13 +97,11 @@ export default function ViewMessage({curMessage, messageType, onRead, onAdd, onR
 
   // Set the first message as read
   React.useEffect(() => {
-    if (curMessage) {
-      if (readMessageIds.length === 0) {
-        setReadMessageIds([curMessage[0].id]);
-        wrappedOnRead([curMessage[0].id]);
-      }
+    if (curMessage && readMessageIds.length === 0) {
+      setReadMessageIds([curMessage[0].id]);
+      onReadRef.current([curMessage[0].id]);
     }
-  }, [curMessage, messageType, wrappedOnRead, readMessageIds, setReadMessageIds])
+  }, [curMessage, readMessageIds])
 
   /**
    * Adds a new message
@@ -129,7 +131,7 @@ export default function ViewMessage({curMessage, messageType, onRead, onAdd, onR
 
     onAdd(recipientRef.current.value, subjectRef.current.value, message, onClose);
 
-  }, [editorRef, onAdd, onClose, recipientRef, setRecipientError, setMessageError, setSubjectError, subjectRef]);
+  }, [onAdd, onClose]);
 
   /**
    * Handles message viewing navigation
@@ -155,9 +157,190 @@ export default function ViewMessage({curMessage, messageType, onRead, onAdd, onR
 
     if (!readMessageIds.includes(curMsg.id)) {
       setReadMessageIds(prev => [...prev, curMsg.id]);
-      wrappedOnRead([curMsg.id]);
+      onReadRef.current([curMsg.id]);
     }
-  }, [curMessage, curMessageIndex, readMessageIds, wrappedOnRead]);
+  }, [curMessage, curMessageIndex, readMessageIds]);
+
+  /**
+   * Calculates the horizontal pixel offset for the username popup
+   * so it appears under the segment currently being typed
+   * @function
+   * @param {string} value The full recipient field value
+   * @param {number} activeIdx The index of the active comma-separated segment
+   * @returns {number} Pixel offset from the left edge of the input
+   */
+  const calcPopupOffset = React.useCallback((value, activeIdx) => {
+    if (!recipientRef.current || activeIdx <= 0) return 0;
+
+    // Get the text that appears before the active segment
+    const textBefore = value
+      .split(',')
+      .slice(0, activeIdx)
+      .join(',') + ',';  // include the comma that precedes the active segment
+
+    // Match the font the browser is actually rendering in the input
+    const style = window.getComputedStyle(recipientRef.current);
+    const paddingLeft = parseFloat(style.paddingLeft) || 0;
+
+    const font = `${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+    ctx.font = font;
+
+    const measuredWidth = ctx.measureText(textBefore).width;
+
+    // Clamp so the popup never overflows past the right edge of the input
+    const maxOffset = recipientRef.current.offsetWidth - 150; // 150 = min popup width
+    return Math.max(0, Math.min(measuredWidth + paddingLeft, maxOffset));
+  }, []);
+
+  /**
+   * Returns the active segment based upon the cursor position
+   * @function
+   * @param {string} value The value of the control
+   * @param {number} cursorPos The cursor position
+   */
+  const getActiveSegment = React.useCallback((value, cursorPos) => {
+    const segments = value.split(',');
+    let charCount = 0;
+    let activeIdx = segments.length - 1;
+
+    for (let i = 0; i < segments.length; i++) {
+      charCount += segments[i].length + 1;      // Add +1 for comma's
+      if (cursorPos < charCount) {
+        activeIdx = i;
+        break;
+      }
+    }
+
+    // Use the last space-delimited word up to the cursor as the filter text,
+    // so typing within or before an existing name filters on just the current word
+    const segment = segments[activeIdx];
+    const segmentStart = charCount - segment.length - 1;
+    const cursorWithinSegment = cursorPos - segmentStart;
+    const textUpToCursor = segment.substring(0, cursorWithinSegment);
+    const activeWord = textUpToCursor.split(' ').pop().trim();
+
+    return { idx: activeIdx, segment: activeWord };
+  }, []);
+
+  /**
+   * Handles when a user is selected
+   * @function
+   * @param {string} name The name the user selected
+   */
+const handleSelectUser = React.useCallback((name) => {
+  const parts = curRecipient.split(',');
+  const segment = parts[activeSegmentIndex];
+
+  const segmentStart = parts
+    .slice(0, activeSegmentIndex)
+    .join(',')
+    .length + (activeSegmentIndex > 0 ? 1 : 0);
+  const cursorWithinSegment = (recipientRef.current?.selectionStart ?? segment.length) - segmentStart;
+
+  const textUpToCursor = segment.substring(0, cursorWithinSegment);
+  const textAfterCursor = segment.substring(cursorWithinSegment);
+
+  const lastSpaceIndex = textUpToCursor.lastIndexOf(' ');
+  const textBeforeWord = lastSpaceIndex >= 0
+    ? textUpToCursor.substring(0, lastSpaceIndex + 1)
+    : '';
+
+  const textAfterCursorTrimmed = textAfterCursor.trimStart();
+
+  // Appending means we are in the last segment and nothing exists after the cursor
+  const isAppending = activeSegmentIndex === parts.length - 1 && 
+    textAfterCursorTrimmed.length === 0;
+
+  if (textAfterCursorTrimmed.length > 0) {
+    parts.splice(activeSegmentIndex, 1,
+      (activeSegmentIndex > 0 ? ' ' : '') + textBeforeWord + name,
+      ' ' + textAfterCursorTrimmed
+    );
+  } else if (textBeforeWord.length > 0) {
+    parts.splice(activeSegmentIndex, 1,
+      (activeSegmentIndex > 0 ? ' ' : '') + textBeforeWord.trimEnd(),
+      ' ' + name
+    );
+  } else {
+    parts[activeSegmentIndex] = (activeSegmentIndex > 0 ? ' ' : '') + name;
+  }
+
+  const cleanedParts = parts.filter(p => p.trim().length > 0);
+  const newValue = cleanedParts.join(',') + (isAppending ? ', ' : '');
+
+  setCurRecipient(newValue);
+  setShowUserNames(false);
+  setFilteredUsers([]);
+  setActiveSegmentIndex(-1);
+  setPopupOffset(0);
+
+  const cursorPos = isAppending
+    ? newValue.length
+    : cleanedParts.slice(0, activeSegmentIndex + 1).join(',').length;
+
+  requestAnimationFrame(() => {
+    if (recipientRef.current) {
+      recipientRef.current.setSelectionRange(cursorPos, cursorPos);
+      recipientRef.current.focus();
+    }
+  });
+
+}, [curRecipient, activeSegmentIndex]);
+
+  /**
+   * Handles when the the recipents cursor position changes or value changes
+   * @function
+   * @param {object} target The triggering event's target value
+   * @param {bool} isChange When true, indicated the event was caused by a change in the field
+   */
+  const handleRecipientUpdate = React.useCallback((target, isChange = false) => {
+    if (isChange) setCurRecipient(target.value);
+
+    const activeSegment = getActiveSegment(target.value, target.selectionStart);
+    setActiveSegmentIndex(activeSegment.idx);
+
+    const hasInput = activeSegment.segment.length > 0;
+
+    // matches must be computed before isExactMatch
+    const matches = hasInput
+      ? userNames.names.filter(n => n.toLowerCase().startsWith(activeSegment.segment.toLowerCase()))
+      : [];
+
+    const isExactMatch = matches.length === 1 &&
+      matches[0].toLowerCase() === activeSegment.segment.toLowerCase();
+
+    setShowUserNames(hasInput && !isExactMatch);
+    setFilteredUsers(matches);
+
+    setPopupOffset(calcPopupOffset(target.value, activeSegment.idx));
+    console.log('value:', target.value, 'selectionStart:', target.selectionStart, 'segment:', getActiveSegment(target.value, target.selectionStart));
+  }, [calcPopupOffset, getActiveSegment, userNames]);
+
+  /**
+   * Handles when the user clicks on the receipent field
+   * @function
+   * @param {object} event The triggering event
+   */
+  const handleRecipientClick = React.useCallback((event) => {
+    if (event.button === 0) {
+      handleRecipientUpdate(event.target); // left-click only
+    }
+  }, [handleRecipientUpdate]);
+
+  /**
+   * Handles when the key up on the receipent field
+   * @function
+   * @param {object} event The triggering event
+   */
+  const handleRecipientKeyUp = React.useCallback((event) => {
+    if (['ArrowLeft','ArrowRight','Home','End'].includes(event.key)) {
+      const target = event.target;
+      setTimeout(() => handleRecipientUpdate(target), 0);
+    }
+  }, [handleRecipientUpdate]);
 
   // Return the UI
   return (
@@ -166,21 +349,33 @@ export default function ViewMessage({curMessage, messageType, onRead, onAdd, onR
             sx={{width:'100vw', height:'100vh', backgroundColor:'rgb(0,0,0,0.5)', position:'absolute', top:'0px', left:'0px', zIndex:2501}}
       >
         <Grid id="new-message-fields" container direction="column" style={{backgroundColor:'ghostwhite', border:'1px solid grey', borderRadius:'15px', padding:'25px 10px'}}>
-          <TextField id='new-message-recepient'
-                      required={messageType !== MESSAGE_TYPE.Read}
-                      error={recipientError}
-                      inputRef={recipientRef}
-                      label={messageType === MESSAGE_TYPE.Read ? 'From' : 'To (comma separated list of names. Send to admin to notify administrators)'}
-                      disabled={messageType === MESSAGE_TYPE.Read}
-                      fullWidth
-                      size="small"
-                      variant="standard"
-                      value={curRecipient}
-                      onChange={(event) => setCurRecipient(event.target.value)}
-                      InputLabelProps={{
-                        shrink: true, // Forces the label to move above the input
-                      }}
-                      sx={{marginBottom:'20px'}} />
+          <div style={{ position: 'relative' }}>
+            <TextField id='new-message-recipient'
+                        required={messageType !== MESSAGE_TYPE.Read}
+                        error={recipientError}
+                        inputRef={recipientRef}
+                        label={messageType === MESSAGE_TYPE.Read ? 'From' : 'To (comma separated list of names. Send to admin to notify administrators)'}
+                        disabled={messageType === MESSAGE_TYPE.Read}
+                        fullWidth
+                        size="small"
+                        variant="standard"
+                        value={curRecipient}
+                        onChange={(event) => handleRecipientUpdate(event.target, true)}
+                        onClick={handleRecipientClick}
+                        onKeyUp={handleRecipientKeyUp}
+                        onBlur={() => setTimeout(() => setShowUserNames(false), 150)}
+                        InputLabelProps={{
+                          shrink: true, // Forces the label to move above the input
+                        }}
+                        sx={{marginBottom:'20px'}} />
+            { showUsernames && 
+              <UserNames
+                filteredUsers={filteredUsers}
+                popupOffset={popupOffset}
+                onSelectUser={handleSelectUser}
+              />
+            }
+          </div>
           <TextField id='new-message-subject'
                       required={messageType !== MESSAGE_TYPE.Read}
                       error={subjectError}

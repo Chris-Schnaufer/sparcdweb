@@ -419,11 +419,57 @@ export function messages(serverURL, token, onExpiredToken, onSuccess, onFailure)
         onSuccess(respData);
       })
       .catch((err) => {
-        console.log('Fetch Message Error: ',err);
+        console.log('Fetch Messages Error: ',err);
         onFailure(err);
     });
   } catch (err) {
-    console.log('Message Fetch Unknown Error: ', err);
+    console.log('Fetch Messages Unknown Error: ', err);
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Gets the user's names from the server
+ * @function
+ * @param {string} serverURL The URL to the server
+ * @param {string} token The authorization token
+ * @param {function} onExpiredToken Function to call when we get an expired token return
+ * @param {function} onSuccess The function to call upon success
+ * @param {function} onFailure The function to call upon failure
+ * @return {boolean} Returns true if the call was successfullly made, false if not
+ */
+export function usernames(serverURL, token, onExpiredToken, onSuccess, onFailure) {
+  onExpiredToken ||= () => {};
+  onSuccess ||= () => {};
+  onFailure ||= () => {};
+
+  const messagesUrl =  serverURL + '/userNames?t=' + encodeURIComponent(token)
+  try {
+    const resp = fetch(messagesUrl, {
+      credentials: 'include',
+      method: 'GET'
+    }).then(async (resp) => {
+          if (resp.ok) {
+            return resp.json();
+          } else {
+            if (resp.status === 401 || resp.status === 404) {
+              // User needs to log in again
+              onExpiredToken(true);
+            }
+            throw new Error(`Failed to get user names: ${resp.status}: ${await resp.text()}`);
+          }
+        })
+      .then((respData) => {
+        onSuccess(respData);
+      })
+      .catch((err) => {
+        console.log('Fetch User Names Error: ',err);
+        onFailure(err);
+    });
+  } catch (err) {
+    console.log('Fetch User Names Unknown Error: ', err);
     return false;
   }
 

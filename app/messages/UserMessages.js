@@ -1,6 +1,6 @@
 'use client';
 
-/** @module components/UserMessages */
+/** @module messages/UserMessages */
 
 import * as React from 'react';
 import Button from '@mui/material/Button';

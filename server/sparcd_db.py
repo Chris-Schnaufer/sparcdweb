@@ -1167,6 +1167,22 @@ class SPARCdDatabase:
         """
         return self._db.is_sole_user(s3_id, user)
 
+    def user_names(self, s3_id: str) -> tuple:
+        """ Gets the known user names
+        Arguments:
+            s3_id: the ID of the S3 instance
+        Return:
+            A tuple of of the names of known users
+        """
+        # Get the users
+        res = self._db.user_names(s3_id)
+
+        # Make sure we have something to work with
+        if not res or len(res) <= 0:
+            return []
+
+        return [one_row[0] for one_row in res]
+
     def message_add(self, s3_id: str, sender: str, receiver: str, subject: str, message: str, \
                                                                             priority: str) -> None:
         """ Adds a message to the database

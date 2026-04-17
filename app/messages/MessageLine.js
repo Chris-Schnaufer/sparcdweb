@@ -1,6 +1,6 @@
 'use client';
 
-/** @module components/MessageLine */
+/** @module messages/MessageLine */
 
 import * as React from 'react';
 import Checkbox from '@mui/material/Checkbox';
