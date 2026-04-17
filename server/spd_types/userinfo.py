@@ -23,7 +23,10 @@ class UserInfo:
     def __str__(self):
         """ Return a string represenation
         """
-        return f'name: {self.__name}, admin: {self.__admin}'
+        return '<UserInfo ' \
+                f'name: {self.__name},email: {self.__email},admin: {self.__admin},' \
+                f'S3: {self.__url},settings: {self.__settings},species: {self.__species}' \
+                '>'
 
     @property
     def name(self):

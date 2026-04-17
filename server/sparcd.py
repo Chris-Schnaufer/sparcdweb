@@ -456,13 +456,15 @@ def login_token():
                                                                             SESSION_EXPIRE_SECONDS)
         if token_valid:
             # Everything checks out
+            s3_url, _ = s3u.web_to_s3_url(crypt.do_decrypt(WORKING_PASSCODE,login_info.url),
+                                                    lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
             return jsonify(
                 {  'success': True,
                    'value': token,
                    'name': login_info.name,
                    'settings': \
                         sdu.secure_user_settings(login_info.settings|{'email':login_info.email}),
-                    'messageCount': db.message_count(hash2str(login_info.url), login_info.name),
+                    'messageCount': db.message_count(hash2str(s3_url), login_info.name),
                     'newInstance': False,
                })
 
