@@ -9,9 +9,8 @@ import sqlite3
 import sys
 import tempfile
 
-from cryptography.fernet import Fernet
-
 import s3_utils as s3u
+
 
 # The name of our script
 SCRIPT_NAME = os.path.basename(__file__)
@@ -237,7 +236,7 @@ def build_database(path: str, admin_info: tuple=None) -> None:
                 'timestamp INTEGER)',
             'CREATE TABLE sparcd(version TEXT)'
         )
-    version_stmt = 'INSERT INTO sparcd(version) VALUES("1.0")';
+    version_stmt = 'INSERT INTO sparcd(version) VALUES("1.0")'
     add_user_stmt = 'INSERT INTO users(name, email, s3_id, administrator, auto_added) '\
                                                                             'values(?, ?, ?, 1, 0)'
 
@@ -256,8 +255,8 @@ def build_database(path: str, admin_info: tuple=None) -> None:
 
         # If we have a administrator information, we add it to the users table
         if admin_info and len(admin_info) == 3:
-            s3_url, _ = s3u.web_to_s3_url(admin_info[2],
-                                                    lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
+            # We only pass the URL as plain text, no need for decryption
+            s3_url, _ = s3u.web_to_s3_url(admin_info[2], None)
             print(f'Adding administrator {admin_info[0]}')
             cursor.execute(add_user_stmt, [admin_info[0], admin_info[1], hash2str(s3_url)])
 

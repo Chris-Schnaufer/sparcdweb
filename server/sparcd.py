@@ -1766,7 +1766,7 @@ def sandbox_new():
 
             data = '\n'.join([','.join(one_media) for one_media in media_data])
         else:
-            data = '\n'.join([','.join(one_media) for one_media in \
+            data = '\n'.join([','.join(one_obs) for one_obs in \
                     ctu.create_observation_data(camtrap.CamTrap,deployment_id, s3_path, all_files)])
 
         S3Connection.upload_file_data(s3_info, s3_bucket,

@@ -960,7 +960,7 @@ def adjust_timestamps(files: tuple, time_adjust: relativedelta, bucket: str, s3_
                                         bucket,
                                         one_file,
                                         media_map[one_file],
-                                        media_info, 
+                                        media_info,
                                         time_adjust):
                         one_file for one_file in files if one_file in media_map}
 

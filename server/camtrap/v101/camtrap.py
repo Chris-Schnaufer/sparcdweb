@@ -1,11 +1,11 @@
-""" CamTrap version 0.1.6 implementation """
+""" CamTrap version 1.0.1 implementation """
 
 from .deployment import Deployment
 from .media import Media
 from .observation import Observation
 
 # CAMTRAP Deployment definitions:
-# https://github.com/tdwg/camtrap-dp/blob/0.1.6/deployments-table-schema.json
+# https://github.com/tdwg/camtrap-dp/blob/1.0.1/deployments-table-schema.json
 CAMTRAP_DEPLOYMENT_ID_IDX = 0
 CAMTRAP_DEPLOYMENT_LOCATION_ID_IDX = 1
 CAMTRAP_DEPLOYMENT_LOCATION_NAME_IDX = 2
@@ -13,62 +13,70 @@ CAMTRAP_DEPLOYMENT_LONGITUDE_IDX = 3
 CAMTRAP_DEPLOYMENT_LATITUDE_IDX = 4
 CAMTRAP_DEPLOYMENT_COORDINATE_UNCERTAINTY_IDX = 5
 CAMTRAP_DEPLOYMENT_START_IDX = 6         # Timestamp
-CAMTRAP_DEPLOYMENT_END_IDX = 7            # Timestamp
+CAMTRAP_DEPLOYMENT_END_IDX = 7           # Timestamp
 CAMTRAP_DEPLOYMENT_SETUPBY_IDX = 8
 CAMTRAP_DEPLOYMENT_CAMERA_ID_IDX = 9
 CAMTRAP_DEPLOYMENT_CAMERA_MODEL_IDX = 10
-CAMTRAP_DEPLOYMENT_CAMERA_INTERVAL_IDX = 11
+CAMTRAP_DEPLOYMENT_CAMERA_DELAY_IDX = 11
 CAMTRAP_DEPLOYMENT_CAMERA_HEIGHT_IDX = 12
-CAMTRAP_DEPLOYMENT_CAMERA_TILT_IDX = 13
-CAMTRAP_DEPLOYMENT_CAMERA_HEADING_IDX = 14
-CAMTRAP_DEPLOYMENT_CAMERA_TIMESTAMP_ISSUES_IDX = 15
-CAMTRAP_DEPLOYMENT_BAIT_USE_IDX = 16
-CAMTRAP_DEPLOYMENT_SESSION_IDX = 17
-CAMTRAP_DEPLOYMENT_ARRAY_IDX = 18
+CAMTRAP_DEPLOYMENT_CAMERA_DEPTH_IDX = 13
+CAMTRAP_DEPLOYMENT_CAMERA_TILT_IDX = 14
+CAMTRAP_DEPLOYMENT_CAMERA_HEADING_IDX = 15
+CAMTRAP_DEPLOYMENT_CAMERA_DETECTION_DISTANCE_IDX = 16
+CAMTRAP_DEPLOYMENT_CAMERA_TIMESTAMP_ISSUES_IDX = 17
+CAMTRAP_DEPLOYMENT_BAIT_USE_IDX = 18
 CAMTRAP_DEPLOYMENT_FEATURE_TYPE_IDX = 19
 CAMTRAP_DEPLOYMENT_HABITAT_IDX = 20
 CAMTRAP_DEPLOYMENT_TAGS_IDX = 21
-CAMTRAP_DEPLOYMENT_COMMENTS_IDX = 22
-CAMTRAP_DEPLOYMENT_ID_INTERNAL_IDX = 23
+CAMTRAP_DEPLOYMENT_GROUPS_IDX = 22
+CAMTRAP_DEPLOYMENT_COMMENTS_IDX = 23
 
 # CAMTRAP Media definitions:
-# https://github.com/tdwg/camtrap-dp/blob/0.1.6/media-table-schema.json
+# https://github.com/tdwg/camtrap-dp/blob/1.0.1/media-table-schema.json
 CAMTRAP_MEDIA_ID_IDX = 0
 CAMTRAP_MEDIA_DEPLOYMENT_ID_IDX = 1
-CAMTRAP_MEDIA_SEQUENCE_ID_IDX = 2
-CAMTRAP_MEDIA_CAPTURE_METHOD_IDX = 3
-CAMTRAP_MEDIA_TIMESTAMP_IDX = 4
-CAMTRAP_MEDIA_FILE_PATH_IDX = 5
+CAMTRAP_MEDIA_CAPTURE_METHOD_IDX = 2
+CAMTRAP_MEDIA_TIMESTAMP_IDX = 3
+CAMTRAP_MEDIA_FILE_PATH_IDX = 4
+CAMTRAP_MEDIA_FILE_PUBLIC_IDX = 5
 CAMTRAP_MEDIA_FILE_NAME_IDX = 6
 CAMTRAP_MEDIA_TYPE_IDX = 7
 CAMTRAP_MEDIA_EXIF_DATA_IDX = 8
 CAMTRAP_MEDIA_FAVORITE_IDX = 9
 CAMTRAP_MEDIA_COMMENTS_IDX = 10
-CAMTRAP_MEDIA_ID_INTERNAL_IDX = 11
 
 # CAMTRAP Observation definitions:
-# https://github.com/tdwg/camtrap-dp/blob/0.1.6/observations-table-schema.json
+# https://github.com/tdwg/camtrap-dp/blob/1.0.1/observations-table-schema.json
 CAMTRAP_OBSERVATION_ID_IDX = 0
 CAMTRAP_OBSERVATION_DEPLOYMENT_ID_IDX = 1
-CAMTRAP_OBSERVATION_SEQUENCE_ID_IDX = 1
-CAMTRAP_OBSERVATION_MEDIA_ID_IDX = 3
-CAMTRAP_OBSERVATION_TIMESTAMP_IDX = 4
-CAMTRAP_OBSERVATION_OBSERVATION_TYPE_IDX = 5
-CAMTRAP_OBSERVATION_CAMERA_SETUP_IDX = 6
-CAMTRAP_OBSERVATION_TAXON_ID_IDX = 7
-CAMTRAP_OBSERVATION_SCIENTIFIC_NAME_IDX = 8
-CAMTRAP_OBSERVATION_COUNT_IDX = 9
-CAMTRAP_OBSERVATION_COUNT_NEW_IDX = 10
+CAMTRAP_OBSERVATION_MEDIA_ID_IDX = 2
+CAMTRAP_OBSERVATION_EVENT_ID_IDX = 3
+CAMTRAP_OBSERVATION_EVENT_START_IDX = 4
+CAMTRAP_OBSERVATION_EVENT_END_IDX = 5
+CAMTRAP_OBSERVATION_OBSERVATION_LEVEL_IDX = 6
+CAMTRAP_OBSERVATION_OBSERVATION_TYPE_IDX = 7
+CAMTRAP_OBSERVATION_CAMERA_SETUP_TYPE_IDX = 8
+CAMTRAP_OBSERVATION_SCIENTIFIC_NAME_IDX = 9
+CAMTRAP_OBSERVATION_COUNT_IDX = 10
 CAMTRAP_OBSERVATION_LIFE_STAGE_IDX = 11
 CAMTRAP_OBSERVATION_SEX_IDX = 12
 CAMTRAP_OBSERVATION_BEHAVIOUR_IDX = 13
 CAMTRAP_OBSERVATION_INDIVIDUAL_ID_IDX = 14
-CAMTRAP_OBSERVATION_CLASSIFICATION_METHOD_IDX = 15
-CAMTRAP_OBSERVATION_CLASSIFIED_BY_IDX = 16
-CAMTRAP_OBSERVATION_CLASSIFICATION_TIMESTAMP_IDX = 17
-CAMTRAP_OBSERVATION_CLASSIFICATION_CONFIDENCE_IDX = 18
-CAMTRAP_OBSERVATION_COMMENT_IDX = 19
-CAMTRAP_OBSERVATION_ID_INTERNAL_IDX = 20
+CAMTRAP_OBSERVATION_INDIVIDUAL_POSITION_RADIUS_IDX = 15
+CAMTRAP_OBSERVATION_INDIVIDUAL_POSITION_ANGLE_IDX = 16
+CAMTRAP_OBSERVATION_INDIVIDUAL_SPEED_IDX = 17
+CAMTRAP_OBSERVATION_BBOX_X_IDX = 18
+CAMTRAP_OBSERVATION_BBOX_Y_IDX = 19
+CAMTRAP_OBSERVATION_BBOX_WIDTH_IDX = 20
+CAMTRAP_OBSERVATION_BBOX_HEIGHT_IDX = 21
+CAMTRAP_OBSERVATION_CLASSIFICATION_METHOD_IDX = 22
+CAMTRAP_OBSERVATION_CLASSIFIED_BY_IDX = 23
+CAMTRAP_OBSERVATION_CLASSIFICATION_TIMESTAMP_IDX = 24
+CAMTRAP_OBSERVATION_CLASSIFICATION_PROBABILITY_IDX = 25
+CAMTRAP_OBSERVATION_TAGS_IDX = 26
+CAMTRAP_OBSERVATION_COMMENT_IDX = 27
+
+CAMTRAP_OBSERVATION_TIMESTAMP_IDX = CAMTRAP_OBSERVATION_EVENT_START_IDX
 
 def _to_bool(value) -> bool:
     """ Converts the parameter to a boolean value
@@ -197,7 +205,8 @@ class CamTrap:
         Return:
             A Deployment instance
         """
-        if len(dep_data) < CAMTRAP_DEPLOYMENT_COMMENTS_IDX:
+        # pylint: disable=too-many-statements
+        if len(dep_data) <= CAMTRAP_DEPLOYMENT_COMMENTS_IDX:
             raise ValueError("Not enough parameters for creating a Deployment")
         if not dep_data[CAMTRAP_DEPLOYMENT_ID_IDX]:
             raise ValueError("Missing Deployment ID when creating a Deployment")
@@ -218,33 +227,40 @@ class CamTrap:
                                         int(dep_data[CAMTRAP_DEPLOYMENT_COORDINATE_UNCERTAINTY_IDX])
         except ValueError:
             dep.coordinate_uncertainty = 0
-        dep.start_timstamp =dep_data[CAMTRAP_DEPLOYMENT_START_IDX]
-        dep.end_timestamp = dep_data[CAMTRAP_DEPLOYMENT_END_IDX]
+        dep.start =dep_data[CAMTRAP_DEPLOYMENT_START_IDX]
+        dep.end = dep_data[CAMTRAP_DEPLOYMENT_END_IDX]
         dep.setup_by = dep_data[CAMTRAP_DEPLOYMENT_SETUPBY_IDX]
         dep.camera_id = dep_data[CAMTRAP_DEPLOYMENT_CAMERA_ID_IDX]
         dep.camera_model = dep_data[CAMTRAP_DEPLOYMENT_CAMERA_MODEL_IDX]
         try:
-            dep.camera_interval = int(dep_data[CAMTRAP_DEPLOYMENT_CAMERA_INTERVAL_IDX])
+            dep.camera_delay = int(dep_data[CAMTRAP_DEPLOYMENT_CAMERA_DELAY_IDX])
         except ValueError:
-            dep.camera_interval = 0
+            dep.camera_delay = 0
         try:
             dep.camera_height = float(dep_data[CAMTRAP_DEPLOYMENT_CAMERA_HEIGHT_IDX])
         except ValueError:
             dep.camera_height = 0.0
         try:
+            dep.camera_depth = float(dep_data[CAMTRAP_DEPLOYMENT_CAMERA_DEPTH_IDX])
+        except ValueError:
+            dep.camera_depth = 0.0
+        try:
             dep.camera_tilt = float(dep_data[CAMTRAP_DEPLOYMENT_CAMERA_TILT_IDX])
         except ValueError:
-            dep.camera_tile = 0.0
+            dep.camera_tilt = 0.0
         try:
             dep.camera_heading = int(dep_data[CAMTRAP_DEPLOYMENT_CAMERA_HEADING_IDX])
         except ValueError:
             dep.camera_heading = 0
+        try:
+            dep.detection_distance = int(dep_data[CAMTRAP_DEPLOYMENT_CAMERA_DETECTION_DISTANCE_IDX])
+        except ValueError:
+            dep.detection_distance = 0
         dep.timestamp_issues = _to_bool(dep_data[CAMTRAP_DEPLOYMENT_CAMERA_TIMESTAMP_ISSUES_IDX])
         dep.bait_use = dep_data[CAMTRAP_DEPLOYMENT_BAIT_USE_IDX]
-        dep.session = dep_data[CAMTRAP_DEPLOYMENT_SESSION_IDX]
-        dep.array = dep_data[CAMTRAP_DEPLOYMENT_ARRAY_IDX]
         dep.feature_type = dep_data[CAMTRAP_DEPLOYMENT_FEATURE_TYPE_IDX]
         dep.habitat = dep_data[CAMTRAP_DEPLOYMENT_HABITAT_IDX]
+        dep.groups = dep_data[CAMTRAP_DEPLOYMENT_GROUPS_IDX]
         dep.tags = dep_data[CAMTRAP_DEPLOYMENT_TAGS_IDX]
         dep.comments = dep_data[CAMTRAP_DEPLOYMENT_COMMENTS_IDX]
 
@@ -268,21 +284,22 @@ class CamTrap:
             str(_not_none_float(dep.longitude)),
             str(_not_none_float(dep.latitude)),
             str(_not_none_int(dep.coordinate_uncertainty)),
-            _not_none(dep.start_timstamp),
-            _not_none(dep.end_timestamp),
+            _not_none(dep.start),
+            _not_none(dep.end),
             _not_none(dep.setup_by),
             _not_none(dep.camera_id),
             _not_none(dep.camera_model),
-            str(_not_none_int(dep.camera_interval)),
+            str(_not_none_int(dep.camera_delay)),
             str(_not_none_float(dep.camera_height)),
+            str(_not_none_float(dep.camera_depth)),
             str(_not_none_float(dep.camera_tilt)),
             str(_not_none_int(dep.camera_heading)),
+            str(_not_none_float(dep.detection_distance)),
             _bool_str(_to_bool(dep.timestamp_issues)),
             _not_none(dep.bait_use),
-            _not_none(dep.session),
-            _not_none(dep.array),
             _not_none(dep.feature_type),
             _not_none(dep.habitat),
+            _not_none(dep.groups),
             _not_none(dep.tags),
             _not_none(dep.comments),
             )
@@ -308,17 +325,17 @@ class CamTrap:
         Return:
             A Media instance
         """
-        if len(med_data) < CAMTRAP_MEDIA_COMMENTS_IDX:
+        if len(med_data) <= CAMTRAP_MEDIA_COMMENTS_IDX:
             raise ValueError("Not enough parameters for creating a Media")
         if not med_data[CAMTRAP_MEDIA_ID_IDX]:
             raise ValueError("Missing Media ID when creating a Media")
 
         med = Media(med_data[CAMTRAP_MEDIA_ID_IDX])
         med.deployment_id = med_data[CAMTRAP_MEDIA_DEPLOYMENT_ID_IDX]
-        med.sequence_id = med_data[CAMTRAP_MEDIA_SEQUENCE_ID_IDX]
         med.capture_method = med_data[CAMTRAP_MEDIA_CAPTURE_METHOD_IDX]
         med.timestamp = med_data[CAMTRAP_MEDIA_TIMESTAMP_IDX]
         med.file_path = med_data[CAMTRAP_MEDIA_FILE_PATH_IDX]
+        med.file_public =  med_data[CAMTRAP_MEDIA_FILE_PUBLIC_IDX]
         med.file_name = med_data[CAMTRAP_MEDIA_FILE_NAME_IDX]
         med.file_media_type = med_data[CAMTRAP_MEDIA_TYPE_IDX]
         med.exif_data = med_data[CAMTRAP_MEDIA_EXIF_DATA_IDX]
@@ -341,10 +358,10 @@ class CamTrap:
         return (
                 _not_none(med.media_id),
                 _not_none(med.deployment_id),
-                _not_none(med.sequence_id),
                 _not_none(med.capture_method),
                 _not_none(med.timestamp),
                 _not_none(med.file_path),
+                _bool_str(_to_bool(med.file_public)),
                 _not_none(med.file_name),
                 _not_none(med.file_media_type),
                 _not_none(med.exif_data),
@@ -373,40 +390,69 @@ class CamTrap:
         Return:
             An instance of Observation
         """
-        if len(obs_data) < CAMTRAP_OBSERVATION_COMMENT_IDX:
+        # pylint: disable=too-many-statements
+        if len(obs_data) <= CAMTRAP_OBSERVATION_COMMENT_IDX:
             raise ValueError("Not enough parameters for creating an Observation")
         if not obs_data[CAMTRAP_OBSERVATION_ID_IDX]:
             raise ValueError("Missing Observation ID when creating an Observation")
 
         obs = Observation(obs_data[CAMTRAP_OBSERVATION_ID_IDX])
         obs.deployment_id = obs_data[CAMTRAP_OBSERVATION_DEPLOYMENT_ID_IDX]
-        obs.sequence_id = obs_data[CAMTRAP_OBSERVATION_SEQUENCE_ID_IDX]
         obs.media_id = obs_data[CAMTRAP_OBSERVATION_MEDIA_ID_IDX]
-        obs.timestamp = obs_data[CAMTRAP_OBSERVATION_TIMESTAMP_IDX]
+        obs.event_id = obs_data[CAMTRAP_OBSERVATION_EVENT_ID_IDX]
+        obs.event_start = obs_data[CAMTRAP_OBSERVATION_EVENT_START_IDX]
+        obs.event_end = obs_data[CAMTRAP_OBSERVATION_EVENT_END_IDX]
+        obs.observation_level = obs_data[CAMTRAP_OBSERVATION_OBSERVATION_LEVEL_IDX]
         obs.observation_type = obs_data[CAMTRAP_OBSERVATION_OBSERVATION_TYPE_IDX]
-        obs.camera_setup = obs_data[CAMTRAP_OBSERVATION_CAMERA_SETUP_IDX]
-        obs.taxon_id = obs_data[CAMTRAP_OBSERVATION_TAXON_ID_IDX]
+        obs.camera_setup_type = obs_data[CAMTRAP_OBSERVATION_CAMERA_SETUP_TYPE_IDX]
         obs.scientific_name = obs_data[CAMTRAP_OBSERVATION_SCIENTIFIC_NAME_IDX]
         try:
             obs.count = int(obs_data[CAMTRAP_OBSERVATION_COUNT_IDX])
         except ValueError:
             obs.count = 0
-        try:
-            obs.count_new = int(obs_data[CAMTRAP_OBSERVATION_COUNT_NEW_IDX])
-        except ValueError:
-            obs.count_new = 0
         obs.life_stage = obs_data[CAMTRAP_OBSERVATION_LIFE_STAGE_IDX]
         obs.sex = obs_data[CAMTRAP_OBSERVATION_SEX_IDX]
         obs.behaviour = obs_data[CAMTRAP_OBSERVATION_BEHAVIOUR_IDX]
         obs.individual_id = obs_data[CAMTRAP_OBSERVATION_INDIVIDUAL_ID_IDX]
+        try:
+            obs.individual_position_radius = \
+                                float(obs_data[CAMTRAP_OBSERVATION_INDIVIDUAL_POSITION_RADIUS_IDX])
+        except ValueError:
+            obs.individual_position_radius = 0.0
+        try:
+            obs.individual_position_angle = \
+                                float(obs_data[CAMTRAP_OBSERVATION_INDIVIDUAL_POSITION_ANGLE_IDX])
+        except ValueError:
+            obs.individual_position_angle = 0.0
+        try:
+            obs.individual_speed = float(obs_data[CAMTRAP_OBSERVATION_INDIVIDUAL_SPEED_IDX])
+        except ValueError:
+            obs.individual_speed = 0.0
+        try:
+            obs.bbox_x = float(obs_data[CAMTRAP_OBSERVATION_BBOX_X_IDX])
+        except ValueError:
+            obs.bbox_x = 0.0
+        try:
+            obs.bbox_y = float(obs_data[CAMTRAP_OBSERVATION_BBOX_Y_IDX])
+        except ValueError:
+            obs.bbox_y = 0.0
+        try:
+            obs.bbox_width = float(obs_data[CAMTRAP_OBSERVATION_BBOX_WIDTH_IDX])
+        except ValueError:
+            obs.bbox_width = 0.0
+        try:
+            obs.height = float(obs_data[CAMTRAP_OBSERVATION_BBOX_HEIGHT_IDX])
+        except ValueError:
+            obs.bbox_height = 0.0
         obs.classification_method = obs_data[CAMTRAP_OBSERVATION_CLASSIFICATION_METHOD_IDX]
         obs.classified_by = obs_data[CAMTRAP_OBSERVATION_CLASSIFIED_BY_IDX]
         obs.classification_timestamp = obs_data[CAMTRAP_OBSERVATION_CLASSIFICATION_TIMESTAMP_IDX]
         try:
-            obs.classification_confidence = \
-                                float(obs_data[CAMTRAP_OBSERVATION_CLASSIFICATION_CONFIDENCE_IDX])
+            obs.classification_probability = \
+                                float(obs_data[CAMTRAP_OBSERVATION_CLASSIFICATION_PROBABILITY_IDX])
         except ValueError:
-            obs.classification_confidence = 0.0
+            obs.classification_probability = 0.0
+        obs.tags = obs_data[CAMTRAP_OBSERVATION_TAGS_IDX]
         obs.comments = obs_data[CAMTRAP_OBSERVATION_COMMENT_IDX]
 
         return obs
@@ -426,22 +472,30 @@ class CamTrap:
         return (
                 _not_none(obs.observation_id),
                 _not_none(obs.deployment_id),
-                _not_none(obs.sequence_id),
                 _not_none(obs.media_id),
-                _not_none(obs.timestamp),
+                _not_none(obs.event_id),
+                _not_none(obs.event_start),
+                _not_none(obs.event_end),
+                _not_none(obs.observation_level),
                 _not_none(obs.observation_type),
-                _not_none(obs.camera_setup),
-                _not_none(obs.taxon_id),
+                _not_none(obs.camera_setup_type),
                 _not_none(obs.scientific_name),
                 str(_not_none_int(obs.count)),
-                str(_not_none_int(obs.count_new)),
                 _not_none(obs.life_stage),
                 _not_none(obs.sex),
                 _not_none(obs.behaviour),
                 _not_none(obs.individual_id),
+                str(_not_none_float(obs.individual_position_radius)),
+                str(_not_none_float(obs.individual_position_angle)),
+                str(_not_none_float(obs.individual_speed)),
+                str(_not_none_float(obs.bbox_x)),
+                str(_not_none_float(obs.bbox_y)),
+                str(_not_none_float(obs.bbox_width)),
+                str(_not_none_float(obs.bbox_height)),
                 _not_none(obs.classification_method),
                 _not_none(obs.classified_by),
                 _not_none(obs.classification_timestamp),
-                str(_not_none_float(obs.classification_confidence)),
+                str(_not_none_float(obs.classification_probability)),
+                _not_none(obs.tag),
                 _not_none(obs.comments)
                )

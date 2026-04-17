@@ -95,8 +95,8 @@ def load_timed_info(load_path: str, timeout_sec: int=TEMP_FILE_EXPIRE_SEC):
                 tries += 1
                 time.sleep(1)
                 continue
-            else:
-                return None
+
+            return None
 
     # Check if the contents are too old
     if not isinstance(loaded_data, dict) or 'timestamp' not in loaded_data or \
