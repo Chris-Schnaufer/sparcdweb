@@ -6,7 +6,7 @@ import PropTypes from 'prop-types';
 
 import { AddMessageContext, BaseURLContext, CollectionsInfoContext, DisableIdleCheckFuncContext, LocationsInfoContext, MobileDeviceContext,
           NarrowWindowContext, SandboxInfoContext, SizeContext, SpeciesInfoContext, SpeciesOtherNamesContext, TokenContext, TokenExpiredFuncContext,
-          UserMessageContext, UserNameContext, UserSettingsContext } from '../serverInfo';
+          UserNamesListContext, UserMessageContext, UserNameContext, UserSettingsContext } from '../serverInfo';
 import defaultTheme from '../Theme';
 
 /**
@@ -21,7 +21,7 @@ export default function ContextProviders({ children, values, theme=defaultTheme 
   const {
     addMessage, collectionInfo, handleDisableIdleCheck, locationInfo,
     mobileDevice, isNarrow, sandboxInfo, sizes, speciesInfo,
-    speciesOtherInfo, lastToken, onTokenExpired, userMessages,
+    speciesOtherInfo, lastToken, onTokenExpired, userMessages, userNames,
     userSettings, serverURL,
   } = values;
 
@@ -38,6 +38,7 @@ export default function ContextProviders({ children, values, theme=defaultTheme 
     <UserSettingsContext.Provider value={userSettings?.settings}>
     <BaseURLContext.Provider value={serverURL}>
     <TokenContext.Provider value={lastToken}>
+    <UserNamesListContext.Provider value={userNames}>
     <AddMessageContext.Provider value={addMessage}>
     <CollectionsInfoContext.Provider value={collectionInfo}>
     <LocationsInfoContext.Provider value={locationInfo}>
@@ -53,6 +54,7 @@ export default function ContextProviders({ children, values, theme=defaultTheme 
     </LocationsInfoContext.Provider>
     </CollectionsInfoContext.Provider>
     </AddMessageContext.Provider>
+    </UserNamesListContext.Provider>
     </TokenContext.Provider>
     </BaseURLContext.Provider>
     </UserSettingsContext.Provider>

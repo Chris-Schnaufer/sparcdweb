@@ -107,6 +107,7 @@ export default function Home() {
   const [userLoginAgain, setUserLoginAgain] = React.useState(false);      // The user needs to log in again
   const [userIdleTimedOut, setUserIdleTimedOut] = React.useState(false);  // The user idles out and needs to log in again
   const [userMessages, setUserMessages] =  React.useState({count:null, messages:null});
+  const [userNames, setUserNames] =  React.useState({names:null, loading:false});       // Names of users on the system
   const [userSettings, setUserSettings] =  React.useState(DEFAULT_USER_SETTINGS);
 
 
@@ -182,7 +183,7 @@ export default function Home() {
    * Fetches the messages from the server
    * @function
    */
-  const handleFetchMessages = React.useCallback((loginToken) => {
+  const fetchMessages = React.useCallback((loginToken) => {
     setUserMessages(prev => ({...prev, loading:true}));
 
 
@@ -205,6 +206,34 @@ export default function Home() {
     if (!success) {
       addMessage(Level.Error, 'An unknown problem occurred while fetching messages');
       setUserMessages(prev => ({...prev, loading:false, count:0, messages:[]}) );     
+    }
+
+  }, [addMessage]);
+
+  /**
+   * Fetches the user names from the server
+   * @function
+   */
+  const fetchUserNames = React.useCallback((loginToken) => {
+    setUserNames(prev => ({...prev, loading:true}));
+
+
+    const success = Server.usernames(serverURLRef.current, loginToken, setUserLoginAgain,
+                                (respData) => {   // Success
+                                    // Save response data
+                                    if (respData.success) {
+                                      setUserNames({names:respData.users, loading:false});
+                                    } else {
+                                      setUserNames(prev => ({...prev, loading:false}) );
+                                    }
+                                },
+                                (err) => {        // Failure
+                                    setUserNames(prev => ({...prev, loading:false}) );
+                                }
+    );
+
+    if (!success) {
+      setUserNames(prev => ({...prev, loading:false}) );
     }
 
   }, [addMessage]);
@@ -237,7 +266,8 @@ export default function Home() {
       setUserIdleTimedOut(false);
       setLoggedIn(true);
       setLastToken(loginToken);
-      window.setTimeout(() => handleFetchMessages(loginToken), 1000);
+      window.setTimeout(() => fetchMessages(loginToken), 1000);
+      window.setTimeout(() => fetchUserNames(loginToken), 1000);
 
       if (onSuccess && typeof(onSuccess) === 'function') {
         onSuccess(loginToken, respData['newInstance'], respData['needsRepair']);
@@ -249,7 +279,7 @@ export default function Home() {
         setRepairInstance(true);
       }
     }
-  }, [handleFetchMessages]);
+  }, [fetchMessages, fetchUserNames]);
 
   /**
    * Common function for logging the user in
@@ -498,7 +528,8 @@ export default function Home() {
             loginStore.clearLoginInfo();
           }
           // Check for messages
-          window.setTimeout(() => handleFetchMessages(newToken), 100);
+          window.setTimeout(() => fetchMessages(newToken), 100);
+          window.setTimeout(() => fetchUserNames(newToken), 100);
           // Load collections if it's not a new instance
           if (!newInstance && !repairServer) {
             window.setTimeout(() => loginAfterActions(newToken), 500);
@@ -516,7 +547,7 @@ export default function Home() {
         }
       );
     }
-  }, [addMessage, handleFetchMessages, loginAfterActions, loginUser]);
+  }, [addMessage, fetchMessages, fetchUserNames, loginAfterActions, loginUser]);
 
 
   // TODO: change dependencies to Theme & use @media to adjust
@@ -1112,8 +1143,8 @@ export default function Home() {
    */
   const handleDisplayMessages = React.useCallback(() => {
     setDisplayMessages(true);
-    handleFetchMessages(lastToken);
-  }, [handleFetchMessages, lastToken]);
+    fetchMessages(lastToken);
+  }, [fetchMessages, lastToken]);
 
   /**
    * Function to handle the timeout when logging in again
@@ -1141,8 +1172,9 @@ export default function Home() {
    * @function
    */
   const handleUserMessagesRefresh = React.useCallback(() => {
-    handleFetchMessages(lastToken);
-  }, [handleFetchMessages, lastToken]);
+    fetchMessages(lastToken);
+    fetchUserNames(lastToken);
+  }, [fetchMessages, lastToken]);
 
   /**
    * Function to close the admin settings
@@ -1165,9 +1197,9 @@ export default function Home() {
    * @function
    */
   const handleCloseUserMessages = React.useCallback(() => {
-    handleFetchMessages(lastToken);
+    fetchMessages(lastToken);
     setDisplayMessages(false);
-  }, [handleFetchMessages, lastToken]);
+  }, [fetchMessages, lastToken]);
 
   // Render the UI
   const providerValues = React.useMemo(() => (
@@ -1186,6 +1218,7 @@ export default function Home() {
       speciesInfo,
       speciesOtherInfo,
       userMessages,
+      userNames,
       userSettings,
     }
   ), [addMessage, collectionInfo, handleDisableIdleCheck, handleTokenExpired, isNarrow, lastToken, locationInfo, mobileDevice, sandboxInfo,

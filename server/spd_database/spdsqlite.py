@@ -2284,6 +2284,25 @@ class SPDSQLite:
 
         return int(res[0]) == 1
 
+    def user_names(self, s3_id: str) -> Optional[tuple]:
+        """ Adds a message to the database
+        Arguments:
+            s3_id: the ID of the S3 instance to get user names for
+        """
+        if self._conn is None:
+            raise RuntimeError('Attempting to get user names from the database before ' \
+                                                                                    'connecting')
+        cursor = self._conn.cursor()
+        cursor.execute('SELECT name FROM users WHERE s3_id=?', (s3_id, ))
+
+        res = cursor.fetchall()
+
+        # Check for a problem
+        if not res or len(res) < 1:
+            return None
+
+        return res
+
     def message_add(self, s3_id: str, sender: str, receiver: str, subject: str, message: str, \
                                                                             priority: int) -> None:
         """ Adds a message to the database

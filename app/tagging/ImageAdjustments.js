@@ -3,6 +3,7 @@
 import * as React from 'react';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
+import DoubleArrowOutlinedIcon from '@mui/icons-material/DoubleArrowOutlined';
 import Grid from '@mui/material/Grid';
 import Typography from '@mui/material/Typography';
 
@@ -54,13 +55,12 @@ export default function ImageAdjustments({isVisible, adjustments, onBrightnessCh
       </Grid>
       <Box id="image-edit-adjust" sx={{position:'absolute',left:'0px',top:'0px',height:'20px', flex:'1'}} 
               onClick={() => setShowAdjustments(!showAdjustments)}>
-        <Typography variant="body1" sx={{textTransform:'uppercase',color:'darkgrey',backgroundColor:'rgba(255,255,255,0.3)',
+        <DoubleArrowOutlinedIcon sx={{textTransform:'uppercase',color:'darkgrey',backgroundColor:'rgba(255,255,255,0.3)',
                                          padding:'1px 3px 0px 3px',borderRadius:'3px',
                                          '&:hover':{backgroundColor:'rgba(255,255,255,0.7)',color:'black'},
                                          cursor:'pointer', ...adjustmentDropProps
-                                       }}>
-          &raquo;
-        </Typography>
+                                       }}
+        />
       </Box>
     </div>
   );

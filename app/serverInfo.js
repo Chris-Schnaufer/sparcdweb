@@ -20,6 +20,8 @@ export const DisableIdleCheckFuncContext = createContext(null); // Function acce
 export const CollectionsInfoContext = createContext(null);
 /** React context for a function to call when a token has exxired */
 export const TokenExpiredFuncContext = createContext(null);
+/** React context for list of user names */
+export const UserNamesListContext = createContext(null);
 /** React context for locations information */
 export const LocationsInfoContext = createContext(null);
 /** React context for running on a mobile device */

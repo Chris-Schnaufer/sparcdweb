@@ -2,8 +2,7 @@
 
 import datetime
 import os
-import tempfile
-from typing import Callable, Optional
+from typing import Optional
 
 from camtrap.v016 import camtrap
 from spd_types.s3info import S3Info
@@ -90,8 +89,7 @@ def load_camtrap_media(s3_info: S3Info, bucket: str, \
             s3_path_len += 1
         if key_field == camtrap.CAMTRAP_MEDIA_ID_IDX:
             return {one_row[key_field][s3_path_len:]: one_row for one_row in loaded_media}
-        else:
-            return {one_row[key_field]: one_row for one_row in loaded_media}
+        return {one_row[key_field]: one_row for one_row in loaded_media}
 
     return None
 

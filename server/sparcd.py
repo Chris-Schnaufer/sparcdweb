@@ -456,13 +456,15 @@ def login_token():
                                                                             SESSION_EXPIRE_SECONDS)
         if token_valid:
             # Everything checks out
+            s3_url, _ = s3u.web_to_s3_url(crypt.do_decrypt(WORKING_PASSCODE,login_info.url),
+                                                    lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
             return jsonify(
                 {  'success': True,
                    'value': token,
                    'name': login_info.name,
                    'settings': \
                         sdu.secure_user_settings(login_info.settings|{'email':login_info.email}),
-                    'messageCount': db.message_count(hash2str(login_info.url), login_info.name),
+                    'messageCount': db.message_count(hash2str(s3_url), login_info.name),
                     'newInstance': False,
                })
 
@@ -1271,7 +1273,7 @@ def query_dl():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def set_settings():
     """ Updates the user's settings
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns the user's settings
@@ -1332,7 +1334,7 @@ def set_settings():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def location_info():
     """ Returns details on a location
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns the location information
@@ -1461,7 +1463,7 @@ def sandbox_stats():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def sandbox_prev():
     """ Checks if a sandbox item has been previously uploaded
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns whether the upload was already atempted and any missing file names
@@ -1504,7 +1506,7 @@ def sandbox_prev():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def sandbox_recovery_update():
     """ Updates the sandbox information in the database upon upload recovery
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns successfully if the information could be updated
@@ -1593,7 +1595,7 @@ def sandbox_recovery_update():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def sandbox_check_continue_upload():
     """ Checks if a sandbox file already uploaded matches what we've just received
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns whether the file appears to match the previous upload attempt
@@ -1690,7 +1692,7 @@ def sandbox_check_continue_upload():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def sandbox_new():
     """ Adds a new sandbox upload to the database
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns the success of adding the upload to the database
@@ -1766,7 +1768,7 @@ def sandbox_new():
 
             data = '\n'.join([','.join(one_media) for one_media in media_data])
         else:
-            data = '\n'.join([','.join(one_media) for one_media in \
+            data = '\n'.join([','.join(one_obs) for one_obs in \
                     ctu.create_observation_data(camtrap.CamTrap,deployment_id, s3_path, all_files)])
 
         S3Connection.upload_file_data(s3_info, s3_bucket,
@@ -1797,7 +1799,7 @@ def sandbox_new():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def sandbox_file():
     """ Handles the upload for a new image
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns the success of storing the uploaded image
@@ -2025,7 +2027,7 @@ def sandbox_unloaded_files():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def sandbox_reset():
     """ Resets the sandbox to start an upload from the beginning
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns the new upload ID
@@ -2066,7 +2068,7 @@ def sandbox_reset():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def sandbox_abandon():
     """ Removes the sandbox and any uploaded files
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns the ID of the abandoned upload
@@ -2114,7 +2116,7 @@ def sandbox_abandon():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def sandbox_completed():
     """ Marks a sandbox as completely uploaded
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns success if everything works out
@@ -2227,7 +2229,7 @@ def sandbox_completed():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def image_location():
     """ Handles the location for images changing
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns success unless there's an issue
@@ -2330,7 +2332,7 @@ def image_location():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def image_species():
     """ Handles the species and counts for an image changing
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns success unless there's an issue
@@ -2384,7 +2386,7 @@ def image_species():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def image_edit_complete():
     """ Handles updating one image with the changes made
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns success unless there's an issue
@@ -2472,7 +2474,7 @@ def image_edit_complete():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def images_all_edited():
     """ Handles completing changes after all images have been edited
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns success unless there's an issue
@@ -2603,7 +2605,7 @@ def images_all_edited():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def species_keybind():
     """ Handles the adding/changing a species keybind
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns success unless an issue is found
@@ -2925,7 +2927,7 @@ def admin_check_changes():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def settings_admin():
     """ Confirms the password is correct for admin editing
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns True if the user is possibly an admin
@@ -2974,7 +2976,7 @@ def settings_admin():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def settings_owner():
     """ Confirms the password is correct for collection editing
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns True if the user is possibly an admin
@@ -3022,7 +3024,7 @@ def settings_owner():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def admin_collection_details():
     """ Returns detailed collection information for admin editing
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns the collection details for admin purposes
@@ -3076,7 +3078,7 @@ def admin_collection_details():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def owner_collection_details():
     """ Returns detailed collection information for owner editing
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns the collection details for editing purposes
@@ -3134,7 +3136,7 @@ def owner_collection_details():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def admin_location_details():
     """ Returns detailed location for admin editing
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns the location details for admin purposes
@@ -3288,7 +3290,7 @@ def admin_species():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def admin_user_update():
     """ Confirms the password is correct for admin editing
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns True if the user is possibly an admin
@@ -3339,7 +3341,7 @@ def admin_user_update():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def admin_species_update():
     """ Adds/updates a species entry
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns True if the the species was put in the database to be updated
@@ -3407,7 +3409,7 @@ def admin_species_update():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def admin_location_update():
     """ Adds/updates a location information
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns True if the location as added to the database
@@ -3543,7 +3545,7 @@ def admin_location_update():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def admin_collection_update():
     """ Updates a collection information
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns True if the collection was updated
@@ -3631,7 +3633,7 @@ def admin_collection_update():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def admin_collection_add():
     """ Adds a collection information
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns True if the collection was added
@@ -3705,7 +3707,7 @@ def admin_collection_add():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def ownercollection_update():
     """ Adds/updates a collection information
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns True if the collection was updated
@@ -3793,7 +3795,7 @@ def ownercollection_update():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def admin_check_incomplete():
     """ Looks for incomplete updated in collections
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns True if the collection changes were made
@@ -3859,7 +3861,7 @@ def admin_check_incomplete():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def admin_complete_changes():
     """ Adds/updates a saved location and species information
-    Arguments: (GET)
+    Arguments: (PUT)
         t - the session token
     Return:
         Returns True if the collection changes were made
@@ -3916,7 +3918,7 @@ def admin_complete_changes():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def admin_abandon_changes():
     """ Adds/updates a saved location and species information
-    Arguments: (GET)
+    Arguments: (PUT)
         t - the session token
     Return:
         Returns True if the collection changes were abandoned
@@ -4135,7 +4137,7 @@ def install_repair():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def set_upload_complete():
     """ Marks an incomplete upload as completed
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns True success if the upload could be marked as completed and False otherwise
@@ -4205,7 +4207,7 @@ def set_upload_complete():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def message_add():
     """ Adds a message to the database
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns True success if the message could be added and False otherwise
@@ -4254,6 +4256,39 @@ def message_add():
     return jsonify({'success': True, 'message': 'All messages stored'})
 
 
+@app.route('/userNames', methods = ['GET'])
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
+def user_names():
+    """ Returns the list of known users
+    Arguments: (GET)
+        t - the session token
+    Return:
+        Returns True success if the messages count be marked as read and False otherwise
+    Notes:
+         If the token is invalid, or a problem occurs, a 404 error is returned
+   """
+    db = SPARCdDatabase(DEFAULT_DB_PATH)
+    token = request.args.get('t')
+    print('USER NAMES', flush=True)
+
+    # Check the credentials
+    token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
+    if token_valid is None or user_info is None:
+        return "Not Found", 404
+    if not token_valid or not user_info:
+        return "Unauthorized", 401
+
+    # Get the messages
+    s3_info = s3u.get_s3_info(user_info.url,
+                              user_info.name,
+                              lambda: get_password(token, db),
+                              lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
+
+    users = db.user_names(s3_info.id)
+
+    return jsonify({'success': True, 'users': users, 'message': 'All user names returned'})
+
+
 @app.route('/messageGet', methods = ['GET'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def message_get():
@@ -4291,7 +4326,7 @@ def message_get():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def message_read():
     """ Marks messages are read
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns True success if the messages count be marked as read and False otherwise
@@ -4333,7 +4368,7 @@ def message_read():
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 def message_delete():
     """ Gets messages for the user
-    Arguments: (GET)
+    Arguments: (POST)
         t - the session token
     Return:
         Returns True success if the messages could me marked as deleted and False otherwise
