@@ -36,7 +36,16 @@ export default function UserNames({ filteredUsers, popupOffset, onSelectUser }) 
       }}
     >
       {filteredUsers.map((name) => (
-        <MenuItem key={name} onMouseDown={() => onSelectUser(name)}>
+        <MenuItem
+                key={name}
+                onMouseDown={() => onSelectUser(name)}
+                sx={{'&:hover': {
+                        backgroundColor: 'primary.main',
+                        color: 'primary.contrastText',
+                      },
+                  cursor: 'pointer',
+                }}
+        >
           {name}
         </MenuItem>
       ))}
