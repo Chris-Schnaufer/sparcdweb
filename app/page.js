@@ -674,28 +674,30 @@ export default function Home() {
     clearSearch();
   }, [breadcrumbs, clearSearch]);
 
-  /**
-   * Sets the current action based upon the users selection
-   * @function
-   * @param {object} action The working user action
-   * @param {object} actionData Data associated with the action
-   * @param {boolean} areEditing Is this an editing command
-   * @param {string} {breadcrumbName} What is the display name of this action
-   */
-  const setCurrentAction = React.useCallback((action, actionData, areEditing, breadcrumbName) => {
+/**
+ * Sets the current action based upon the users selection
+ * @function
+ * @param {object} action The working user action
+ * @param {object} actionData Data associated with the action
+ * @param {boolean} areEditing Is this an editing command
+ * @param {string} {breadcrumbName} What is the display name of this action
+ * @param {object} {breadcrumbOverride} Optional explicit state to save in the breadcrumb instead of current state
+ * @param {object} {breadcrumbOverride.action} The action to save in the breadcrumb
+ * @param {object} {breadcrumbOverride.actionData} The action data to save in the breadcrumb
+ * @param {boolean} {breadcrumbOverride.editing} The editing state to save in the breadcrumb
+ */
+ const setCurrentAction = React.useCallback((action, actionData, areEditing, breadcrumbName, breadcrumbOverride) => {
     if (Object.values(UserActions).indexOf(action) > -1) {
       if (!actionData) {
         actionData = null;
       }
       // TODO: save state and data (and auto-restore)
-      const prevAction = curAction;
-      const prevActionData = curActionData;
-      const prevEditing = editing;
+      const prevAction = breadcrumbOverride?.action ?? curAction;
+      const prevActionData = breadcrumbOverride?.actionData ?? curActionData;
+      const prevEditing = breadcrumbOverride?.editing ?? editing;
       if (breadcrumbName) {
-        let curCrumbs = [...breadcrumbs];
         let newBreadcrumb = {name:breadcrumbName, action:prevAction, actionData:prevActionData, editing:prevEditing};
-        curCrumbs.push(newBreadcrumb);
-        setBreadcrumbs(curCrumbs);
+        setBreadcrumbs(prev => [...prev, newBreadcrumb]);
       }
       setCurAction(action);
       setCurActionData(actionData);
