@@ -30,12 +30,13 @@ import { pad } from './utils';
  * Renders the UI for managing the list of uploaded folders
  * @function
  * @param {boolean} loadingCollections Indicates if collections are being loaded
- * @param {string} selectedCollection The currently selected collection name
+ * @param {string} [selectedCollection] The currently selected collection name
+ * @param {function} onSelectionChange Called when the user selects a new collection
  * @param {function} onEditUpload Called when the user wants to edit an upload of a collection
  * @param {function} searchSetup Call when settting up or clearing search elements
  * @returns {object} The rendered UI
  */
-export default function CollectionsManage({loadingCollections, selectedCollection, onEditUpload, searchSetup}) {
+export default function CollectionsManage({loadingCollections, selectedCollection, onSelectionChange, onEditUpload, searchSetup}) {
   const theme = useTheme();
   const sidebarRef = React.useRef();
   const collectionsItems = React.useContext(CollectionsInfoContext);
@@ -46,13 +47,20 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
   const [searchIsSetup, setSearchIsSetup] = React.useState(false);
   const [selectionIndex, setSelectionIndex] = React.useState(-1);
   const [totalHeight, setTotalHeight] = React.useState(null);  // Default value is recalculated at display time
+  const [uploadSelectionIndex, setUploadSelectionIndex] = React.useState(-1);
 
   // Initialize collections information
   React.useEffect(() => {
-    if (collectionsItems && selectedCollection && (selectionIndex === -1 || selectionIndex >= collectionsItems.length)) {
-      setSelectionIndex(collectionsItems.findIndex((item) => item.name === selectedCollection));
+    if (collectionsItems && selectedCollection.collectionName && (selectionIndex === -1 || selectionIndex >= collectionsItems.length)) {
+      const collIndex = collectionsItems.findIndex((item) => item.name === selectedCollection.collectionName);
+      setSelectionIndex(collIndex);
+      if (collIndex >= 0 && selectedCollection.uploadKey) {
+        setUploadSelectionIndex(collectionsItems[collIndex].uploads.findIndex((item) => item.key === selectedCollection.uploadKey));
+      } else {
+        setUploadSelectionIndex(-1);
+      }
     }
-  }, [collectionsItems, selectedCollection, selectionIndex, setSelectionIndex]);
+  }, [collectionsItems, selectedCollection, selectionIndex]);
 
   // Recalcuate available space in the window
   React.useLayoutEffect(() => {
@@ -65,13 +73,21 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
    // Scrolls the selected collection into view
   React.useLayoutEffect(() => {
     if (selectionIndex >= 0 && collectionsItems && selectionIndex < collectionsItems.length) {
+      // Scroll the collection into view
       const collectionName = collectionsItems[selectionIndex].name;
       let el = document.getElementById("collection-"+collectionName);
       if (el) {
         el.scrollIntoView({behavior: 'instant', block: 'center', inline: 'center'});
       }
+
+      if (uploadSelectionIndex >= 0 && uploadSelectionIndex < collectionsItems[selectionIndex].uploads.length) {
+        el = document.getElementById('collection-upload-item-' + collectionsItems[selectionIndex].uploads[uploadSelectionIndex].name);
+        if (el) {
+          el.scrollIntoView({behavior: 'instant', block: 'center', inline: 'center'});
+        }
+      }
     }
-  }, [collectionsItems, selectionIndex])
+  }, [collectionsItems, selectionIndex, uploadSelectionIndex])
 
   /**
    * Searches for collections that meet the search criteria and scrolls it into view
@@ -106,7 +122,7 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
     window.setTimeout(() => {
         onEditUpload(curCollectionId, itemKey, "Collections", () => {}, () => setEditingUploadMask(false));
     }, 200);
-  }, [onEditUpload, setEditingUploadMask]);
+  }, [collectionsItems, onEditUpload, selectionIndex]);
 
   /**
    * Returns a function that will set the expanded panel name for Accordian panels
@@ -127,10 +143,14 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
    * @param {string} bucket The bucket of the new selected collection
    * @param {string} id The ID of the new selected collection
    */
-  function onCollectionChange(event, bucket, id) {
+  const onCollectionChange = React.useCallback((event, bucket, id) => {
     event.preventDefault();
-    setSelectionIndex(collectionsItems.findIndex((item) => item.bucket === bucket && item.id === id));
-  }
+
+    const collIndex = collectionsItems.findIndex((item) => item.bucket === bucket && item.id === id);
+    setSelectionIndex(collIndex);
+
+    onSelectionChange(collectionsItems[collIndex].name);
+  }, [collectionsItems, onSelectionChange]);
 
   /**
    * Formats the upload timestamp for display
@@ -212,7 +232,9 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
                             sx={{border:'2px solid rgba(128, 128, 185, 0.5)', borderRadius:'15px', minWidth:'400px', maxWidth:'400px',
                                   backgroundColor:'rgba(218, 232,242,0.7)',
                                   '&[data-active]': {borderColor:'rgba(155, 175, 202, 0.85)'},
-                                  '&:hover':{backgroundColor:'rgba(185, 185, 185, 0.25)'} }}>
+                                  '&:hover':{backgroundColor:'rgba(185, 185, 185, 0.25)'}
+                                }}
+                      >
                         <CardActionArea data-active={selectionIndex === idx ? '' : undefined}
                           sx={{height: '100%',  '&[data-active]': {backgroundColor:'rgba(64, 64, 64, 0.23)'} }}
                         >
@@ -257,8 +279,14 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
         <div id='collection-manage-workspace-uploads-wrapper' style={{minWidth:'460px', maxWidth:'460px', maxHeight:curHeight, paddingRight:'10px', overflowY:"scroll"}}>
           <Grid id='collection-manage-workspace-uploads-details' container direction="column" alignItems='start' justifyContent="start">
             { curCollection && curCollection.uploads.map((item, idx) =>
-              <Card id={"collection-upload-"+item.name} key={'collection-'+idx} variant="outlined" 
-                    sx={{minWidth:'100%', backgroundColor:'#D3DEE6', borderRadius:'10px', '&:hover':{backgroundColor:'rgba(0, 0, 0, 0.25)'} }}>
+              <Card id={"collection-upload-item-"+item.name} key={'collection-upload-item'+idx} variant="outlined" 
+                    data-active={uploadSelectionIndex === idx ? '' : undefined}
+                    sx={{minWidth:'100%', backgroundColor:'#D3DEE6', borderRadius:'10px', 
+                          '&:hover':{backgroundColor:'rgba(0, 0, 0, 0.25)'},
+                          '&[data-active]': {borderColor:'rgba(155, 175, 202, 0.85)',backgroundColor:'#BAC6CD'},
+                          '&[data-active]:hover': { backgroundColor:'rgba(0, 0, 0, 0.25)' },
+                        }}
+              >
                 <CardHeader title={
                                   <Grid id="collection-card-header-wrapper" container direction="row" alignItems="start" justifyContent="start" wrap="nowrap">
                                     <Grid>
@@ -357,8 +385,9 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
 CollectionsManage.propTypes = {
   loadingCollections: PropTypes.bool.isRequired,
   selectedCollection: PropTypes.string,
-  onEditUpload: PropTypes.func.isRequired,
-  searchSetup: PropTypes.func.isRequired,
+  onSelectionChange:  PropTypes.func.isRequired,
+  onEditUpload:       PropTypes.func.isRequired,
+  searchSetup:        PropTypes.func.isRequired,
 };
 
 CollectionsManage.defaultProps = {

@@ -146,7 +146,7 @@ export default function Landing({loadingCollections, loadingSandbox, onUserActio
           <Grid size={{xs:12, sm: 12, md:6 }}>
             <LandingCard title="Collections" subtitle="Organize and view collection uploads. View uploaded images and identify species"
                          action={{title:'Manage', 
-                                  onClick:() => onUserAction(UserActions.Collection, selCollectionInfo, false, 'Home'),
+                                  onClick:() => onUserAction(UserActions.Collection, {selCollectionInfo}, false, 'Home'),
                                   disabled: !curCollectionInfo && !loadingCollections}}
             >
               <LandingCollections loadingCollections={loadingCollections} onChange={setCollectionSelection} />

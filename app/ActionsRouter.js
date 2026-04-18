@@ -53,10 +53,16 @@ export default function ActionsRouter({action, curActionData, loadingCollections
   const handleEditUpload = React.useCallback((collectionId, uploadId, breadcrumbName, onSuccess, onFailure) => {
     onEditUpload(collectionId, uploadId, 
         (curUpload, curImages) => { // Success callback
+            const breadcrumbOverride = {action: UserActions.Collection,
+                                        actionData: { collectionName: curActionData?.collectionName, uploadKey: uploadId },
+                                        editing: false,
+                                        };
             onSetAction(UserActions.UploadEdit, 
-                             {collectionId, name:curUpload.name, uploadName:curUpload.key, uploadId:uploadId, location:curUpload.location, images:curImages},
-                             true,
-                             breadcrumbName);
+                         {collectionId, name:curUpload.name, uploadName:curUpload.key, uploadId:uploadId, location:curUpload.location, images:curImages},
+                         true,
+                         breadcrumbName,
+                         breadcrumbOverride
+                      );
             onSuccess?.();
           },
           () => {   // Failure callback
@@ -65,6 +71,16 @@ export default function ActionsRouter({action, curActionData, loadingCollections
         )
   }, [onEditUpload, onSetAction]);
 
+  /**
+   * Handles when a collection selection has been changed
+   * @function
+   * @param {string} collectionName The name of the collection that was selected
+   */
+  const handleCollectionSelectionChange = React.useCallback((collectionName) => {
+    onSetAction(UserActions.Collection, {collectionName}, false, null);
+  }, [curActionData, onSetAction]);
+
+  // Return the UI associated with the user action
   switch(action) {
     case UserActions.None:
       return (
@@ -95,6 +111,7 @@ export default function ActionsRouter({action, curActionData, loadingCollections
                             selectedCollection={curActionData} 
                             searchSetup={setupSearch}
                             onEditUpload={handleEditUpload}
+                            onSelectionChange={handleCollectionSelectionChange}
         />
     );
     case UserActions.Query:
