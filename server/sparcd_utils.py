@@ -21,6 +21,7 @@ from flask import request
 from camtrap.v016 import camtrap
 import image_utils
 import spd_crypt as crypt
+from sparcd_config import TEMP_SPECIES_STATS_FILE_NAME_POSTFIX, TEMP_SPECIES_STATS_FILE_TIMEOUT_SEC
 from sparcd_db import SPARCdDatabase
 import sparcd_collections as sdc
 import sparcd_file_utils as sdfu
@@ -37,10 +38,6 @@ TIMEOUT_COLLECTIONS_FILE_SEC = 12 * 60 * 60
 TEMP_COLLECTION_FILE_NAME = SPARCD_PREFIX + 'coll.json'
 # Name of temporary species file
 TEMP_LOCATIONS_FILE_NAME = SPARCD_PREFIX + 'locations.json'
-
-# Name of temporary upload stats file
-TEMP_SPECIES_STATS_FILE_NAME_POSTFIX = '-' + SPARCD_PREFIX + 'species-stats.json'
-TEMP_SPECIES_STATS_FILE_TIMEOUT_SEC = 12 * 60 * 60
 
 # Uploads table timeout length
 TIMEOUT_UPLOADS_SEC = 3 * 60 * 60

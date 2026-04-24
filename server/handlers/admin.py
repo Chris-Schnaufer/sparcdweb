@@ -373,7 +373,7 @@ def handle_admin_species(user_info: UserInfo,
 
     # Make sure this user is an admin
     if not is_admin:
-        return False
+        return None
 
     cur_species = s3u.load_sparcd_config(SPECIES_JSON_FILE_NAME,
                                          species_temp_filename,
