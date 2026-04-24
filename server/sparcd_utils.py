@@ -16,10 +16,13 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 
+from flask import request
+
 from camtrap.v016 import camtrap
 import image_utils
 import spd_crypt as crypt
 from sparcd_db import SPARCdDatabase
+import sparcd_collections as sdc
 import sparcd_file_utils as sdfu
 from spd_types.s3info import S3Info
 from s3_connect import s3_connect
@@ -35,12 +38,23 @@ TEMP_COLLECTION_FILE_NAME = SPARCD_PREFIX + 'coll.json'
 # Name of temporary species file
 TEMP_LOCATIONS_FILE_NAME = SPARCD_PREFIX + 'locations.json'
 
+# Name of temporary upload stats file
+TEMP_SPECIES_STATS_FILE_NAME_POSTFIX = '-' + SPARCD_PREFIX + 'species-stats.json'
+TEMP_SPECIES_STATS_FILE_TIMEOUT_SEC = 12 * 60 * 60
+
 # Uploads table timeout length
 TIMEOUT_UPLOADS_SEC = 3 * 60 * 60
 
 # Allowed movie extensions for upload
 UPLOAD_KNOWN_MOVIE_EXT = ['.mp4', '.mov', '.avi']
 
+# Maximum tries to get a lock for loading collections
+MAX_STAT_FETCH_TRIES = 10
+# Maximium number of seconds to wait for collections to get loaded before giving up
+MAX_STAT_FETCH_WAIT_SEC = 5 * 60
+# Sleep interval value while waiting for collections to load
+STAT_FETCH_WAIT_INTERVAL_SEC = (MAX_STAT_FETCH_WAIT_SEC) / \
+                                                ((MAX_STAT_FETCH_TRIES+1)*MAX_STAT_FETCH_TRIES/2)
 
 def make_boolean(value) -> bool:
     """ Converts the parameter to a boolean value
@@ -700,26 +714,27 @@ def process_upload_changes(s3_info: S3Info, \
     return success_files, failed_files
 
 
-def token_user_valid(db: SPARCdDatabase, request, token, session_expire_sec: int) -> tuple:
+def token_user_valid(db: SPARCdDatabase, req, token: str, session_expire_sec: int) -> tuple:
     """ Checks that the token and user are valid
     Arguments:
         db: the database to access
-        request: the incoming request environment
+        req: the incoming request environment
+        token: the user request token
         session_expire_sec: the number of seconds before the session is considered expired
     Return:
         Returns a tuple with the first boolean value indicating if the token is valid, and the
         second value containing the loaded user information. None is returned for each of these
         values if there is an issue
     """
-    if not db or not request or not token or not session_expire_sec:
+    if not db or not req or not token or not session_expire_sec:
         return None, None
 
     # Get the client IP and check against the user agent information to ensure the IP is well
     # formed
-    client_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.environ.get('HTTP_ORIGIN', \
-                                    request.environ.get('HTTP_REFERER',request.remote_addr) \
+    client_ip = req.environ.get('HTTP_X_FORWARDED_FOR', req.environ.get('HTTP_ORIGIN', \
+                                    req.environ.get('HTTP_REFERER',req.remote_addr) \
                                     ))
-    client_user_agent =  request.environ.get('HTTP_USER_AGENT', None)
+    client_user_agent =  req.environ.get('HTTP_USER_AGENT', None)
     if not client_ip or client_ip is None or not client_user_agent or client_user_agent is None:
         return None, None
 
@@ -998,3 +1013,97 @@ def adjust_timestamps(files: tuple, time_adjust: relativedelta, bucket: str, s3_
                 traceback.print_exception(ex)
 
     return media_info
+
+
+def load_species_stats(db: SPARCdDatabase, is_admin: bool, s3_info: S3Info) -> Optional[tuple]:
+    """ Generates the species stats
+    Arguments:
+        db: the database to access
+        s3_info: the connection information for the S3 instance
+    Return:
+        Returns the loaded stats or None if a problem is found
+    """
+    loaded_stats = None
+
+    lock_name = 'species_stats'
+
+    stats_temp_filename = os.path.join(tempfile.gettempdir(), s3_info.id + \
+                                                            TEMP_SPECIES_STATS_FILE_NAME_POSTFIX)
+    loaded_stats = sdfu.load_timed_info(stats_temp_filename, TEMP_SPECIES_STATS_FILE_TIMEOUT_SEC)
+    if loaded_stats is None:
+        # If we can get the lock we load the stats, otherwise wait for the stats to generate
+        have_lock = False
+        lock_id = None
+        try:
+            lock_id = db.get_lock(lock_name)
+            if lock_id is not None:
+                have_lock = True
+
+                # Get collections from the database
+                coll_info = sdc.load_collections(db, is_admin, s3_info)
+                if coll_info:
+                    # Generate the stats
+                    loaded_stats = species_stats(db, coll_info, s3_info.id, s3_info)
+
+                db.release_lock(lock_name, lock_id)
+                have_lock = False
+                lock_id = None
+
+                if loaded_stats is not None:
+                    sdfu.save_timed_info(stats_temp_filename, loaded_stats)
+            else:
+                # We wait for the collections to get loaded
+                # This uses a linear wait/sleep but that can be changed
+                tries = 0
+                while tries < MAX_STAT_FETCH_TRIES:
+                    tries += 1
+                    time.sleep(tries * STAT_FETCH_WAIT_INTERVAL_SEC)
+
+                    loaded_stats = sdfu.load_timed_info(stats_temp_filename,
+                                                                TEMP_SPECIES_STATS_FILE_TIMEOUT_SEC)
+                    if loaded_stats:
+                        tries += MAX_STAT_FETCH_TRIES
+        finally:
+            # If we have the lock, something must have happened so we release the lock
+            if have_lock is True and lock_id is not None:
+                db.release_lock(lock_name, lock_id)
+
+    return loaded_stats
+
+
+def get_request_files() -> Optional[list]:
+    """ Gets all the request file json for a request
+    Arguments:
+        request: the current request
+    Return:
+        The JSON object as described in the request (all file parameters are combined), or None if
+        there's a problem - such as files not being found, or not being JSON strings, or multiple
+        file parameters not being able to be combined
+    """
+    all_files = request.form.get('files')
+    if not all_files:
+        return None
+
+    # Get all the file names
+    try:
+        all_files = json.loads(all_files)
+    except json.JSONDecodeError as ex:
+        print('ERROR: Unable to load file list JSON', ex, flush=True)
+        return None
+
+    # Check if we have additional files to upload
+    req_index = 1
+    while True:
+        more_files = request.form.get(f'files{req_index}')
+        if not more_files:
+            break
+
+        req_index += 1
+        try:
+            more_files = json.loads(more_files)
+            all_files = all_files + more_files
+        except json.JSONDecodeError as ex:
+            print('ERROR: Unable to load file list JSON', ex, flush=True)
+            return None
+
+    return all_files

@@ -266,14 +266,14 @@ def get_filter_dt(filter_name: str, filters: tuple) -> Optional[datetime.datetim
     return None
 
 
-def query_output(results: Results, results_id: str) -> tuple:
+def query_output(results: Results, results_id: str) -> dict:
     """ Formats the results into something that can be returned to the caller
     Arguments:
         results: the results class containing the results of the filter_uploads function
         results_id: the unique identifier for this result
         user_settings: the user settings
     Return:
-        Returns a tuple containing the formatted results
+        Returns a dict containing the formatted results and supporting information
     """
     if not results:
         return tuple()
