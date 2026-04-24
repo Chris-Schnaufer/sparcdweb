@@ -410,8 +410,12 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
         }
       }
 
-      setMaxTilesDisplay(prev => prev + 40 + ((prev + 40) % rowTilesCount));
+      const newCount = maxTilesDisplay  + 40 + ((maxTilesDisplay + 40) % rowTilesCount);
+      setMaxTilesDisplay(newCount);
+      return newCount;
     }
+
+    return maxTilesDisplay;
   }, [curUpload, maxTilesDisplay]);
 
   // Check if we need to setup an interaction observer
@@ -767,9 +771,10 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
 
     const foundEl = document.getElementById(foundImage.name);
     if (!foundEl) {
+      let curMaxDisplay = maxTilesDisplay;
       const imageIndex = curUpload.images.findIndex((item) => item.name === foundImage.name);
-      while (maxTilesDisplay < imageIndex && maxTilesDisplay < curUpload.images.length - 1) {
-        onMoreImages();
+      while (curMaxDisplay < imageIndex && curMaxDisplay < curUpload.images.length - 1) {
+        curMaxDisplay = onMoreImages();
       }
 
       window.setTimeout(() => handleImageSearch(searchTerm, iterCount + 1), 500);
