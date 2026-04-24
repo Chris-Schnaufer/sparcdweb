@@ -16,6 +16,8 @@ from flask_cors import cross_origin
 import handlers.admin as hadmin
 import handlers.base as hbase
 import handlers.image as himage
+import handlers.install as hinstall
+import handlers.message as hmessage
 import handlers.next as hnext
 import handlers.query as hquery
 import handlers.sandbox as hsand
@@ -28,7 +30,7 @@ import sparcd_utils as sdu
 # TODO: Move the code using the following to sparcd_utils
 from sparcd_utils import TEMP_SPECIES_STATS_FILE_NAME_POSTFIX, TEMP_SPECIES_STATS_FILE_TIMEOUT_SEC
 import spd_crypt as crypt
-from s3_access import S3Connection, SPARCD_PREFIX
+from s3_access import SPARCD_PREFIX
 import s3_utils as s3u
 
 
@@ -135,16 +137,6 @@ print(f'Using database at {DEFAULT_DB_PATH}', flush=True)
 print(f'Temporary folder at {tempfile.gettempdir()}', flush=True)
 
 authenticated_route = make_authenticated_route(DEFAULT_DB_PATH, SESSION_EXPIRE_SECONDS)
-
-def hash2str(text: str) -> str:
-    """ Returns the hash of the passed in string
-    Arguments:
-        text: the string to hash
-    Return:
-        The hash value as a string
-    """
-    return hashlib.md5(text.encode('utf-8')).hexdigest()
-
 
 def get_password(token: str, db: SPARCdDatabase) -> Optional[str]:
     """ Returns the password associated with the token in plain text
@@ -285,7 +277,7 @@ def login_token():
                                 SESSION_EXPIRE_SECONDS,
                                 # We don't have the S3 ID yet so only pass in the name
                                 TEMP_SPECIES_FILE_NAME,
-                                hash2str
+                                crypt.hash2str
                                )
     if not result:
         return "Not Found", 404
@@ -589,7 +581,7 @@ def check_changes(*, db, token, user_info):
         401: if the session token is invalid or expired.
         404: if the request is malformed or the user cannot be found.
    """
-    print('CHECK CHANGES', request, flush=True)
+    print(f'CHECK CHANGES user={user_info.name}', request, flush=True)
 
     # Check the rest of the request parameters
     collection_id = request.form.get('id', None)
@@ -1945,27 +1937,19 @@ def admin_abandon_changes(*, db, token, user_info):
 
 @app.route('/installCheck', methods = ['GET'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
-def new_install_check():
+@authenticated_route()
+def new_install_check(*, db, token, user_info):
     """ Checks if the S3 endpoint can support a new installation
-    Arguments: (GET)
-        t - the session token
-    Return:
-        Returns True/False if the endpoint appears to be able to support a new S3 installation
-        (or not), if there are already collections on the remote endpoint, if the user is in the
-        database already for this endpoint and is/is not admin.
-    Notes:
-         If the token is invalid, or a problem occurs, a 404 error is returned
+    Arguments:
+        db: the database instance (injected by authenticated_route)
+        token: the session token (injected by authenticated_route)
+        user_info: the authenticated user's information (injected by authenticated_route)
+    Returns:
+        200: JSON object
+        401: if the session token is invalid or expired.
+        404: if the request is malformed or the user cannot be found.
    """
-    db = SPARCdDatabase(DEFAULT_DB_PATH)
-    token = request.args.get('t')
-    print('NEW INSTALL CHECK', flush=True)
-
-    # Check the credentials
-    token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
-    if token_valid is None or user_info is None:
-        return "Not Found", 404
-    if not token_valid or not user_info:
-        return "Unauthorized", 401
+    print(f'NEW INSTALL CHECK user={user_info.name}', flush=True)
 
     # Perform the checks on the S3 instance to see that we can support a new installation
     s3_info = s3u.get_s3_info(user_info.url,
@@ -1973,77 +1957,30 @@ def new_install_check():
                               lambda: get_password(token, db),
                               lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
 
-    # Return data
-    return_data = { 'success':False,
-                    'admin': bool(user_info.admin),
-                    'needsRepair': False,
-                    'failedPerms': False,
-                    'newInstance': False,
-                    'message': 'Success'
-                   }
+    resp = hinstall.handle_new_install_check(db, user_info, s3_info)
+    if resp is False:
+        return "Not Found", 406
+    if resp is None:
+        return "Not Found", 404
 
-    # Check if the S3 instance needs repairs and not a new install
-    needs_repair, has_everything = S3Connection.needs_repair(s3_info)
-    if needs_repair:
-        return_data['needsRepair'] = True
-        return_data['message'] = 'You can try to perform a repair on the S3 endpoint'
-        return jsonify(return_data)
-    if has_everything:
-        # The endpoint has everything needed (what are they up to?)
-        return_data['success'] = True
-        return_data['admin'] = False
-        return_data['message'] = 'The endpoint already is configured for SPARCd'
-        return jsonify(return_data)
+    return jsonify(resp)
 
-    # Check if they can make a new install
-    can_create, test_bucket = S3Connection.check_new_install_possible(s3_info)
-    if not can_create:
-        return_data['failedPerms'] = True
-        return_data['message'] = 'Unable to install SPARCd at the S3 endpoint. Please ' \
-                                        'contact your S3 administrator about permissions'
-        return jsonify(return_data)
-
-    # Check that there aren't any administrators for this endpoint in the database
-    # If it's a new install, there shouldn't be an admin in the database (the endpoint is
-    # unknown so no one should be an admin)
-    if not bool(user_info.admin):
-        if db.have_any_known_admin(s3_info.id):
-            return_data['admin'] = False        # always false or we wouldn't be here
-            return_data['message'] = 'You are not authorized to make a new installation or ' \
-                                            'repair an existing one. Please contact your ' \
-                                            'administrator'
-            return jsonify(return_data)
-
-    # TODO: When have messages to users and the test bucket isn't removed, inform the admin(s)
-    if test_bucket is not None:
-        print(f'WARNING: unable to delete testing bucket {test_bucket}', flush=True)
-
-    return_data['success'] = True
-    return_data['newInstance'] = True
-    return jsonify(return_data)
 
 @app.route('/installNew', methods = ['GET'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
-def install_new():
+@authenticated_route()
+def install_new(*, db, token, user_info):
     """ Attempts to create a new SPARCd installation
-    Arguments: (GET)
-        t - the session token
-    Return:
-        Returns True success if the endpoint could be configured for SPARCd and
-        False if not.
-    Notes:
-         If the token is invalid, or a problem occurs, a 404 error is returned
+    Arguments:
+        db: the database instance (injected by authenticated_route)
+        token: the session token (injected by authenticated_route)
+        user_info: the authenticated user's information (injected by authenticated_route)
+    Returns:
+        200: JSON object
+        401: if the session token is invalid or expired.
+        404: if the request is malformed or the user cannot be found.
    """
-    db = SPARCdDatabase(DEFAULT_DB_PATH)
-    token = request.args.get('t')
-    print('NEW INSTALL', flush=True)
-
-    # Check the credentials
-    token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
-    if token_valid is None or user_info is None:
-        return "Not Found", 404
-    if not token_valid or not user_info:
-        return "Unauthorized", 401
+    print(f'NEW INSTALL  user={user_info.name}', flush=True)
 
     # Perform the checks on the S3 instance to see that we can support a new installation
     s3_info = s3u.get_s3_info(user_info.url,
@@ -2051,53 +1988,29 @@ def install_new():
                               lambda: get_password(token, db),
                               lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
 
-    # Check that we can create
-    sole_user = False
-    if not bool(user_info.admin):
-        if not db.is_sole_user(s3_info.id, user_info.name):
-            return jsonify({'success': False,
-                                'message': 'You are not authorized to create a new ' \
-                                            'SPARCd configuration'})
-        sole_user = True
+    resp = hinstall.handle_new_install(db, user_info, s3_info, DEFAULT_SETTINGS_PATH)
+    if resp is False:
+        return "Not Found", 406
+    if resp is None:
+        return "Not Found", 404
 
-    # Check if the S3 instance needs repairs and of is all set
-    needs_repair, has_everything = S3Connection.needs_repair(s3_info)
-
-    if needs_repair or has_everything:
-        return jsonify({'success': False, 'message': 'There is already an existing SPARCd ' \
-                                                        'configuration'})
-
-    # The user is apparently the sole user or an admin, and the S3 instance is not setup for SPARCd
-    if not S3Connection.create_sparcd(s3_info, DEFAULT_SETTINGS_PATH):
-        return jsonify({'success': False, 'message': 'Unable to configure new SPARCd instance'})
-
-    # Make this user the admin if they're the only one in the DB
-    if sole_user:
-        db.update_user(s3_info.id, user_info.name, user_info.email, True)
-
-    return jsonify({'success': True})
+    return jsonify(resp)
 
 @app.route('/installRepair', methods = ['GET'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
-def install_repair():
+@authenticated_route()
+def install_repair(*, db, token, user_info):
     """ Attempts to repair an existing SPARCd installation
-    Arguments: (GET)
-        t - the session token
-    Return:
-        Returns True success if the endpoint could be repaired and False if not.
-    Notes:
-         If the token is invalid, or a problem occurs, a 404 error is returned
+    Arguments:
+        db: the database instance (injected by authenticated_route)
+        token: the session token (injected by authenticated_route)
+        user_info: the authenticated user's information (injected by authenticated_route)
+    Returns:
+        200: JSON object
+        401: if the session token is invalid or expired.
+        404: if the request is malformed or the user cannot be found.
    """
-    db = SPARCdDatabase(DEFAULT_DB_PATH)
-    token = request.args.get('t')
-    print('REPAIR INSTALL', flush=True)
-
-    # Check the credentials
-    token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
-    if token_valid is None or user_info is None:
-        return "Not Found", 404
-    if not token_valid or not user_info:
-        return "Unauthorized", 401
+    print(f'REPAIR INSTALL user={user_info.name}', flush=True)
 
     # Perform the checks on the S3 instance to see that we can support a new installation
     s3_info = s3u.get_s3_info(user_info.url,
@@ -2105,168 +2018,92 @@ def install_repair():
                               lambda: get_password(token, db),
                               lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
 
-    # Check that we can create
-    if not bool(user_info.admin):
-        return jsonify({'success': False, 'message': 'You are not authorized to repair the ' \
-                                                    'SPARCd configuration'})
+    resp = hinstall.handle_repair_install(user_info, s3_info, DEFAULT_SETTINGS_PATH)
+    if resp is False:
+        return "Not Found", 406
+    if resp is None:
+        return "Not Found", 404
 
-    # Check if the S3 instance needs repairs and of is all set
-    needs_repair, has_everything = S3Connection.needs_repair(s3_info)
+    return jsonify(resp)
 
-    if not needs_repair or has_everything:
-        return jsonify({'success': True, \
-                            'message': 'The SPARCd installation doesn\'t need repair'})
-
-    # Make repairs
-    if not S3Connection.repair_sparcd(s3_info, DEFAULT_SETTINGS_PATH):
-        return jsonify({'success': False, 'message': 'Unable to repair this SPARCd instance'})
-
-    return jsonify({'success': True})
 
 @app.route('/setUploadComplete', methods = ['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
-def set_upload_complete():
+@authenticated_route()
+def set_upload_complete(*, db, token, user_info):
     """ Marks an incomplete upload as completed
-    Arguments: (POST)
-        t - the session token
-    Return:
-        Returns True success if the upload could be marked as completed and False otherwise
-    Notes:
-         If the token is invalid, or a problem occurs, a 404 error is returned
+    Arguments:
+        db: the database instance (injected by authenticated_route)
+        token: the session token (injected by authenticated_route)
+        user_info: the authenticated user's information (injected by authenticated_route)
+    Returns:
+        200: JSON object
+        401: if the session token is invalid or expired.
+        404: if the request is malformed or the user cannot be found.
    """
-    db = SPARCdDatabase(DEFAULT_DB_PATH)
-    token = request.args.get('t')
-    print('SET UPLOAD COMPLETE', flush=True)
+    print(f'SET UPLOAD COMPLETE user={user_info.name}', flush=True)
 
-    # Check the credentials
-    token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
-    if token_valid is None or user_info is None:
-        return "Not Found", 404
-    if not token_valid or not user_info:
-        return "Unauthorized", 401
-
-    # Get the rest of the request parameters
-    col_id = request.form.get('collectionId', None)
-    up_key = request.form.get('uploadKey', None)
-
-    # Check what we have from the requestor
-    if not all(item for item in [col_id, up_key]):
-        return "Not Found", 406
-
-    # Mark the setup as complete
+    # Perform the checks on the S3 instance to see that we can support a new installation
     s3_info = s3u.get_s3_info(user_info.url,
                               user_info.name,
                               lambda: get_password(token, db),
                               lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
 
-    # Get the collection we need
-    all_colls = sdc.load_collections(db, bool(user_info.admin), s3_info)
-    if not all_colls:
-        return jsonify({'success': False,
-                            'message': "Unable to load collections for marking upload complete"})
-
-    coll = [one_coll for one_coll in all_colls if one_coll["id"] == col_id]
-    if not coll:
-        return jsonify({'success': False,
-                            'message': 'Unable to find the collection needed to mark upload as ' \
-                                        'completed'})
-    coll = coll[0]
-
-    # Find the upload in the collection
-    upload = [one_up for one_up in coll['uploads'] if one_up["key"] == up_key]
-    if not upload:
-        return jsonify({'success': False,
-                            'message': 'Unable to find the incomplete upload in the collections'})
-    upload = upload[0]
-
-    # Make sure this user has permissions to do this
-    if not bool(user_info.admin) and user_info.name == upload['uploadUser']:
+    resp = hbase.handle_upload_complete(db, user_info, s3_info)
+    if resp is False:
+        return "Not Found", 406
+    if resp is None:
         return "Not Found", 404
 
-    # Update the counts of the uploaded images to reflect what's on the server
-    S3Connection.upload_recalculate_image_count(s3_info, coll['bucket'], upload['key'])
-
-    # Remove the upload from the database
-    db.sandbox_upload_complete_by_info(s3_info.id, user_info.name, coll['bucket'],
-                                                                                    upload['key'])
-
-    return jsonify({'success': True, 'message': 'Successfully marked upload as completed'})
+    return jsonify(resp)
 
 
 @app.route('/messageAdd', methods = ['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
-def message_add():
+@authenticated_route()
+def message_add(*, db, token, user_info):
     """ Adds a message to the database
-    Arguments: (POST)
-        t - the session token
-    Return:
-        Returns True success if the message could be added and False otherwise
-    Notes:
-         If the token is invalid, or a problem occurs, a 404 error is returned
+    Arguments:
+        db: the database instance (injected by authenticated_route)
+        token: the session token (injected by authenticated_route)
+        user_info: the authenticated user's information (injected by authenticated_route)
+    Returns:
+        200: JSON object
+        401: if the session token is invalid or expired.
+        404: if the request is malformed or the user cannot be found.
    """
-    db = SPARCdDatabase(DEFAULT_DB_PATH)
-    token = request.args.get('t')
-    print('ADD MESSAGE', flush=True)
+    print(f'ADD MESSAGE user={user_info.name}', flush=True)
 
-    # Check the credentials
-    token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
-    if token_valid is None or user_info is None:
-        return "Not Found", 404
-    if not token_valid or not user_info:
-        return "Unauthorized", 401
-
-    # Get the rest of the request parameters
-    receiver = request.form.get('receiver', None)
-    subject = request.form.get('subject', None)
-    message = request.form.get('message', None)
-    priority = request.form.get('priority', None)
-
-    # Check what we have from the requestor
-    if not all(item for item in [receiver, subject]):
-        return "Not Found", 406
-
-    # Check the parameters
-    if not message:
-        message = ""
-    if priority is None:
-        priority = "normal"
-
-    # Add the message
+    # Perform the checks on the S3 instance to see that we can support a new installation
     s3_info = s3u.get_s3_info(user_info.url,
                               user_info.name,
                               lambda: get_password(token, db),
                               lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
 
-    all_receivers = [one_rec.strip() for one_rec in receiver.split(',')]
+    resp = hmessage.handle_message_add(db, user_info, s3_info)
+    if resp is False:
+        return "Not Found", 406
+    if resp is None:
+        return "Not Found", 404
 
-    # Add the messages
-    for one_rec in all_receivers:
-        db.message_add(s3_info.id, user_info.name, one_rec, subject, message, priority)
-
-    return jsonify({'success': True, 'message': 'All messages stored'})
+    return jsonify(resp)
 
 
 @app.route('/userNames', methods = ['GET'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
-def user_names():
+@authenticated_route()
+def user_names(*, db, token, user_info):
     """ Returns the list of known users
-    Arguments: (GET)
-        t - the session token
-    Return:
-        Returns True success if the messages count be marked as read and False otherwise
-    Notes:
-         If the token is invalid, or a problem occurs, a 404 error is returned
+    Arguments:
+        db: the database instance (injected by authenticated_route)
+        token: the session token (injected by authenticated_route)
+        user_info: the authenticated user's information (injected by authenticated_route)
+    Returns:
+        200: JSON object
+        401: if the session token is invalid or expired.
+        404: if the request is malformed or the user cannot be found.
    """
-    db = SPARCdDatabase(DEFAULT_DB_PATH)
-    token = request.args.get('t')
-    print('USER NAMES', flush=True)
-
-    # Check the credentials
-    token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
-    if token_valid is None or user_info is None:
-        return "Not Found", 404
-    if not token_valid or not user_info:
-        return "Unauthorized", 401
+    print(f'USER NAMES user={user_info.name}', flush=True)
 
     # Get the messages
     s3_info = s3u.get_s3_info(user_info.url,
@@ -2281,25 +2118,19 @@ def user_names():
 
 @app.route('/messageGet', methods = ['GET'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
-def message_get():
+@authenticated_route()
+def message_get(*, db, token, user_info):
     """ Gets messages for the user
-    Arguments: (GET)
-        t - the session token
-    Return:
-        Returns True success and the messages if they could be retrieved and False otherwise
-    Notes:
-         If the token is invalid, or a problem occurs, a 404 error is returned
+    Arguments:
+        db: the database instance (injected by authenticated_route)
+        token: the session token (injected by authenticated_route)
+        user_info: the authenticated user's information (injected by authenticated_route)
+    Returns:
+        200: JSON object
+        401: if the session token is invalid or expired.
+        404: if the request is malformed or the user cannot be found.
    """
-    db = SPARCdDatabase(DEFAULT_DB_PATH)
-    token = request.args.get('t')
-    print('GET MESSAGE', flush=True)
-
-    # Check the credentials
-    token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
-    if token_valid is None or user_info is None:
-        return "Not Found", 404
-    if not token_valid or not user_info:
-        return "Unauthorized", 401
+    print(f'GET MESSAGE user={user_info.name}', flush=True)
 
     # Get the messages
     s3_info = s3u.get_s3_info(user_info.url,
@@ -2314,31 +2145,19 @@ def message_get():
 
 @app.route('/messageRead', methods = ['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
-def message_read():
+@authenticated_route()
+def message_read(*, db, token, user_info):
     """ Marks messages are read
-    Arguments: (POST)
-        t - the session token
-    Return:
-        Returns True success if the messages count be marked as read and False otherwise
-    Notes:
-         If the token is invalid, or a problem occurs, a 404 error is returned
+    Arguments:
+        db: the database instance (injected by authenticated_route)
+        token: the session token (injected by authenticated_route)
+        user_info: the authenticated user's information (injected by authenticated_route)
+    Returns:
+        200: JSON object
+        401: if the session token is invalid or expired.
+        404: if the request is malformed or the user cannot be found.
    """
-    db = SPARCdDatabase(DEFAULT_DB_PATH)
-    token = request.args.get('t')
-    print('READ MESSAGE', flush=True)
-
-    # Check the credentials
-    token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
-    if token_valid is None or user_info is None:
-        return "Not Found", 404
-    if not token_valid or not user_info:
-        return "Unauthorized", 401
-
-    # Get the rest of the request parameters
-    ids = request.form.get('ids', None)
-    if ids is None:
-        return "Not Found", 406
-    ids = json.loads(ids)
+    print(f'READ MESSAGE user={user_info.name}', flush=True)
 
     # Get the messages
     s3_info = s3u.get_s3_info(user_info.url,
@@ -2346,51 +2165,40 @@ def message_read():
                               lambda: get_password(token, db),
                               lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
 
-    all_ids = [int(one_id) for one_id in ids]
-    db.messages_are_read(s3_info.id, user_info.name, all_ids)
-    if bool(user_info.admin):
-        db.messages_are_read(s3_info.id, 'admin', all_ids)
+    resp = hmessage.handle_message_read(db, user_info, s3_info)
+    if resp is False:
+        return "Not Found", 406
+    if resp is None:
+        return "Not Found", 404
 
-    return jsonify({'success': True, 'message': 'Messages were marked as read'})
+    return jsonify(resp)
 
 
 @app.route('/messageDelete', methods = ['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
-def message_delete():
-    """ Gets messages for the user
-    Arguments: (POST)
-        t - the session token
-    Return:
-        Returns True success if the messages could me marked as deleted and False otherwise
-    Notes:
-         If the token is invalid, or a problem occurs, a 404 error is returned
+@authenticated_route()
+def message_delete(*, db, token, user_info):
+    """ Handles deleting messages
+    Arguments:
+        db: the database instance (injected by authenticated_route)
+        token: the session token (injected by authenticated_route)
+        user_info: the authenticated user's information (injected by authenticated_route)
+    Returns:
+        200: JSON object
+        401: if the session token is invalid or expired.
+        404: if the request is malformed or the user cannot be found.
    """
-    db = SPARCdDatabase(DEFAULT_DB_PATH)
-    token = request.args.get('t')
-    print('DELETE MESSAGE', flush=True)
+    print(f'DELETE MESSAGE user={user_info.name}', flush=True)
 
-    # Check the credentials
-    token_valid, user_info = sdu.token_user_valid(db, request, token, SESSION_EXPIRE_SECONDS)
-    if token_valid is None or user_info is None:
-        return "Not Found", 404
-    if not token_valid or not user_info:
-        return "Unauthorized", 401
-
-    # Get the rest of the request parameters
-    ids = request.form.get('ids', None)
-    if ids is None:
-        return "Not Found", 406
-    ids = json.loads(ids)
-
-    # Get the messages
     s3_info = s3u.get_s3_info(user_info.url,
                               user_info.name,
                               lambda: get_password(token, db),
                               lambda x: crypt.do_decrypt(WORKING_PASSCODE, x))
 
-    all_ids = [int(one_id) for one_id in ids]
-    db.messages_are_deleted(s3_info.id, user_info.name, all_ids)
-    if bool(user_info.admin):
-        db.messages_are_deleted(s3_info.id, 'admin', all_ids)
+    resp = hmessage.handle_message_delete(db, user_info, s3_info)
+    if resp is False:
+        return "Not Found", 406
+    if resp is None:
+        return "Not Found", 404
 
-    return jsonify({'success': True, 'message': 'Messages were marked as deleted'})
+    return jsonify(resp)

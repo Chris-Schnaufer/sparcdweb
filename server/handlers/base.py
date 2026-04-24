@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import hashlib
 import json
 import os
-from typing import Callable, Optional
+from typing import Callable, Optional, Union
 import uuid
 
 from flask import request
@@ -373,11 +373,9 @@ def handle_settings_admin(user_info: UserInfo, s3_info: S3Info) -> Union[bool, N
         return None
 
     # Log onto S3 to make sure the information is correct
-    pw_ok = False
     try:
         minio = s3_connect(s3_info)
         _ = minio.list_buckets()
-        pw_ok = True
     except MinioException as ex:
         print(f'Admin password check failed for {user_info.name}:', ex)
         return None
@@ -403,11 +401,9 @@ def handle_settings_owner(user_info: UserInfo, s3_info: S3Info) -> Union[bool, N
         return None
 
     # Log onto S3 to make sure the information is correct
-    pw_ok = False
     try:
         minio = s3_connect(s3_info)
         _ = minio.list_buckets()
-        pw_ok = True
     except MinioException as ex:
         print(f'Owner password check failed for {user_info.name}:', ex)
         return None
@@ -459,3 +455,55 @@ def handle_location_info(s3_info: S3Info) -> dict:
             'utm_x':0.0,
             'utm_y':0.0
            }
+
+
+def handle_upload_complete(db: SPARCdDatabase, user_info: UserInfo,
+                                                        s3_info: S3Info) -> Union[dict, bool, None]:
+    """ Handles when a sandbox upload is complete
+    Arguments:
+        db: the database instance
+        user_info: the user information
+        s3_info: the S3 endpoint information
+        upload_id: the ID of the upload
+    Return:
+        A dict for marking an upload complete upon success. False is returned if there is a problem
+        with the request parameters. None is returned if the request can't be completed
+    """
+    # Get the rest of the request parameters
+    col_id = request.form.get('collectionId')
+    up_key = request.form.get('uploadKey')
+
+    # Check what we have from the requestor
+    if not all(item for item in [col_id, up_key]):
+        return False
+
+    # Get the collection we need
+    all_colls = sdc.load_collections(db, bool(user_info.admin), s3_info)
+    if not all_colls:
+        return {'success': False,
+                'message': "Unable to load collections for marking upload complete"}
+
+    coll = [one_coll for one_coll in all_colls if one_coll["id"] == col_id]
+    if not coll:
+        return {'success': False,
+                'message': 'Unable to find the collection needed to mark upload as completed'}
+    coll = coll[0]
+
+    # Find the upload in the collection
+    upload = [one_up for one_up in coll['uploads'] if one_up["key"] == up_key]
+    if not upload:
+        return {'success': False,
+                'message': 'Unable to find the incomplete upload in the collections'}
+    upload = upload[0]
+
+    # Make sure this user has permissions to do this
+    if not bool(user_info.admin) and user_info.name == upload['uploadUser']:
+        return None
+
+    # Update the counts of the uploaded images to reflect what's on the server
+    S3Connection.upload_recalculate_image_count(s3_info, coll['bucket'], upload['key'])
+
+    # Remove the upload from the database
+    db.sandbox_upload_complete_by_info(s3_info.id, user_info.name, coll['bucket'], upload['key'])
+
+    return {'success': True, 'message': 'Successfully marked upload as completed'}
