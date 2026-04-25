@@ -4,7 +4,7 @@ import time
 from typing import Optional
 
 from sparcd_db import SPARCdDatabase
-import sparcd_utils as sdu
+import sparcd_upload_utils as sdupu
 from spd_types.s3info import S3Info
 from s3.s3_collections import S3CollectionConnection
 from s3.s3_images import S3ImageConnection
@@ -65,7 +65,7 @@ def __get_loaded_collections(db: SPARCdDatabase, s3_info: S3Info) -> Optional[tu
 
             loaded_colls = []
             for one_coll in all_collections:
-                loaded_colls.append(sdu.normalize_collection(one_coll))
+                loaded_colls.append(sdupu.normalize_collection(one_coll))
 
             db.save_all_collections(s3_info.id, loaded_colls)
 

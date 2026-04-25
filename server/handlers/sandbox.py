@@ -395,6 +395,8 @@ def __upload_and_record(db_context: DBContext,
         prepared: the prepared file information
         file_info: the extracted file file_info
     """
+    working_ts = file_info.timestamp.isoformat() if file_info.timestamp else None
+    
     S3UploadConnection.upload_file(target.s3_info, target.s3_bucket,
                              make_s3_path((target.s3_path, prepared.working_name)),
                              prepared.upload_path)
@@ -403,7 +405,7 @@ def __upload_and_record(db_context: DBContext,
                                                   context.upload_id,
                                                   prepared.working_name,
                                                   prepared.working_mimetype,
-                                                  file_info.timestamp)
+                                                  working_ts)
     if file_id is None:
         print(f'INFO: file {context.file_obj.filename} with upload ID {context.upload_id} '
               'was uploaded but not found in the database - database not updated')
@@ -411,7 +413,7 @@ def __upload_and_record(db_context: DBContext,
 
     if (file_info.species and file_info.timestamp) or file_info.location:
         db_context.db.sandbox_add_file_info(file_id, file_info.species, file_info.location,
-                                 file_info.timestamp.isoformat() if file_info.timestamp else None)
+                                 working_ts)
 
 
 def handle_sandbox(db: SPARCdDatabase, user_info: UserInfo, s3_info: S3Info) -> tuple:

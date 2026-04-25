@@ -13,7 +13,7 @@ from s3.s3_access_helpers import (SPARCD_PREFIX, S3_UPLOADS_PATH_PART, COLLECTIO
                                 temp_s3_file, load_s3_json, load_deployment_location,
                                 load_upload_observations, make_s3_path, get_s3_file,
                                 get_user_collections, get_uploaded_folders, update_user_collections,
-                                get_upload_data_thread, check_incomplete_thread,
+                                get_upload_data_thread, check_incomplete_thread, load_upload_meta,
                                 S3_UPLOAD_META_JSON_FILE_NAME)
 
 
@@ -100,8 +100,7 @@ class S3CollectionConnection:
         if not found_buckets:
             return None
 
-        from s3_access_helpers import __load_upload_meta
-        coll_info = __load_upload_meta(minio, bucket, upload_path, 'get_upload_info')
+        coll_info = load_upload_meta(minio, bucket, upload_path, 'get_upload_info')
         if not coll_info:
             return None
 

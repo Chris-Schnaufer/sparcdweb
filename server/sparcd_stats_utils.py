@@ -119,7 +119,7 @@ def __count_species(all_results: list) -> dict:
     for one_result in all_results:
         for one_image in one_result.get('info', {}).get('images', []):
             for one_species in one_image.get('species', []):
-                species_name = one_species.get('name', '').strip()
+                species_name = (one_species.get('name') or '').strip()
                 if not species_name:
                     continue
                 if species_name in ret_stats:
