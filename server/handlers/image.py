@@ -19,10 +19,14 @@ import spd_crypt as crypt
 from spd_types.userinfo import UserInfo
 from spd_types.s3info import S3Info
 import sparcd_utils as sdu
-from s3_access import S3Connection, download_s3_file, make_s3_path, OBSERVATIONS_CSV_FILE_NAME, \
-                        MEDIA_CSV_FILE_NAME, SPECIES_JSON_FILE_NAME, SPARCD_PREFIX, \
-                        S3_UPLOADS_PATH_PART
-from s3_connect import s3_connect
+import sparcd_timestamp_utils as sdtsu
+import sparcd_upload_utils as sdupu
+from s3.s3_access_helpers import make_s3_path, download_s3_file, MEDIA_CSV_FILE_NAME, \
+                                OBSERVATIONS_CSV_FILE_NAME, SPECIES_JSON_FILE_NAME, \
+                                SPARCD_PREFIX, S3_UPLOADS_PATH_PART
+from s3.s3_collections import S3CollectionConnection
+from s3.s3_connect import s3_connect
+from s3.s3_uploads import S3UploadConnection
 import s3_utils as s3u
 
 
@@ -39,6 +43,7 @@ class ImageEditParams:
 @dataclass
 class ImageAllEditedParams:
     """ Contains the parameters for when the user has finished editing images """
+    user_name: str
     coll_id: str
     upload_id: str
     last_request_id: str
@@ -166,8 +171,10 @@ def __image_edit_request_params(passcode: str) -> Optional[ImageEditParams]:
                            last_reqid=last_reqid)
 
 
-def __images_all_edited_params() -> Optional[ImageAllEditedParams]:
+def __images_all_edited_params(user_name: str) -> Optional[ImageAllEditedParams]:
     """ Gets and validates the request parameters for an images all edited request
+    Arguments:
+        user_name: the user's name
     Return:
         Returns the request parameters in ImageAllEditedParams when successful, and None if not
     """
@@ -188,7 +195,8 @@ def __images_all_edited_params() -> Optional[ImageAllEditedParams]:
 
     return ImageAllEditedParams(coll_id=coll_id, upload_id=upload_id,
                                 last_request_id=last_request_id, timestamp=timestamp,
-                                force_all_changes=force_all_changes)
+                                force_all_changes=force_all_changes,
+                                user_name=user_name)
 
 
 
@@ -239,12 +247,12 @@ def __update_metadata_and_collection(db: SPARCdDatabase,
     edit_comment = f'Edited by {params.user_name} on ' + \
                    datetime.datetime.fromisoformat(params.timestamp).strftime("%Y.%m.%d.%H.%M.%S")
 
-    updated, _ = S3Connection.update_upload_metadata(s3_info, s3_bucket, s3_path,
+    updated, _ = S3UploadConnection.update_upload_metadata(s3_info, s3_bucket, s3_path,
                                                      edit_comment, image_with_species)
     if updated:
-        updated_collection = S3Connection.get_collection_info(s3_info, s3_bucket)
+        updated_collection = S3CollectionConnection.get_collection_info(s3_info, s3_bucket)
         if updated_collection:
-            sdc.collection_update(db, s3_info.id, sdu.normalize_collection(updated_collection))
+            sdc.collection_update(db, s3_info.id, sdupu.normalize_collection(updated_collection))
 
     return updated, kept_urls
 
@@ -273,7 +281,7 @@ def __update_observations(s3_info: S3Info,
                         deployment_info[0][camtrap.CAMTRAP_DEPLOYMENT_ID_IDX])
 
     row_groups = (obs_info[one_key] for one_key in obs_info)
-    S3Connection.upload_camtrap_data(s3_info, s3_bucket,
+    S3UploadConnection.upload_camtrap_data(s3_info, s3_bucket,
                                      make_s3_path((s3_path, OBSERVATIONS_CSV_FILE_NAME)),
                                      [one_row for one_set in row_groups for one_row in one_set])
 
@@ -347,10 +355,14 @@ def handle_image_edit_complete(db: SPARCdDatabase, user_info: UserInfo, s3_info:
                        [one_file['s3_path'].index(params.upload_id) + len(params.upload_id) + 1:]}
                        for one_file in edit_files_info]
 
-    success_files, errored_files = sdu.process_upload_changes(
-                                        s3_info, params.coll_id, params.upload_id,
-                                        temp_species_filename,
-                                        files_info=edit_files_info)
+    success_files, errored_files = sdupu.process_upload_changes(s3_info,
+                                                sdupu.UploadChangeParams(
+                                                        collection_id=params.coll_id,
+                                                        upload_name=params.upload_id,
+                                                        species_timed_file=temp_species_filename,
+                                                        files_info=edit_files_info
+                                                )
+                                            )
     if success_files:
         db.complete_image_edits(user_info.name, success_files)
 
@@ -375,7 +387,7 @@ def handle_images_all_edited(db: SPARCdDatabase, user_info: UserInfo,
         was a problem
     """
     # Get the rest of the request parameters
-    params = __images_all_edited_params()
+    params = __images_all_edited_params(user_info.name)
     if not params:
         return None
 
@@ -568,13 +580,19 @@ def handle_adjust_timestamp(s3_info: S3Info) -> Union[bool, None]:
                                 minute=params.timestamp.minute,
                                 second=params.timestamp.second)
 
-    new_media_info = sdu.adjust_timestamps(params.files, time_adjust, s3_bucket,
-                                                                                s3_info, media_info)
+    new_media_info = sdtsu.adjust_timestamps(params.files,
+                                            sdtsu.TimestampAdjustContext(time_adjust=time_adjust,
+                                                                        bucket=s3_bucket,
+                                                                        s3_info=s3_info,
+                                                                        media_info=media_info
+                                                                     )
+
+                                            )
 
     # Upload the MEDIA csv file to the server
-    S3Connection.upload_camtrap_data(s3_info,
+    S3UploadConnection.upload_camtrap_data(s3_info,
                                      s3_bucket,
                                      make_s3_path((s3_path, MEDIA_CSV_FILE_NAME)),
-                                     (new_media_info[one_key] for one_key in new_media_info.keys()))
+                                     new_media_info.values())
 
     return True

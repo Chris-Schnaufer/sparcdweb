@@ -3,17 +3,16 @@
 import os
 import sys
 import tempfile
-from typing import Callable, Optional
+from typing import  Optional
 
 from flask import jsonify
-from flask_cors import cross_origin
 
 from route_decorators import make_authenticated_route
 from sparcd_db import SPARCdDatabase
 from spd_types.userinfo import UserInfo
 from spd_types.s3info import S3Info
 import spd_crypt as crypt
-from s3_access import SPARCD_PREFIX
+from s3.s3_access_helpers import SPARCD_PREFIX
 import s3_utils as s3u
 
 
@@ -31,6 +30,8 @@ ENV_NAME_PASSCODE = 'SPARCD_CODE'
 ENV_NAME_SESSION_EXPIRE = 'SPARCD_SESSION_TIMEOUT'
 # Environment variable name for default settings files
 ENV_DEFAULT_SETTINGS_PATH = 'SPARCD_DEFAULT_SETTINGS_PATH'
+# Environment variable name for default timezone offset
+ENV_DEFAULT_TIMEZONE_OFFSET = 'SPARCD_DEFAULT_TIMEZONE_OFFSET'
 
 
 # =============================================================================
@@ -54,6 +55,12 @@ SESSION_EXPIRE_SECONDS = os.environ.get(ENV_NAME_SESSION_EXPIRE, SESSION_EXPIRE_
 # Folder that has the template settings files used to setup a new SPARCd instance or repair one
 DEFAULT_SETTINGS_PATH = os.environ.get(ENV_DEFAULT_SETTINGS_PATH,
                                        os.path.join(os.getcwd(), 'defaultSettings'))
+
+
+# Default timezone offset in seconds
+DEFAULT_TIMEZONE_OFFSET_HOUR = -7.00
+DEFAULT_TIMEZONE_OFFSET = int(float(os.environ.get(ENV_DEFAULT_TIMEZONE_OFFSET,
+                                                            DEFAULT_TIMEZONE_OFFSET_HOUR))*60*60)
 
 
 # =============================================================================
@@ -94,10 +101,6 @@ TEMP_OTHER_SPECIES_FILE_NAME_POSTFIX = '-' + SPARCD_PREFIX + 'other-species.json
 
 # Temporary directory path
 TEMP_DIR = tempfile.gettempdir()
-
-# Name of temporary upload stats file
-TEMP_SPECIES_STATS_FILE_NAME_POSTFIX = '-' + SPARCD_PREFIX + 'species-stats.json'
-TEMP_SPECIES_STATS_FILE_TIMEOUT_SEC = 12 * 60 * 60
 
 
 # =============================================================================

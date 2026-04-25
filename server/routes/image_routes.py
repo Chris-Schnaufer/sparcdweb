@@ -5,7 +5,7 @@ from flask_cors import cross_origin
 
 import handlers.image as himage
 from sparcd_config import ALLOWED_ORIGINS, WORKING_PASSCODE, authenticated_route, \
-                          temp_species_filename
+                          make_handler_response, temp_species_filename
 
 image_bp = Blueprint('image', __name__)
 
@@ -13,11 +13,10 @@ image_bp = Blueprint('image', __name__)
 @image_bp.route('/imageSpecies', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def image_species(*, db, _token, user_info, s3_info):
+def image_species(*, db, user_info, s3_info, **_):
     """ Handles updating the species and counts for an image
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
@@ -36,11 +35,10 @@ def image_species(*, db, _token, user_info, s3_info):
 @image_bp.route('/imageEditComplete', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def image_edit_complete(*, db, _token, user_info, s3_info):
+def image_edit_complete(*, db, user_info, s3_info, **_):
     """ Handles updating one image with the changes made
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
@@ -65,11 +63,10 @@ def image_edit_complete(*, db, _token, user_info, s3_info):
 @image_bp.route('/imagesAllEdited', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def images_all_edited(*, db, _token, user_info, s3_info):
+def images_all_edited(*, db, user_info, s3_info, **_):
     """ Handles completing changes after all images in an upload have been edited
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
@@ -94,11 +91,10 @@ def images_all_edited(*, db, _token, user_info, s3_info):
 @image_bp.route('/speciesKeybind', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def species_keybind(*, db, _token, user_info, s3_info):
+def species_keybind(*, db, user_info, s3_info, **_):
     """ Handles adding or changing a species keybind for an image
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
@@ -119,12 +115,9 @@ def species_keybind(*, db, _token, user_info, s3_info):
 @image_bp.route('/imageTimestamp', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def image_timestamps(*, _db, _token, _user_info, s3_info):
+def image_timestamps(*, s3_info, **_):
     """ Fetches the first timestamp found in the list of uploaded files
     Arguments:
-        _db: the database instance (injected by authenticated_route, unused)
-        _token: the session token (injected by authenticated_route, unused)
-        _user_info: the authenticated user's information (injected by authenticated_route, unused)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
         200: JSON object containing success status and the timestamp in ISO format if found
@@ -146,12 +139,9 @@ def image_timestamps(*, _db, _token, _user_info, s3_info):
 @image_bp.route('/adjustTimestamps', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def adjust_timestamps(*, _db, _token, _user_info, s3_info):
+def adjust_timestamps(*, s3_info, **_):
     """ Adjusts the timestamps for image files in an upload
     Arguments:
-        _db: the database instance (injected by authenticated_route, unused)
-        _token: the session token (injected by authenticated_route, unused)
-        _user_info: the authenticated user's information (injected by authenticated_route, unused)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
         200: JSON object indicating success or failure with a message

@@ -13,11 +13,10 @@ install_bp = Blueprint('install', __name__)
 @install_bp.route('/installCheck', methods=['GET'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def new_install_check(*, db, _token, user_info, s3_info):
+def new_install_check(*, db, user_info, s3_info, **_):
     """ Checks if the S3 endpoint can support a new SPARCd installation
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
@@ -34,11 +33,10 @@ def new_install_check(*, db, _token, user_info, s3_info):
 @install_bp.route('/installNew', methods=['GET'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def install_new(*, db, _token, user_info, s3_info):
+def install_new(*, db, user_info, s3_info, **_):
     """ Attempts to create a new SPARCd installation on the S3 endpoint
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
@@ -59,11 +57,9 @@ def install_new(*, db, _token, user_info, s3_info):
 @install_bp.route('/installRepair', methods=['GET'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def install_repair(*, _db, _token, user_info, s3_info):
+def install_repair(*, user_info, s3_info, **_):
     """ Attempts to repair an existing SPARCd installation on the S3 endpoint
     Arguments:
-        _db: the database instance (injected by authenticated_route, unused)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:

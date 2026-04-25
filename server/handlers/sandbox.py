@@ -21,10 +21,15 @@ from sparcd_db import SPARCdDatabase
 import sparcd_file_utils as sdfu
 from spd_types.userinfo import UserInfo
 from spd_types.s3info import S3Info
-import sparcd_utils as sdu
-from s3_access import S3Connection, make_s3_path, CAMTRAP_FILE_NAMES, \
-                    DEPLOYMENT_CSV_FILE_NAME, MEDIA_CSV_FILE_NAME, OBSERVATIONS_CSV_FILE_NAME, \
-                    SPARCD_PREFIX
+import sparcd_location_utils as sdlu
+import sparcd_sandbox_utils as sdsu
+import sparcd_timestamp_utils as sdtsu
+import sparcd_upload_utils as sdupu
+from s3.s3_access_helpers import make_s3_path, CAMTRAP_FILE_NAMES, DEPLOYMENT_CSV_FILE_NAME, \
+                                MEDIA_CSV_FILE_NAME, OBSERVATIONS_CSV_FILE_NAME, SPARCD_PREFIX
+from s3.s3_collections import S3CollectionConnection
+from s3.s3_images import S3ImageConnection
+from s3.s3_uploads import S3UploadConnection
 
 @dataclass
 class DBContext:
@@ -121,7 +126,7 @@ def __compare_one_file(s3_info: S3Info, s3_bucket: str, s3_path: str,
     try:
         file_obj.save(temp_file[1])
         s3_comp_path = make_s3_path((s3_path, file_name))
-        S3Connection.download_image(s3_info, s3_bucket, s3_comp_path, comp_file[1])
+        S3ImageConnection.download_image(s3_info, s3_bucket, s3_comp_path, comp_file[1])
 
         if sdfu.file_checksum(temp_file[1]) != sdfu.file_checksum(comp_file[1]):
             return FileCompareResult(False,
@@ -238,7 +243,7 @@ def __get_file_info(temp_path: str, file_ext: str, tz_offset: float) -> FileInfo
     Return:
         Returns a FileInfo instance containing the extracted information
     """
-    if file_ext not in sdu.UPLOAD_KNOWN_MOVIE_EXT:
+    if file_ext not in sdupu.UPLOAD_KNOWN_MOVIE_EXT:
         species, location, timestamp = image_utils.get_embedded_image_info(temp_path)
     else:
         species, location, timestamp = (None, None, image_utils.get_movie_timestamp(temp_path))
@@ -272,13 +277,16 @@ def __prepare_upload_file(db: SPARCdDatabase,
         (sb_location and metadata.location and
          sb_location['idProperty'] != metadata.location['id'])
 
-    if needs_location_update and context.file_ext not in sdu.UPLOAD_KNOWN_MOVIE_EXT:
+    if needs_location_update and context.file_ext not in sdupu.UPLOAD_KNOWN_MOVIE_EXT:
         if not image_utils.update_image_file_exif(context.temp_path,
-                                                   loc_id=sb_location['idProperty'],
-                                                   loc_name=sb_location['nameProperty'],
-                                                   loc_ele=sb_location['elevationProperty'],
-                                                   loc_lat=sb_location['latProperty'],
-                                                   loc_lon=sb_location['lngProperty']):
+                                                   location=image_utils.ImageLocationData(
+                                                        loc_id=sb_location['idProperty'],
+                                                        loc_name=sb_location['nameProperty'],
+                                                        loc_ele=sb_location['elevationProperty'],
+                                                        loc_lat=sb_location['latProperty'],
+                                                        loc_lon=sb_location['lngProperty']
+                                                    )
+                                                 ):
             print(f'Warning: Unable to update sandbox file with the location: '
                   f'{context.file_obj.filename} with upload_id {context.upload_id}', flush=True)
 
@@ -330,7 +338,7 @@ def __update_media_csv(db: SPARCdDatabase,
     for one_key, one_ts in db.get_file_created_timestamp(user_info.name, upload_id):
         media_info[one_key][camtrap.CAMTRAP_MEDIA_TIMESTAMP_IDX] = one_ts
 
-    S3Connection.upload_camtrap_data(target.s3_info,
+    S3UploadConnection.upload_camtrap_data(target.s3_info,
                                      target.s3_bucket,
                                      make_s3_path((target.s3_path, MEDIA_CSV_FILE_NAME)),
                                      (media_info[one_key] for one_key in media_info.keys()))
@@ -367,7 +375,7 @@ def __update_observations_csv(db: SPARCdDatabase,
                                     deployment_info[camtrap.CAMTRAP_DEPLOYMENT_ID_IDX])
 
     row_groups = (obs_info[one_key] for one_key in obs_info)
-    S3Connection.upload_camtrap_data(target.s3_info,
+    S3UploadConnection.upload_camtrap_data(target.s3_info,
                                 target.s3_bucket,
                                 make_s3_path((target.s3_path, OBSERVATIONS_CSV_FILE_NAME)),
                                 [one_row for one_set in row_groups for one_row in one_set])
@@ -387,7 +395,7 @@ def __upload_and_record(db_context: DBContext,
         prepared: the prepared file information
         file_info: the extracted file file_info
     """
-    S3Connection.upload_file(target.s3_info, target.s3_bucket,
+    S3UploadConnection.upload_file(target.s3_info, target.s3_bucket,
                              make_s3_path((target.s3_path, prepared.working_name)),
                              prepared.upload_path)
 
@@ -426,7 +434,7 @@ def handle_sandbox(db: SPARCdDatabase, user_info: UserInfo, s3_info: S3Info) -> 
     all_collections = sdc.load_collections(db, is_admin, s3_info)
 
     # Get the sandbox collection regardless if we were able to load collections
-    return sdu.get_sandbox_collections(s3_info, sandbox_items, all_collections)
+    return sdsu.get_sandbox_collections(s3_info, sandbox_items, all_collections)
 
 
 def handle_sandbox_stats(db: SPARCdDatabase, user_info: UserInfo, s3_info: S3Info,
@@ -505,8 +513,8 @@ def handle_sandbox_recovery_update(db: SPARCdDatabase,
     upload = upload[0]
 
     # Find the location
-    cur_locations = sdu.load_locations(s3_info)
-    our_location = sdu.get_location_info(recovery_params.loc_id, cur_locations)
+    cur_locations = sdlu.load_locations(s3_info)
+    our_location = sdlu.get_location_info(recovery_params.loc_id, cur_locations)
     if not our_location:
         print('Unable to find the location for upload recovery ' \
               f'{recovery_params.coll_id} {recovery_params.upload_key} {recovery_params.loc_id}',
@@ -551,7 +559,7 @@ def handle_sandbox_check_continue_upload(db: SPARCdDatabase,
     # Get the S3 information
     s3_bucket, s3_path = db.sandbox_get_s3_info(user_info.name, upload_id)
 
-    if S3Connection.have_images(s3_info, s3_bucket, s3_path):
+    if S3ImageConnection.have_images(s3_info, s3_bucket, s3_path):
         for one_file in files:
             result = __compare_one_file(s3_info, s3_bucket, s3_path, files[one_file])
 
@@ -576,7 +584,7 @@ def handle_sandbox_new(db: SPARCdDatabase,
     """
     client_ts = datetime.datetime.fromisoformat(new_params.timestamp).\
                                                 astimezone(dateutil.tz.gettz(new_params.timezone))
-    s3_bucket, s3_path = S3Connection.create_upload(s3_info,
+    s3_bucket, s3_path = S3UploadConnection.create_upload(s3_info,
                                                     new_params.collection_id,
                                                     new_params.comment,
                                                     client_ts,
@@ -584,8 +592,8 @@ def handle_sandbox_new(db: SPARCdDatabase,
                                                     )
 
     # Upload the CAMTRAP files to S3 storage
-    cur_locations = sdu.load_locations(s3_info)
-    our_location = sdu.get_location_info(new_params.location_id, cur_locations)
+    cur_locations = sdlu.load_locations(s3_info)
+    our_location = sdlu.get_location_info(new_params.location_id, cur_locations)
     deployment_id = s3_bucket[len(SPARCD_PREFIX):] + ':' + new_params.location_id
     for one_file in CAMTRAP_FILE_NAMES:
         if one_file == DEPLOYMENT_CSV_FILE_NAME:
@@ -600,7 +608,7 @@ def handle_sandbox_new(db: SPARCdDatabase,
                     ctu.create_observation_data(camtrap.CamTrap,deployment_id, s3_path,
                                                                             new_params.all_files)])
 
-        S3Connection.upload_file_data(s3_info, s3_bucket,
+        S3UploadConnection.upload_file_data(s3_info, s3_bucket,
                                         s3_path + '/' + one_file, data, 'application/csv')
 
     # Add the entries to the database
@@ -618,9 +626,9 @@ def handle_sandbox_new(db: SPARCdDatabase,
                                       )
 
     # Update the collection to reflect the new upload
-    updated_collection = S3Connection.get_collection_info(s3_info, s3_bucket)
+    updated_collection = S3CollectionConnection.get_collection_info(s3_info, s3_bucket)
     if updated_collection:
-        updated_collection = sdu.normalize_collection(updated_collection)
+        updated_collection = sdupu.normalize_collection(updated_collection)
 
         # Update the collection entry in the database
         sdc.collection_update(db, s3_info.id, updated_collection)
@@ -640,7 +648,7 @@ def handle_sandbox_file(db: SPARCdDatabase,
         file_params: parameters for handling an uploaded sandbox file
     """
     # Normalize the timestamp into offset hours. If invalid, uses local timezone
-    tz_offset = sdu.get_tz_offset(file_params.tz_offset)
+    tz_offset = sdtsu.get_tz_offset(file_params.tz_offset)
 
     s3_bucket, s3_path = db.sandbox_get_s3_info(user_info.name, file_params.upload_id)
     s3_target = S3UploadTarget(s3_info=s3_info, s3_bucket=s3_bucket, s3_path=s3_path)
@@ -704,13 +712,13 @@ def handle_sandbox_completed(db: SPARCdDatabase,
 
     # Update the upload metadata with the count of files that have species
     if num_files_with_species > 0:
-        S3Connection.update_upload_metadata_image_species(s3_info, s3_bucket, s3_path,
+        S3UploadConnection.update_upload_metadata_image_species(s3_info, s3_bucket, s3_path,
                                                                             num_files_with_species)
 
     # Update the collection to reflect the new upload metadata
-    updated_collection = S3Connection.get_collection_info(s3_info, s3_bucket)
+    updated_collection = S3CollectionConnection.get_collection_info(s3_info, s3_bucket)
     if updated_collection:
-        updated_collection = sdu.normalize_collection(updated_collection)
+        updated_collection = sdupu.normalize_collection(updated_collection)
 
         # Update the collection entry in the database
         sdc.collection_update(db, s3_info.id, updated_collection)

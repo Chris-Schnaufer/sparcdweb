@@ -16,10 +16,13 @@ import spd_crypt as crypt
 import sparcd_collections as sdc
 from sparcd_db import SPARCdDatabase
 import sparcd_utils as sdu
+import sparcd_location_utils as sdlu
 from spd_types.userinfo import UserInfo
 from spd_types.s3info import S3Info
-from s3_access import S3Connection, SPECIES_JSON_FILE_NAME, SPARCD_PREFIX
-from s3_connect import s3_connect
+from s3.s3_access_helpers import SPECIES_JSON_FILE_NAME, SPARCD_PREFIX
+from s3.s3_admin import S3AdminConnection
+from s3.s3_connect import s3_connect
+from s3.s3_uploads import S3UploadConnection
 import s3_utils as s3u
 from text_formatters.coordinate_utils import DEFAULT_UTM_ZONE
 
@@ -92,7 +95,7 @@ def __get_new_login(db: SPARCdDatabase, s3_info: S3Info, params: LoginParams,
         return None
 
     # Get whether the endpoint is setup for SPARCd and if it needs repairs
-    needs_repair, _ = S3Connection.needs_repair(s3_info)
+    needs_repair, _ = S3AdminConnection.needs_repair(s3_info)
     new_instance = not s3u.sparcd_config_exists(minio)
 
     # Save information into the database - also cleans up old tokens if there's too many
@@ -438,7 +441,7 @@ def handle_location_info(s3_info: S3Info) -> dict:
     if not all(item for item in [loc_id, loc_name, loc_lat, loc_lon, loc_ele]):
         return None
 
-    cur_locations = sdu.load_locations(s3_info)
+    cur_locations = sdlu.load_locations(s3_info)
 
     for one_loc in cur_locations:
         if one_loc['idProperty'] == loc_id and one_loc['nameProperty'] == loc_name and \
@@ -501,7 +504,7 @@ def handle_upload_complete(db: SPARCdDatabase, user_info: UserInfo,
         return None
 
     # Update the counts of the uploaded images to reflect what's on the server
-    S3Connection.upload_recalculate_image_count(s3_info, coll['bucket'], upload['key'])
+    S3UploadConnection.upload_recalculate_image_count(s3_info, coll['bucket'], upload['key'])
 
     # Remove the upload from the database
     db.sandbox_upload_complete_by_info(s3_info.id, user_info.name, coll['bucket'], upload['key'])

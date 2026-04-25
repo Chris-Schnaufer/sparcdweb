@@ -15,11 +15,13 @@ from sparcd_db import SPARCdDatabase
 import spd_crypt as crypt
 from spd_types.userinfo import UserInfo
 from spd_types.s3info import S3Info
-import sparcd_utils as sdu
-from s3_access import S3Connection, make_s3_path, DEPLOYMENT_CSV_FILE_NAME, MEDIA_CSV_FILE_NAME, \
-                        OBSERVATIONS_CSV_FILE_NAME, SPARCD_PREFIX, S3_UPLOADS_PATH_PART, \
-                        SPECIES_JSON_FILE_NAME
+import sparcd_upload_utils as sdupu
 import s3_utils as s3u
+from s3.s3_access_helpers import make_s3_path, DEPLOYMENT_CSV_FILE_NAME, MEDIA_CSV_FILE_NAME, \
+                                OBSERVATIONS_CSV_FILE_NAME, SPECIES_JSON_FILE_NAME, SPARCD_PREFIX, \
+                                S3_UPLOADS_PATH_PART
+from s3.s3_collections import S3CollectionConnection
+from s3.s3_uploads import S3UploadConnection
 
 @dataclass
 class UploadImagesParams:
@@ -140,10 +142,11 @@ def __prepare_image_response(all_images: tuple,
     """
     images = list(all_images)
     for one_img in images:
-        one_img['url'] = url_for('image', _external=True,
+        one_img['url'] = url_for('auth.image', _external=True,
                                  i=crypt.do_encrypt(passcode,
                                      json.dumps({'k': one_img['key'],
                                                  'p': f'{collection_id}:{collection_upload}'})))
+
         one_img['s3_path'] = crypt.do_encrypt(passcode, one_img['s3_path'])
         one_img['upload'] = collection_upload
         del one_img['bucket']
@@ -174,7 +177,7 @@ def __update_camtrap_files(s3_info: S3Info,
     deployment_info[0][camtrap.CAMTRAP_DEPLOYMENT_LONGITUDE_IDX] = loc_params.location.loc_lat
     deployment_info[0][camtrap.CAMTRAP_DEPLOYMENT_LATITUDE_IDX] = loc_params.location.loc_lon
     deployment_info[0][camtrap.CAMTRAP_DEPLOYMENT_CAMERA_HEIGHT_IDX] = loc_params.location.loc_ele
-    S3Connection.upload_camtrap_data(s3_info, bucket,
+    S3UploadConnection.upload_camtrap_data(s3_info, bucket,
                                      make_s3_path((upload_path, DEPLOYMENT_CSV_FILE_NAME)),
                                      deployment_info)
 
@@ -182,7 +185,7 @@ def __update_camtrap_files(s3_info: S3Info,
     media_info = ctu.load_camtrap_media(s3_info, bucket, upload_path)
     for one_media in media_info:
         media_info[one_media][camtrap.CAMTRAP_MEDIA_DEPLOYMENT_ID_IDX] = deployment_id
-    S3Connection.upload_camtrap_data(s3_info, bucket,
+    S3UploadConnection.upload_camtrap_data(s3_info, bucket,
                                      make_s3_path((upload_path, MEDIA_CSV_FILE_NAME)),
                                      [media_info[one_key] for one_key in media_info.keys()])
 
@@ -192,7 +195,7 @@ def __update_camtrap_files(s3_info: S3Info,
         for one_obs in obs_info[one_file]:
             one_obs[camtrap.CAMTRAP_OBSERVATION_DEPLOYMENT_ID_IDX] = deployment_id
     row_groups = [obs_info[one_key] for one_key in obs_info]
-    S3Connection.upload_camtrap_data(s3_info, bucket,
+    S3UploadConnection.upload_camtrap_data(s3_info, bucket,
                                      make_s3_path((upload_path, OBSERVATIONS_CSV_FILE_NAME)),
                                      [one_row for one_set in row_groups for one_row in one_set])
 
@@ -219,6 +222,7 @@ def __upload_location_request_params() -> Optional[UploadLocationInfo]:
         location=LocationInfo(loc_id=loc_id, loc_name=loc_name, loc_ele=loc_ele,
                               loc_lat=loc_lat, loc_lon=loc_lon)
     )
+
 
 def handle_upload_images(db: SPARCdDatabase,
                           user_info: UserInfo,
@@ -287,24 +291,27 @@ def handle_upload_location(db: SPARCdDatabase, user_info: UserInfo, s3_info: S3I
                            loc_params.upload.timestamp, loc_params.location.loc_id,
                            loc_params.location.loc_name, loc_params.location.loc_ele)
 
-    sdu.process_upload_changes(s3_info,
-                               loc_params.upload.coll_id,
-                               loc_params.upload.upload_id,
-                               temp_species_filename,
-                               change_locations={
-                                   'loc_id': loc_params.location.loc_id,
-                                   'loc_name': loc_params.location.loc_name,
-                                   'loc_ele': loc_params.location.loc_ele,
-                                   'loc_lat': loc_params.location.loc_lat,
-                                   'loc_lon': loc_params.location.loc_lon,
-                               })
+    sdupu.process_upload_changes(s3_info,
+                            sdupu.UploadChangeParams(
+                                       collection_id=loc_params.upload.coll_id,
+                                       upload_name=loc_params.upload.upload_id,
+                                       species_timed_file=temp_species_filename,
+                                       change_locations={
+                                           'loc_id': loc_params.location.loc_id,
+                                           'loc_name': loc_params.location.loc_name,
+                                           'loc_ele': loc_params.location.loc_ele,
+                                           'loc_lat': loc_params.location.loc_lat,
+                                           'loc_lon': loc_params.location.loc_lon,
+                                       }
+                            )
+                    )
 
     __update_camtrap_files(s3_info, bucket, upload_path, loc_params)
 
     # Update the collection to reflect the new upload location
-    updated_collection = S3Connection.get_collection_info(s3_info, bucket)
+    updated_collection = S3CollectionConnection.get_collection_info(s3_info, bucket)
     if updated_collection:
         # Update the collection entry in the database
-        sdc.collection_update(db, s3_info.id, sdu.normalize_collection(updated_collection))
+        sdc.collection_update(db, s3_info.id, sdupu.normalize_collection(updated_collection))
 
     return True

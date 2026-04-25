@@ -12,11 +12,10 @@ message_bp = Blueprint('message', __name__)
 @message_bp.route('/messageAdd', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def message_add(*, db, _token, user_info, s3_info):
+def message_add(*, db, user_info, s3_info, **_):
     """ Adds a message to the database
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
@@ -33,12 +32,10 @@ def message_add(*, db, _token, user_info, s3_info):
 @message_bp.route('/userNames', methods=['GET'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def user_names(*, db, _token, _user_info, s3_info):
+def user_names(*, db, s3_info, **_):
     """ Returns the list of known users for message addressing
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
-        _user_info: the authenticated user's information (injected by authenticated_route, unused)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
         200: JSON object containing the list of user names
@@ -55,11 +52,10 @@ def user_names(*, db, _token, _user_info, s3_info):
 @message_bp.route('/messageGet', methods=['GET'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def message_get(*, db, _token, user_info, s3_info):
+def message_get(*, db, user_info, s3_info, **_):
     """ Returns all messages for the authenticated user
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
@@ -78,11 +74,10 @@ def message_get(*, db, _token, user_info, s3_info):
 @message_bp.route('/messageRead', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def message_read(*, db, _token, user_info, s3_info):
+def message_read(*, db, user_info, s3_info, **_):
     """ Marks messages as read
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
@@ -99,11 +94,10 @@ def message_read(*, db, _token, user_info, s3_info):
 @message_bp.route('/messageDelete', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def message_delete(*, db, _token, user_info, s3_info):
+def message_delete(*, db, user_info, s3_info, **_):
     """ Handles deleting messages
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:

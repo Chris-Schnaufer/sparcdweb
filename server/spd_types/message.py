@@ -115,7 +115,7 @@ class Message(dict):
         else:
             raise ValueError(f'Invalid message priority specified {value}')
 
-    @priority.setter
+    @created.setter
     def created(self, value: str) -> None:
         """ Sets the elapsed seconds from when this message was created
         Arguments:
@@ -123,7 +123,7 @@ class Message(dict):
         """
         self["created_sec"] = value
 
-    @priority.setter
+    @read.setter
     def read(self, value: str) -> None:
         """ Sets the elapsed seconds from when this message was read
         Arguments:

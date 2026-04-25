@@ -1,6 +1,6 @@
 """ Formats image downloads from query results """
 
-from s3_access import S3Connection
+from s3.s3_images import S3ImageConnection
 
 from text_formatters.results import Results
 
@@ -11,7 +11,7 @@ def get_image_downloads(results: Results) -> str:
     Return:
         The JSON representing the image downloads
     """
-    image_urls = S3Connection.get_object_urls(results.s3_info,
+    image_urls = S3ImageConnection.get_object_urls(results.s3_info,
                     [(one_image['bucket'], one_image['s3_path']) for \
                                                                 one_image in results.get_images()])
 

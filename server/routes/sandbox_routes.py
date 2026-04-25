@@ -16,11 +16,10 @@ sandbox_bp = Blueprint('sandbox', __name__)
 @sandbox_bp.route('/sandbox', methods=['GET'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def sandbox(*, db, _token, user_info, s3_info):
+def sandbox(*, db, user_info, s3_info, **_):
     """ Returns the list of sandbox uploads accessible to the user
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
@@ -36,11 +35,10 @@ def sandbox(*, db, _token, user_info, s3_info):
 @sandbox_bp.route('/sandboxStats', methods=['GET'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def sandbox_stats(*, db, _token, user_info, s3_info):
+def sandbox_stats(*, db, user_info, s3_info, **_):
     """ Returns upload statistics for display
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
@@ -59,11 +57,10 @@ def sandbox_stats(*, db, _token, user_info, s3_info):
 @sandbox_bp.route('/sandboxPrev', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def sandbox_prev(*, db, _token, user_info, s3_info):
+def sandbox_prev(*, db, user_info, s3_info, **_):
     """ Checks if a sandbox item has been previously uploaded
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Form parameters:
@@ -99,11 +96,10 @@ def sandbox_prev(*, db, _token, user_info, s3_info):
 @sandbox_bp.route('/sandboxRecoveryUpdate', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def sandbox_recovery_update(*, db, _token, user_info, s3_info):
+def sandbox_recovery_update(*, db, user_info, s3_info, **_):
     """ Updates the sandbox information in the database upon upload recovery
     Arguments:
         db: the database instance (injected by authenticated_route)
-        token: the session token (injected by authenticated_route)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Form parameters:
@@ -147,11 +143,10 @@ def sandbox_recovery_update(*, db, _token, user_info, s3_info):
 @sandbox_bp.route('/sandboxCheckContinueUpload', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def sandbox_check_continue_upload(*, db, _token, user_info, s3_info):
+def sandbox_check_continue_upload(*, db, user_info, s3_info, **_):
     """ Checks if sandbox files already uploaded match what has just been received
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Form parameters:
@@ -184,11 +179,10 @@ def sandbox_check_continue_upload(*, db, _token, user_info, s3_info):
 @sandbox_bp.route('/sandboxNew', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def sandbox_new(*, db, _token, user_info, s3_info):
+def sandbox_new(*, db, user_info, s3_info, **_):
     """ Adds a new sandbox upload to the database
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Form parameters:
@@ -241,11 +235,10 @@ def sandbox_new(*, db, _token, user_info, s3_info):
 @sandbox_bp.route('/sandboxFile', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def sandbox_file(*, db, _token, user_info, s3_info):
+def sandbox_file(*, db, user_info, s3_info, **_):
     """ Handles the upload of a new sandbox image file
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Form parameters:
@@ -277,13 +270,11 @@ def sandbox_file(*, db, _token, user_info, s3_info):
 @sandbox_bp.route('/sandboxCounts', methods=['GET'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def sandbox_counts(*, db, _token, user_info, _s3_info):
+def sandbox_counts(*, db, user_info, **_):
     """ Returns the total and uploaded file counts for a sandbox upload
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
-        _s3_info: the S3 endpoint information (injected by authenticated_route, unused)
     Query parameters:
         i - the upload ID to get counts for
     Returns:
@@ -305,13 +296,11 @@ def sandbox_counts(*, db, _token, user_info, _s3_info):
 @sandbox_bp.route('/sandboxUnloadedFiles', methods=['GET'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def sandbox_unloaded_files(*, db, _token, user_info, _s3_info):
+def sandbox_unloaded_files(*, db, user_info, **_):
     """ Returns the list of files that have not yet been uploaded
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
-        _s3_info: the S3 endpoint information (injected by authenticated_route, unused)
     Query parameters:
         i - the upload ID to check for unloaded files
     Returns:
@@ -332,13 +321,11 @@ def sandbox_unloaded_files(*, db, _token, user_info, _s3_info):
 @sandbox_bp.route('/sandboxReset', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def sandbox_reset(*, db, _token, user_info, _s3_info):
+def sandbox_reset(*, db, user_info, **_):
     """ Resets a sandbox upload to start from the beginning
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
-        _s3_info: the S3 endpoint information (injected by authenticated_route, unused)
     Form parameters:
         id - the upload ID to reset
         files - JSON encoded list of files for the upload
@@ -368,13 +355,11 @@ def sandbox_reset(*, db, _token, user_info, _s3_info):
 @sandbox_bp.route('/sandboxAbandon', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def sandbox_abandon(*, db, _token, user_info, _s3_info):
+def sandbox_abandon(*, db, user_info, **_):
     """ Removes a sandbox upload record from the database
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
-        _s3_info: the S3 endpoint information (injected by authenticated_route, unused)
     Form parameters:
         id - the upload ID to abandon
     Returns:
@@ -406,11 +391,10 @@ def sandbox_abandon(*, db, _token, user_info, _s3_info):
 @sandbox_bp.route('/sandboxCompleted', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def sandbox_completed(*, db, _token, user_info, s3_info):
+def sandbox_completed(*, db, user_info, s3_info, **_):
     """ Marks a sandbox upload as completely uploaded and finalizes it
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Form parameters:

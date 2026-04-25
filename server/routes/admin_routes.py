@@ -13,11 +13,10 @@ admin_bp = Blueprint('admin', __name__)
 @admin_bp.route('/adminCheckChanges', methods=['GET'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route(admin_only=True)
-def admin_check_changes(*, db, _token, user_info, s3_info):
+def admin_check_changes(*, db, user_info, s3_info, **_):
     """ Checks if there are pending admin changes to locations or species
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
@@ -36,11 +35,10 @@ def admin_check_changes(*, db, _token, user_info, s3_info):
 @admin_bp.route('/adminCollectionDetails', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route(admin_only=True)
-def admin_collection_details(*, db, _token, user_info, s3_info):
+def admin_collection_details(*, db, user_info, s3_info, **_):
     """ Returns detailed collection information for admin editing
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
@@ -61,11 +59,10 @@ def admin_collection_details(*, db, _token, user_info, s3_info):
 @admin_bp.route('/ownerCollectionDetails', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route(non_admin_only=True)
-def owner_collection_details(*, db, _token, user_info, s3_info):
+def owner_collection_details(*, db, user_info, s3_info, **_):
     """ Returns detailed collection information for collection owner editing
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
@@ -89,11 +86,9 @@ def owner_collection_details(*, db, _token, user_info, s3_info):
 @admin_bp.route('/adminLocationDetails', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route(admin_only=True)
-def admin_location_details(*, _db, _token, user_info, s3_info):
+def admin_location_details(*, user_info, s3_info, **_):
     """ Returns detailed location information for admin editing
     Arguments:
-        _db: the database instance (injected by authenticated_route, unused)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
@@ -112,11 +107,10 @@ def admin_location_details(*, _db, _token, user_info, s3_info):
 @admin_bp.route('/adminUsers', methods=['GET'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route(admin_only=True)
-def admin_users(*, db, _token, user_info, s3_info):
+def admin_users(*, db, user_info, s3_info, **_):
     """ Returns user information for admin editing
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
@@ -136,11 +130,9 @@ def admin_users(*, db, _token, user_info, s3_info):
 @admin_bp.route('/adminSpecies', methods=['GET'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route(admin_only=True)
-def admin_species(*, _db, _token, user_info, s3_info):
+def admin_species(*, user_info, s3_info, **_):
     """ Returns the official species list for admin editing
     Arguments:
-        _db: the database instance (injected by authenticated_route, unused)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
@@ -162,11 +154,10 @@ def admin_species(*, _db, _token, user_info, s3_info):
 @admin_bp.route('/adminUserUpdate', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route(admin_only=True)
-def admin_user_update(*, db, _token, user_info, s3_info):
+def admin_user_update(*, db, user_info, s3_info, **_):
     """ Updates a user with the specified information
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
@@ -183,11 +174,10 @@ def admin_user_update(*, db, _token, user_info, s3_info):
 @admin_bp.route('/adminSpeciesUpdate', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route(admin_only=True)
-def admin_species_update(*, db, _token, user_info, s3_info):
+def admin_species_update(*, db, user_info, s3_info, **_):
     """ Adds or updates a species entry in the official species list
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
@@ -205,11 +195,10 @@ def admin_species_update(*, db, _token, user_info, s3_info):
 @admin_bp.route('/adminLocationUpdate', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route(admin_only=True)
-def admin_location_update(*, db, _token, user_info, s3_info):
+def admin_location_update(*, db, user_info, s3_info, **_):
     """ Adds or updates location information
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
@@ -226,11 +215,10 @@ def admin_location_update(*, db, _token, user_info, s3_info):
 @admin_bp.route('/adminCollectionUpdate', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route(admin_only=True)
-def admin_collection_update(*, db, _token, user_info, s3_info):
+def admin_collection_update(*, db, user_info, s3_info, **_):
     """ Updates collection information
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
@@ -247,11 +235,10 @@ def admin_collection_update(*, db, _token, user_info, s3_info):
 @admin_bp.route('/adminCollectionAdd', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route(admin_only=True)
-def admin_collection_add(*, db, _token, user_info, s3_info):
+def admin_collection_add(*, db, user_info, s3_info, **_):
     """ Adds a new collection
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
@@ -268,11 +255,10 @@ def admin_collection_add(*, db, _token, user_info, s3_info):
 @admin_bp.route('/ownerCollectionUpdate', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route(non_admin_only=True)
-def owner_collection_update(*, db, _token, user_info, s3_info):
+def owner_collection_update(*, db, user_info, s3_info, **_):
     """ Adds or updates collection information for a collection owner
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
@@ -293,11 +279,10 @@ def owner_collection_update(*, db, _token, user_info, s3_info):
 @admin_bp.route('/adminCheckIncomplete', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route(admin_only=True)
-def admin_check_incomplete(*, db, _token, user_info, s3_info):
+def admin_check_incomplete(*, db, user_info, s3_info, **_):
     """ Looks for incomplete uploads in collections
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
@@ -314,11 +299,10 @@ def admin_check_incomplete(*, db, _token, user_info, s3_info):
 @admin_bp.route('/adminCompleteChanges', methods=['PUT'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route(admin_only=True)
-def admin_complete_changes(*, db, _token, user_info, s3_info):
+def admin_complete_changes(*, db, user_info, s3_info, **_):
     """ Applies all pending location and species changes to the S3 data
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
@@ -336,11 +320,10 @@ def admin_complete_changes(*, db, _token, user_info, s3_info):
 @admin_bp.route('/adminAbandonChanges', methods=['PUT'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route(admin_only=True)
-def admin_abandon_changes(*, db, _token, user_info, s3_info):
+def admin_abandon_changes(*, db, user_info, s3_info, **_):
     """ Discards all pending location and species changes
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:

@@ -1,15 +1,17 @@
 """ Functions to help queries """
 
 import concurrent.futures
+from dataclasses import dataclass
 import datetime
 import json
 import traceback
 from typing import Optional
 import dateutil.tz
 
+from sparcd_config import DEFAULT_TIMEZONE_OFFSET
 from sparcd_db import SPARCdDatabase
 from spd_types.s3info import S3Info
-from s3_access import S3Connection
+from sparcd_stats_utils import list_uploads_thread
 from format_dr_sanderson import get_dr_sanderson_output, get_dr_sanderson_pictures
 from format_csv import get_csv_raw, get_csv_location, get_csv_species
 from format_image_downloads import get_image_downloads
@@ -19,9 +21,141 @@ from text_formatters.results import Results
 # Uploads table timeout length
 TIMEOUT_UPLOADS_SEC = 3 * 60 * 60
 
-# Default timezone offset in seconds
-# TODO: Set the default timezone elsewhere; perhaps as a environment variable?
-DEFAULT_TIMEZONE_OFFSET = -7.00*60*60
+@dataclass
+class DateFilters:
+    """ Contains the date-related filter values for image filtering """
+    start_date_ts: Optional[datetime.datetime]
+    end_date_ts: Optional[datetime.datetime]
+    years_filter: Optional[dict]
+
+
+def __parse_image_timestamp(one_image: dict) -> tuple:
+    """ Parses the timestamp from an image dict
+    Arguments:
+        one_image: the image to parse the timestamp from
+    Return:
+        Returns a tuple of (image_dt, failed) where image_dt is the parsed datetime
+        or None if not present, and failed is True if parsing failed
+    """
+    if 'timestamp' not in one_image or not one_image['timestamp']:
+        return None, False
+    try:
+        image_dt = datetime.datetime.fromisoformat(one_image['timestamp'])
+        if image_dt and (image_dt.tzinfo is None or
+                         image_dt.tzinfo.utcoffset(image_dt) is None):
+            image_dt = image_dt.replace(
+                tzinfo=dateutil.tz.tzoffset(None, DEFAULT_TIMEZONE_OFFSET))
+        return image_dt, False
+    except Exception as ex:  # pylint: disable=broad-exception-caught
+        print(f'Error converting image timestamp: {one_image["name"]} '
+              f'{one_image["timestamp"]}')
+        print(ex)
+        return None, True
+
+
+def __image_passes_filter(one_image: dict, one_filter: tuple,
+                          image_dt: Optional[datetime.datetime],
+                          date_filters: DateFilters) -> bool:
+    """ Checks if an image passes a single filter
+    Arguments:
+        one_image: the image to check
+        one_filter: the filter to apply
+        image_dt: the parsed image datetime, or None
+        date_filters: the date-related filter values
+    Return:
+        Returns True if the image passes the filter, False if excluded
+    """
+    # pylint: disable=too-many-return-statements
+    match one_filter[0]:
+        case 'dayofweek':
+            return image_dt is not None and image_dt.weekday() in one_filter[1]
+        case 'hour':
+            return image_dt is not None and image_dt.hour in one_filter[1]
+        case 'month':
+            return image_dt is not None and image_dt.month in one_filter[1]
+        case 'species':
+            return any(s['scientificName'] in one_filter[1]
+                       for s in one_image['species'])
+        case 'years':
+            return (date_filters.years_filter is not None and image_dt is not None and
+                    int(date_filters.years_filter['yearStart']) <= image_dt.year
+                    <= int(date_filters.years_filter['yearEnd']))
+        case 'endDate':
+            return image_dt is not None and image_dt <= date_filters.end_date_ts
+        case 'startDate':
+            return image_dt is not None and image_dt >= date_filters.start_date_ts
+        case _:
+            return True
+
+
+def __filter_image(one_image: dict, filters: tuple,
+                   date_filters: DateFilters) -> Optional[dict]:
+    """ Applies all filters to a single image
+    Arguments:
+        one_image: the image to filter
+        filters: the filters to apply
+        date_filters: the date-related filter values
+    Return:
+        Returns the image with image_dt added if it passes all filters, or None if excluded
+    """
+    image_dt, failed = __parse_image_timestamp(one_image)
+    if failed:
+        return None
+
+    if all(__image_passes_filter(one_image, one_filter, image_dt, date_filters)
+           for one_filter in filters):
+        return one_image | {'image_dt': image_dt}
+
+    return None
+
+
+def __filter_upload_images(one_upload: dict, filters: tuple,
+                           date_filters: DateFilters) -> Optional[tuple]:
+    """ Filters all images in a single upload
+    Arguments:
+        one_upload: the upload to filter
+        filters: the filters to apply
+        date_filters: the date-related filter values
+    Return:
+        Returns a tuple of (upload, matching_images) or None if no images match
+    """
+    if not one_upload['info'] or 'images' not in one_upload['info']:
+        return None
+
+    cur_images = [result for one_image in one_upload['info']['images']
+                  if (result := __filter_image(one_image, filters,
+                                               date_filters)) is not None]
+
+    return (one_upload, cur_images) if cur_images else None
+
+
+def __get_date_filters(filtering_names: list,
+                       filters: tuple) -> tuple:
+    """ Extracts and validates the start and end date filters
+    Arguments:
+        filtering_names: the list of active filter names
+        filters: the full filter list
+    Return:
+        Returns a tuple of (start_date_ts, end_date_ts)
+    """
+    start_date_ts = None if 'startDate' not in filtering_names else \
+                    get_filter_dt('startDate', filters)
+    end_date_ts = None if 'endDate' not in filtering_names else \
+                  get_filter_dt('endDate', filters)
+    return start_date_ts, end_date_ts
+
+
+def __filter_and_accumulate(uploads_info: list, filters: tuple,
+                             all_results: list) -> None:
+    """ Filters uploads and appends matching results to all_results
+    Arguments:
+        uploads_info: the list of upload information to process
+        filters: the filters to apply
+        all_results: the list to append matching results to
+    """
+    cur_results = filter_uploads(uploads_info, filters)
+    if cur_results:
+        all_results.extend(cur_results)
 
 
 def filter_uploads(uploads_info: tuple, filters: tuple) -> tuple:
@@ -35,118 +169,38 @@ def filter_uploads(uploads_info: tuple, filters: tuple) -> tuple:
     """
     cur_uploads = uploads_info
 
-    # Filter at the upload level
     for one_filter in filters:
-        match(one_filter[0]):
+        match one_filter[0]:
             case 'locations':
-                cur_uploads = [one_upload for one_upload in cur_uploads if \
-                                one_upload['info']['loc'] in one_filter[1]]
+                cur_uploads = [one_upload for one_upload in cur_uploads
+                               if one_upload['info']['loc'] in one_filter[1]]
             case 'elevation':
                 cur_uploads = filter_elevation(cur_uploads, json.loads(one_filter[1]))
 
-    # Filter at the image level
     filtering_names = [one_filter[0] for one_filter in filters]
-    years_filter = None
     try:
-        start_date_ts = None if 'startDate' not in filtering_names else \
-                                                        get_filter_dt('startDate', filters)
-        end_date_ts = None if 'endDate' not in filtering_names else \
-                                                        get_filter_dt('endDate', filters)
-    except Exception as ex:
+        start_date_ts, end_date_ts = __get_date_filters(filtering_names, filters)
+    except Exception as ex:  # pylint: disable=broad-exception-caught
         print('Invalid start or end filter date')
         print(ex)
         raise ex
 
-    matches = []
-    for one_upload in cur_uploads:
-        cur_images = []
-        if not one_upload['info'] or 'images' not in one_upload['info']:
-            continue
+    date_filters = DateFilters(
+        start_date_ts=start_date_ts,
+        end_date_ts=end_date_ts,
+        years_filter=next((f[1] for f in filters if f[0] == 'years'), None)
+    )
 
-        for one_image in one_upload['info']['images']:
-            excluded = False
-            image_dt = None
-            # pylint: disable=broad-exception-caught
-            if 'timestamp' in one_image and one_image['timestamp']:
-                try:
-                    image_dt = datetime.datetime.fromisoformat(one_image['timestamp'])
-                    # Add a timezone if there isn't one
-                    if image_dt and (image_dt.tzinfo is None or \
-                                            image_dt.tzinfo.utcoffset(image_dt) is None):
-                        image_dt = image_dt.replace(tzinfo=\
-                                        dateutil.tz.tzoffset(None,DEFAULT_TIMEZONE_OFFSET))
-                except Exception as ex:
-                    print(f'Error converting image timestamp: {one_image["name"]} ' \
-                          f'{one_image["timestamp"]} from upload {one_upload["bucket"]} '\
-                          f'{one_upload["name"]}')
-                    print(ex)
-                    excluded = True
-                    continue
+    matches = [result for one_upload in cur_uploads
+               if (result := __filter_upload_images(one_upload, filters,
+                                                    date_filters)) is not None]
 
-            # Filter the image
-            for one_filter in filters:
-                match(one_filter[0]):
-                    case 'dayofweek':
-                        if image_dt is None or image_dt.weekday() not in one_filter[1]:
-                            excluded = True
-                    case 'hour':
-                        if image_dt is None or image_dt.hour not in one_filter[1]:
-                            excluded = True
-                    case 'month':
-                        if image_dt is None or image_dt.month not in one_filter[1]:
-                            excluded = True
-                    case 'species':
-                        found = False
-                        for one_species in one_image['species']:
-                            if one_species['scientificName'] in one_filter[1]:
-                                found = True
-
-                        if not found:
-                            excluded = True
-                    case 'years':
-                        if years_filter is None:
-                            years_filter = one_filter[1]
-                        if image_dt is None or \
-                            not int(years_filter['yearStart']) <= image_dt.year <= \
-                                                                    int(years_filter['yearEnd']):
-                            excluded = True
-                    case 'endDate': # Need to compare against GMT of filter
-                        if image_dt is None or image_dt > end_date_ts:
-                            excluded = True
-                    case 'startDate': # Need to compare against GMT of filter
-                        if image_dt is None or image_dt < start_date_ts:
-                            excluded = True
-
-                # Break loop as soon as it's excluded
-                if excluded:
-                    break
-
-            # Return it if it's not excluded
-            if not excluded:
-                one_image['image_dt'] = image_dt
-                cur_images.append(one_image)
-
-        if len(cur_images) > 0:
-            matches.append((one_upload, cur_images))
-
-    return [cur_upload['info']|{'images':cur_images} for cur_upload,cur_images in matches]
+    return [cur_upload['info'] | {'images': cur_images}
+            for cur_upload, cur_images in matches]
 
 
-def list_uploads_thread(s3_info: S3Info, bucket: str) -> object:
-    """ Used to load upload information from an S3 instance
-    Arguments:
-        s3_info - the information on the S3 instance
-        bucket - the bucket to look in
-    Return:
-        Returns an object with the loaded uploads
-    """
-    uploads_info = S3Connection.list_uploads(s3_info, bucket, True)
-
-    return {'bucket': bucket, 'uploads_info': uploads_info}
-
-
-def filter_collections(db: SPARCdDatabase, cur_coll: tuple, s3_info: S3Info, \
-                                                                        filters: tuple) -> tuple:
+def filter_collections(db: SPARCdDatabase, cur_coll: tuple, s3_info: S3Info,
+                       filters: tuple) -> tuple:
     """ Filters the collections in an efficient manner
     Arguments:
         db - connections to the current database
@@ -159,52 +213,36 @@ def filter_collections(db: SPARCdDatabase, cur_coll: tuple, s3_info: S3Info, \
     all_results = []
     s3_uploads = []
 
-    # Load all the DB data first
     for one_coll in cur_coll:
         cur_bucket = one_coll['bucket']
         uploads_info = db.get_uploads(s3_info.id, cur_bucket, TIMEOUT_UPLOADS_SEC)
         if uploads_info is not None and uploads_info:
-            uploads_info = [{'bucket':cur_bucket,                           \
-                             'name':one_upload['name'],                     \
-                             'info':json.loads(one_upload['json']) if       \
-                                            one_upload['json'] else {} }    \
-                                                for one_upload in uploads_info]
+            uploads_info = [{'bucket': cur_bucket,
+                             'name': one_upload['name'],
+                             'info': json.loads(one_upload['json'])
+                                     if one_upload['json'] else {}}
+                            for one_upload in uploads_info]
+            __filter_and_accumulate(uploads_info, filters, all_results)
         else:
             s3_uploads.append(cur_bucket)
-            continue
 
-        # Filter on current DB uploads
-        if len(uploads_info) > 0:
-            cur_results = filter_uploads(uploads_info, filters)
-            if cur_results:
-                all_results = all_results + cur_results
-
-
-    # Load the S3 uploads in an aynchronous fashion
-    if len(s3_uploads) > 0:
+    if s3_uploads:
         with concurrent.futures.ThreadPoolExecutor() as executor:
             cur_futures = {executor.submit(list_uploads_thread, s3_info, cur_bucket):
-                            cur_bucket for cur_bucket in s3_uploads}
+                           cur_bucket for cur_bucket in s3_uploads}
 
             for future in concurrent.futures.as_completed(cur_futures):
                 try:
                     uploads_results = future.result()
-                    if 'uploads_info' in uploads_results and \
-                                                        len(uploads_results['uploads_info']) > 0:
-                        uploads_info = [{'bucket':uploads_results['bucket'],
-                                         'name':one_upload['name'],
-                                         'info':one_upload,
-                                         'json':json.dumps(one_upload)
-                                        } for one_upload in uploads_results['uploads_info']]
+                    if 'uploads_info' in uploads_results and uploads_results['uploads_info']:
+                        uploads_info = [{'bucket': uploads_results['bucket'],
+                                         'name': one_upload['name'],
+                                         'info': one_upload,
+                                         'json': json.dumps(one_upload)}
+                                        for one_upload in uploads_results['uploads_info']]
                         db.save_uploads(s3_info.id, uploads_results['bucket'], uploads_info)
-
-                        # Filter on current DB uploads
-                        if len(uploads_info) > 0:
-                            cur_results = filter_uploads(uploads_info, filters)
-                            if cur_results:
-                                all_results = all_results + cur_results
-                # pylint: disable=broad-exception-caught
-                except Exception as ex:
+                        __filter_and_accumulate(uploads_info, filters, all_results)
+                except Exception as ex:  # pylint: disable=broad-exception-caught
                     print(f'Generated exception: {ex}', flush=True)
                     traceback.print_exception(ex)
 

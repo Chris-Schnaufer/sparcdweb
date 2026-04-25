@@ -4,8 +4,9 @@ from flask import Blueprint, jsonify, request
 from flask_cors import cross_origin
 
 import handlers.upload as hupload
-from sparcd_config import ALLOWED_ORIGINS, WORKING_PASSCODE, TEMP_SPECIES_FILE_NAME, \
+from sparcd_config import ALLOWED_ORIGINS, WORKING_PASSCODE, \
                           authenticated_route, temp_species_filename
+from s3.s3_access_helpers import SPARCD_PREFIX
 
 upload_bp = Blueprint('upload', __name__)
 
@@ -13,11 +14,10 @@ upload_bp = Blueprint('upload', __name__)
 @upload_bp.route('/uploadImages', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def upload_images(*, db, _token, user_info, s3_info):
+def upload_images(*, db, user_info, s3_info, **_):
     """ Returns the list of images from a collection's upload
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
@@ -41,11 +41,10 @@ def upload_images(*, db, _token, user_info, s3_info):
 @upload_bp.route('/uploadLocation', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def image_location(*, db, _token, user_info, s3_info):
+def image_location(*, db, user_info, s3_info, **_):
     """ Handles updating the location information for images in an upload
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Form parameters:
@@ -70,3 +69,34 @@ def image_location(*, db, _token, user_info, s3_info):
         return 'Not Found', 406
 
     return jsonify({'success': True})
+
+@upload_bp.route('/checkChanges', methods=['POST'])
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
+@authenticated_route()
+def check_changes(*, db, user_info, s3_info, **_):
+    """ Checks if changes have been made to an upload and are stored in the database
+    Arguments:
+        db: the database instance (injected by authenticated_route)
+        user_info: the authenticated user's information (injected by authenticated_route)
+        s3_info: the S3 endpoint information (injected by authenticated_route)
+    Form parameters:
+        id - the collection ID to check
+        up - the upload ID to check
+    Returns:
+        200: JSON object containing whether changes have been made
+        401: if the session token is invalid or expired
+        404: if the request is malformed or the user cannot be found
+        406: if the collection ID or upload ID parameters are missing
+    """
+    print(f'CHECK CHANGES user={user_info.name}', flush=True)
+
+    collection_id = request.form.get('id')
+    collection_upload = request.form.get('up')
+
+    if not collection_id or not collection_upload:
+        return 'Not Found', 406
+
+    have_changes = db.have_upload_changes(s3_info.id,
+                                          SPARCD_PREFIX + collection_id,
+                                          collection_upload)
+    return jsonify({'changesMade': have_changes})

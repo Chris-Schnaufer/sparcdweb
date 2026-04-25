@@ -1,18 +1,18 @@
 """ Species routes for SPARCd server """
 
 import os
-import tempfile
 
 from flask import Blueprint, jsonify
 from flask_cors import cross_origin
 
 import handlers.base as hbase
 import handlers.species as hspecies
-import sparcd_utils as sdu
 from sparcd_config import ALLOWED_ORIGINS, TEMP_OTHER_SPECIES_FILE_NAME_POSTFIX, \
                           SPECIES_STATS_EXCLUDE, TEMP_DIR, authenticated_route, \
                           temp_species_filename
-from sparcd_utils import TEMP_SPECIES_STATS_FILE_NAME_POSTFIX, TEMP_SPECIES_STATS_FILE_TIMEOUT_SEC
+from sparcd_constants import TEMP_SPECIES_STATS_FILE_NAME_POSTFIX, \
+                                TEMP_SPECIES_STATS_FILE_TIMEOUT_SEC
+import sparcd_stats_utils as sdstu
 
 species_bp = Blueprint('species', __name__)
 
@@ -20,11 +20,10 @@ species_bp = Blueprint('species', __name__)
 @species_bp.route('/species', methods=['GET'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def species(*, db, _token, user_info, s3_info):
+def species(*, db, user_info, s3_info, **_):
     """ Returns the list of species for the authenticated user
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
@@ -49,11 +48,10 @@ def species(*, db, _token, user_info, s3_info):
 @species_bp.route('/speciesStats', methods=['GET'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route(eager_password=True)
-def species_stats(*, db, _token, user_info, s3_info):
+def species_stats(*, db, user_info, s3_info, **_):
     """ Returns upload statistics broken down by species
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
@@ -66,7 +64,7 @@ def species_stats(*, db, _token, user_info, s3_info):
     """
     print('SPECIES STATS', flush=True)
 
-    stats = sdu.load_species_stats(db, bool(user_info.admin), s3_info)
+    stats = sdstu.load_species_stats(db, bool(user_info.admin), s3_info)
     if stats is None:
         return 'Not Found', 404
 
@@ -82,12 +80,9 @@ def species_stats(*, db, _token, user_info, s3_info):
 @species_bp.route('/speciesOther', methods=['GET'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def species_other(*, _db, _token, _user_info, s3_info):
+def species_other(*, s3_info, **_):
     """ Returns species that are not part of the official species list
     Arguments:
-        _db: the database instance (injected by authenticated_route, unused)
-        _token: the session token (injected by authenticated_route, unused)
-        _user_info: the authenticated user's information (injected by authenticated_route, unused)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
         200: JSON list of unofficial species found in uploads

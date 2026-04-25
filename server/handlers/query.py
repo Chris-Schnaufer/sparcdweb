@@ -17,9 +17,10 @@ import sparcd_collections as sdc
 from sparcd_db import SPARCdDatabase
 import sparcd_file_utils as sdfu
 import sparcd_utils as sdu
+import sparcd_location_utils as sdlu
 from spd_types.userinfo import UserInfo
 from spd_types.s3info import S3Info
-from s3_access import SPARCD_PREFIX, SPECIES_JSON_FILE_NAME
+from s3.s3_access_helpers import SPECIES_JSON_FILE_NAME, SPARCD_PREFIX
 import s3_utils as s3u
 from text_formatters.results import Results
 import zip_utils as zu
@@ -177,7 +178,7 @@ def __run_query(db: SPARCdDatabase, user_info: UserInfo, s3_info: S3Info,
     cur_species = s3u.load_sparcd_config(SPECIES_JSON_FILE_NAME,
                                          context.temp_species_filename,
                                          s3_info)
-    cur_locations = sdu.load_locations(s3_info)
+    cur_locations = sdlu.load_locations(s3_info)
 
     return Results(all_results, cur_species, cur_locations, s3_info, user_info.settings,
                                                                                 context.interval)

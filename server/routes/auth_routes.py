@@ -99,11 +99,10 @@ def image():
 @auth_bp.route('/settings', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def set_settings(*, db, _token, user_info, s3_info):
+def set_settings(*, db, user_info, s3_info, **_):
     """ Updates the authenticated user's application settings
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Form parameters:
@@ -140,13 +139,10 @@ def set_settings(*, db, _token, user_info, s3_info):
 @auth_bp.route('/adminCheck', methods=['GET'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def admin_check(*, _db, _token, user_info, _s3_info):
+def admin_check(*, user_info, **_):
     """ Returns whether the authenticated user has administrator privileges
     Arguments:
-        _db: the database instance (injected by authenticated_route, unused)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
-        _s3_info: the S3 endpoint information (injected by authenticated_route, unused)
     Returns:
         200: JSON object with 'value' set to True if admin, False otherwise
         401: if the session token is invalid or expired
@@ -159,13 +155,10 @@ def admin_check(*, _db, _token, user_info, _s3_info):
 @auth_bp.route('/settingsAdmin', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route(admin_only=True)
-def settings_admin(*, _db, _token, user_info, _s3_info):
+def settings_admin(*, user_info, **_):
     """ Verifies an administrator's S3 password before allowing admin-level edits
     Arguments:
-        _db: the database instance (injected by authenticated_route, unused)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
-        _s3_info: the S3 endpoint information (injected by authenticated_route, unused)
     Form parameters:
         value - the S3 password to verify
     Returns:
@@ -200,13 +193,10 @@ def settings_admin(*, _db, _token, user_info, _s3_info):
 @auth_bp.route('/settingsOwner', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route(non_admin_only=True)
-def settings_owner(*, _db, _token, user_info, _s3_info):
+def settings_owner(*, user_info, **_):
     """ Verifies a collection owner's S3 password before allowing owner-level edits
     Arguments:
-        _db: the database instance (injected by authenticated_route, unused)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
-        _s3_info: the S3 endpoint information (injected by authenticated_route, unused)
     Form parameters:
         value - the S3 password to verify
     Returns:
@@ -242,12 +232,9 @@ def settings_owner(*, _db, _token, user_info, _s3_info):
 @auth_bp.route('/locationInfo', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def location_info(*, _db, _token, _user_info, s3_info):
+def location_info(*, s3_info, **_):
     """ Returns details on a location from the S3 endpoint
     Arguments:
-        _db: the database instance (injected by authenticated_route, unused)
-        _token: the session token (injected by authenticated_route, unused)
-        _user_info: the authenticated user's information (injected by authenticated_route, unused)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:
         200: JSON object containing location details
@@ -267,11 +254,10 @@ def location_info(*, _db, _token, _user_info, s3_info):
 @auth_bp.route('/setUploadComplete', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
 @authenticated_route()
-def set_upload_complete(*, db, _token, user_info, s3_info):
+def set_upload_complete(*, db, user_info, s3_info, **_):
     """ Marks an incomplete upload as completed
     Arguments:
         db: the database instance (injected by authenticated_route)
-        _token: the session token (injected by authenticated_route, unused)
         user_info: the authenticated user's information (injected by authenticated_route)
         s3_info: the S3 endpoint information (injected by authenticated_route)
     Returns:

@@ -11,7 +11,11 @@ from sparcd_db import SPARCdDatabase
 from spd_types.userinfo import UserInfo
 from spd_types.s3info import S3Info
 import sparcd_utils as sdu
-from s3_access import S3Connection, SPECIES_JSON_FILE_NAME, SPARCD_PREFIX
+import sparcd_location_utils as sdlu
+import sparcd_upload_utils as sdupu
+from s3.s3_access_helpers import SPARCD_PREFIX, SPECIES_JSON_FILE_NAME
+from s3.s3_admin import S3AdminConnection
+from s3.s3_collections import S3CollectionConnection
 import s3_utils as s3u
 from text_formatters.coordinate_utils import deg2utm, deg2utm_code, utm2deg
 
@@ -253,9 +257,9 @@ def handle_admin_collection_details(db: SPARCdDatabase, user_info: UserInfo, s3_
             collection = found_colls[0]
 
     if not collection:
-        collection = S3Connection.get_collection_info(s3_info, bucket)
+        collection = S3CollectionConnection.get_collection_info(s3_info, bucket)
         if collection:
-            collection = sdu.normalize_collection(collection)
+            collection = sdupu.normalize_collection(collection)
 
     if not collection:
         return None if is_admin else False
@@ -291,7 +295,7 @@ def handle_admin_location_details(user_info: UserInfo, s3_info: S3Info) -> Union
     # Get the location information
     location = None
 
-    cur_locations = sdu.load_locations(s3_info, True)
+    cur_locations = sdlu.load_locations(s3_info, True)
 
     if cur_locations:
         found_locs = [one_loc for one_loc in cur_locations if one_loc['idProperty'] == loc_id]
@@ -495,7 +499,7 @@ def handle_location_update(db:SPARCdDatabase, user_info: UserInfo,
         return False
 
     # Get the locations to work with
-    cur_locations = sdu.load_locations(s3_info, True)
+    cur_locations = sdlu.load_locations(s3_info, True)
 
     # Make sure this is OK to do by finding the location
     if params.coords.old_lat and params.coords.old_lng:
@@ -608,14 +612,15 @@ def handle_collection_update(db:SPARCdDatabase, user_info: UserInfo, s3_info: S3
             return None
 
     # Upload the changes
-    S3Connection.save_collection_info(s3_info, found_coll['bucket'], found_coll)
+    S3AdminConnection.save_collection_info(s3_info, found_coll['bucket'], found_coll)
 
-    S3Connection.save_collection_permissions(s3_info, found_coll['bucket'], params.col_all_perms)
+    S3AdminConnection.save_collection_permissions(s3_info, found_coll['bucket'],
+                                                                            params.col_all_perms)
 
     # Update the collection to reflect the changes
-    updated_collection = S3Connection.get_collection_info(s3_info, s3_bucket)
+    updated_collection = S3CollectionConnection.get_collection_info(s3_info, s3_bucket)
     if updated_collection:
-        updated_collection = sdu.normalize_collection(updated_collection)
+        updated_collection = sdupu.normalize_collection(updated_collection)
 
         # Update the collection entry in the database
         sdc.collection_update(db, s3_info.id, updated_collection)
@@ -671,7 +676,7 @@ def handle_collection_add(db:SPARCdDatabase, user_info: UserInfo, s3_info: S3Inf
         return False
 
     # Add the collection
-    s3_bucket = S3Connection.add_collection(s3_info,
+    s3_bucket = S3AdminConnection.add_collection(s3_info,
                                 {   'name': col_name,
                                     'description': col_desc,
                                     'email': col_email,
@@ -681,9 +686,9 @@ def handle_collection_add(db:SPARCdDatabase, user_info: UserInfo, s3_info: S3Inf
     print(f'INFO: Created new collection: {s3_bucket}', flush=True)
 
     # Update the collection to reflect the changes
-    updated_collection = S3Connection.get_collection_info(s3_info, s3_bucket)
+    updated_collection = S3CollectionConnection.get_collection_info(s3_info, s3_bucket)
     if updated_collection:
-        updated_collection = sdu.normalize_collection(updated_collection)
+        updated_collection = sdupu.normalize_collection(updated_collection)
 
         # Update the collection entry in the database
         sdc.collection_add(db, s3_info.id, updated_collection)
@@ -719,7 +724,7 @@ def handle_check_incomplete(db:SPARCdDatabase, user_info: UserInfo,
 
     # Get the locations and species changes logged in the database
 
-    incomplete = S3Connection.check_incomplete_uploads(s3_info, cur_colls)
+    incomplete = S3CollectionConnection.check_incomplete_uploads(s3_info, cur_colls)
 
     if incomplete is None:
         print('ERROR: unable to check for incomplete uploads in indicated collections', cur_colls,
@@ -758,14 +763,14 @@ def handle_complete_changes(db:SPARCdDatabase, user_info: UserInfo, s3_info: S3I
 
     # Update the location
     if 'locations' in changes and changes['locations']:
-        if not sdu.update_admin_locations(s3_info, changes):
+        if not sdlu.update_admin_locations(s3_info, changes):
             return 'Unable to update the locations', 422
     # Mark the locations as done in the DB
     db.clear_admin_location_changes(s3_info.id, user_info.name)
 
     # Update the species
     if 'species' in changes and changes['species']:
-        updated_species = sdu.update_admin_species(s3_info, changes)
+        updated_species = sdlu.update_admin_species(s3_info, changes)
         if updated_species is None:
             return 'Unable to update the species. Any changed locations were updated', 422
 

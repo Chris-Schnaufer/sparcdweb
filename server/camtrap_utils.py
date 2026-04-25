@@ -6,8 +6,10 @@ from typing import Optional
 
 from camtrap.v016 import camtrap
 from spd_types.s3info import S3Info
-from s3_access import S3Connection, make_s3_path, DEPLOYMENT_CSV_FILE_NAME, MEDIA_CSV_FILE_NAME, \
-                      OBSERVATIONS_CSV_FILE_NAME
+from s3.s3_access_helpers import make_s3_path, DEPLOYMENT_CSV_FILE_NAME, MEDIA_CSV_FILE_NAME, \
+                                OBSERVATIONS_CSV_FILE_NAME
+from s3.s3_uploads import S3UploadConnection
+
 #from sparcd_file_utils import load_timed_info, save_timed_info
 
 def load_camtrap_info(s3_info: S3Info, bucket: str, \
@@ -26,6 +28,8 @@ def load_camtrap_info(s3_info: S3Info, bucket: str, \
         Looks on the local file system to see if the contents are available. If not found there,
         the file is downloaded from S3
     """
+    # pylint: disable=unused-argument
+
    ## First try the local file system
    #load_path = os.path.join(tempfile.gettempdir(),
    #                bucket+'_'+os.path.basename(s3_path)+'_'+filename)
@@ -35,7 +39,8 @@ def load_camtrap_info(s3_info: S3Info, bucket: str, \
    #        return camtrap_data
 
     # Try S3 since we don't have the data
-    camtrap_data = S3Connection.get_camtrap_file(s3_info, bucket, make_s3_path((s3_path, filename)))
+    camtrap_data = S3UploadConnection.get_camtrap_file(s3_info, bucket,
+                                                                make_s3_path((s3_path, filename)))
 
     # Check if we need to save it to disk
     #if temp_to_disk is True:

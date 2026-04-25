@@ -3,7 +3,7 @@
 from sparcd_db import SPARCdDatabase
 from spd_types.userinfo import UserInfo
 from spd_types.s3info import S3Info
-from s3_access import S3Connection
+from s3.s3_admin import S3AdminConnection
 
 
 def handle_new_install_check(db:SPARCdDatabase, user_info: UserInfo, s3_info: S3Info) -> dict:
@@ -25,7 +25,7 @@ def handle_new_install_check(db:SPARCdDatabase, user_info: UserInfo, s3_info: S3
                    }
 
     # Check if the S3 instance needs repairs and not a new install
-    needs_repair, has_everything = S3Connection.needs_repair(s3_info)
+    needs_repair, has_everything = S3AdminConnection.needs_repair(s3_info)
     if needs_repair:
         return_data['needsRepair'] = True
         return_data['message'] = 'You can try to perform a repair on the S3 endpoint'
@@ -39,7 +39,7 @@ def handle_new_install_check(db:SPARCdDatabase, user_info: UserInfo, s3_info: S3
         return return_data
 
     # Check if they can make a new install
-    can_create, test_bucket = S3Connection.check_new_install_possible(s3_info)
+    can_create, test_bucket = S3AdminConnection.check_new_install_possible(s3_info)
     if not can_create:
         return_data['failedPerms'] = True
         return_data['message'] = 'Unable to install SPARCd at the S3 endpoint. Please ' \
@@ -87,14 +87,14 @@ def handle_new_install(db:SPARCdDatabase, user_info: UserInfo, s3_info: S3Info,
         sole_user = True
 
     # Check if the S3 instance needs repairs and of is all set
-    needs_repair, has_everything = S3Connection.needs_repair(s3_info)
+    needs_repair, has_everything = S3AdminConnection.needs_repair(s3_info)
 
     if needs_repair or has_everything:
         return {'success': False, 'message': 'There is already an existing SPARCd ' \
                                                         'configuration'}
 
     # The user is apparently the sole user or an admin, and the S3 instance is not setup for SPARCd
-    if not S3Connection.create_sparcd(s3_info, settings_path):
+    if not S3AdminConnection.create_sparcd(s3_info, settings_path):
         return {'success': False, 'message': 'Unable to configure new SPARCd instance'}
 
     # Make this user the admin if they're the only one in the DB
@@ -119,14 +119,14 @@ def handle_repair_install(user_info: UserInfo, s3_info: S3Info, settings_path: s
                                                     'SPARCd configuration'}
 
     # Check if the S3 instance needs repairs and of is all set
-    needs_repair, has_everything = S3Connection.needs_repair(s3_info)
+    needs_repair, has_everything = S3AdminConnection.needs_repair(s3_info)
 
     if not needs_repair or has_everything:
         return {'success': True, \
                  'message': 'The SPARCd installation doesn\'t need repair'}
 
     # Make repairs
-    if not S3Connection.repair_sparcd(s3_info, settings_path):
+    if not S3AdminConnection.repair_sparcd(s3_info, settings_path):
         return {'success': False, 'message': 'Unable to repair this SPARCd instance'}
 
     return {'success': True}

@@ -6,7 +6,7 @@ import tempfile
 
 import sparcd_file_utils as sdfu
 from spd_types.s3info import S3Info
-from s3_access import SPECIES_JSON_FILE_NAME
+from s3.s3_access_helpers import SPECIES_JSON_FILE_NAME
 import s3_utils as s3u
 
 
