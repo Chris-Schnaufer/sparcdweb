@@ -10,7 +10,6 @@ import uuid
 from flask import request
 from minio.error import MinioException
 import requests
-from requests.models import Response
 
 import spd_crypt as crypt
 import sparcd_collections as sdc
@@ -56,7 +55,7 @@ class NewLoginContext:
     temp_species_filename: str
 
 
-def __get_params() -> LoginParams:
+def __get_login_params() -> LoginParams:
     """ Returns the request parameters
     Return:
         Returns a LoginParams instance
@@ -161,7 +160,7 @@ def handle_login(db: SPARCdDatabase, passcode: str, expire_sec: int,
 
     user_agent_hash = hashlib.sha256(client_user_agent.encode('utf-8')).hexdigest()
 
-    params = __get_params()
+    params = __get_login_params()
 
     # If the token is here for checking, and we have session information, see if it's valid
     if params.token is not None:
@@ -283,7 +282,8 @@ def handle_species(db: SPARCdDatabase, user_info: UserInfo, s3_info: S3Info,
 
 
 def handle_image(db: SPARCdDatabase, s3_info: S3Info, image: str,
-                                image_fetch_timeout_sec: int, passcode: str) -> Optional[Response]:
+                        image_fetch_timeout_sec: int,
+                        passcode: str) -> Optional[tuple]:
     """ Handles return the bytes of an image
     Arguments:
         db: the database instance
@@ -292,18 +292,20 @@ def handle_image(db: SPARCdDatabase, s3_info: S3Info, image: str,
         image_fetch_timeout_sec: the timeout for getting an image
         passcode: the working passcode
     Return:
+        A tuple containing the loaded image in a requests.Response object and the file extension
+        upon success. None is returned for each tuple position otherwise
     """
 
     # Check the rest of the parameters
     try:
         image_req = json.loads(crypt.do_decrypt(passcode, image))
     except json.JSONDecodeError:
-        image_req = None
+        image_req = None, None
 
     # Check what we have from the requestor
     if not image_req or not isinstance(image_req, dict) or \
                 not all(one_key in image_req.keys() for one_key in ('k','p')):
-        return None
+        return None, None
 
     image_key = image_req['k']
     image_path = image_req['p']
@@ -315,14 +317,16 @@ def handle_image(db: SPARCdDatabase, s3_info: S3Info, image: str,
     # Load the image data
     image_data = sdc.load_image_data(db, s3_info.id, collection_id, collection_upload, image_key)
     if image_data is None or not isinstance(image_data, dict):
-        return None
+        return None, None
 
     # Get the image data (not to be confused with Flask's request)
     res = requests.get(image_data['s3_url'],
                        timeout=image_fetch_timeout_sec,
                        allow_redirects=False)
 
-    return res
+    ext = os.path.splitext(image_data['s3_url'])[1].lower().split('?')[0]
+
+    return res, ext
 
 
 def handle_settings(db: SPARCdDatabase, user_info: UserInfo, s3_info: S3Info,

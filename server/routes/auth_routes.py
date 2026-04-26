@@ -2,8 +2,9 @@
 
 import hashlib
 
-from flask import Blueprint, jsonify, make_response, request
+from flask import Blueprint, jsonify, request, Response
 from flask_cors import cross_origin
+import requests
 
 import handlers.base as hbase
 from sparcd_db import SPARCdDatabase
@@ -16,6 +17,57 @@ import s3_utils as s3u
 import spd_crypt as crypt
 
 auth_bp = Blueprint('auth', __name__)
+
+
+def __parse_range(range_header: str, object_size: int) -> tuple:
+    """ Parses an HTTP Range header and returns (start, end) byte positions
+    Arguments:
+        range_header: the Range header value e.g. 'bytes=0-1023'
+        object_size: the total size of the object in bytes
+    Return:
+        Returns a tuple of (start, end) where end is exclusive
+    """
+    ranges = range_header.strip().replace('bytes=', '')
+    start_str, end_str = ranges.split('-')
+    start = int(start_str) if start_str else 0
+    end = (int(end_str) + 1) if end_str else object_size
+    return start, min(end, object_size)
+
+
+def __serve_image_stream(res: requests.Response) -> Response:
+    """ Streams an image response progressively
+    Arguments:
+        res: the requests response object containing the image content
+    """
+    def generate():
+        yield from res.iter_content(32 * 1024)
+
+    response = Response(generate(), content_type=res.headers.get('Content-Type', 'image/jpeg'))
+    response.headers.set('Cache-Control', f'private, max-age={IMAGE_BROWSER_CACHE_TIMEOUT_SEC}')
+    return response
+
+
+def __serve_video(res: requests.Response) -> Response:
+    """ Serves a video response with range request support
+    Arguments:
+        res: the requests response object containing the video content
+    """
+    object_size = int(res.headers.get('Content-Length', 0))
+    mimetype = res.headers.get('Content-Type', 'video/mp4')
+
+    range_header = request.headers.get('Range')
+    if range_header:
+        start, end = __parse_range(range_header, object_size)
+        content = res.content[start:end]
+        response = Response(content, 206, content_type=mimetype)
+        response.headers['Content-Range'] = f'bytes {start}-{end - 1}/{object_size}'
+    else:
+        response = Response(res.content, 200, content_type=mimetype)
+
+    response.headers['Accept-Ranges'] = 'bytes'
+    response.headers['Content-Length'] = object_size
+    response.headers.set('Cache-Control', f'private, max-age={IMAGE_BROWSER_CACHE_TIMEOUT_SEC}')
+    return response
 
 
 @auth_bp.route('/login', methods=['POST'])
@@ -84,16 +136,19 @@ def image():
         return 'Unauthorized', 401
 
     s3_info = get_s3_info(token, db, user_info)
-    res = hbase.handle_image(db,
+    res, ext = hbase.handle_image(db,
                              s3_info,
                              request.args.get('i'),
                              DEFAULT_IMAGE_FETCH_TIMEOUT_SEC,
                              WORKING_PASSCODE)
 
-    response = make_response(res.content)
-    response.headers.set('Cache-Control',
-                         f'public, max-age={IMAGE_BROWSER_CACHE_TIMEOUT_SEC}')
-    return response
+    if not res:
+        return 'Not Found', 404
+
+    if ext in ('.mp4', '.mov', '.avi'):
+        return __serve_video(res)
+
+    return __serve_image_stream(res)
 
 
 @auth_bp.route('/settings', methods=['POST'])
