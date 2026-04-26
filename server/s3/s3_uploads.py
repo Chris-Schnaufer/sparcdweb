@@ -143,14 +143,14 @@ class S3UploadConnection:
         """
         minio = s3_connect(conn_info)
 
-        coll_info = load_upload_meta(minio, bucket, upload_path,
+        meta_info = load_upload_meta(minio, bucket, upload_path,
                                        'update_upload_metadata_image_species')
-        if not coll_info:
+        if not meta_info:
             return False
 
-        coll_info['imagesWithSpecies'] = new_count
+        meta_info['imagesWithSpecies'] = new_count
         put_s3_json(minio, bucket,
-                      make_s3_path((upload_path, S3_UPLOAD_META_JSON_FILE_NAME)), coll_info)
+                      make_s3_path((upload_path, S3_UPLOAD_META_JSON_FILE_NAME)), meta_info)
 
         return True
 
@@ -168,14 +168,14 @@ class S3UploadConnection:
         """
         minio = s3_connect(conn_info)
 
-        coll_info = load_upload_meta(minio, bucket, upload_path,
+        meta_info = load_upload_meta(minio, bucket, upload_path,
                                        'update_upload_metadata_description')
-        if not coll_info:
+        if not meta_info:
             return False
 
-        coll_info['description'] = description
+        meta_info['description'] = description
         put_s3_json(minio, bucket,
-                      make_s3_path((upload_path, S3_UPLOAD_META_JSON_FILE_NAME)), coll_info)
+                      make_s3_path((upload_path, S3_UPLOAD_META_JSON_FILE_NAME)), meta_info)
 
         return True
 

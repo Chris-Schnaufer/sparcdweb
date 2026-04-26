@@ -130,5 +130,6 @@ def upload_update_details(*, db, user_info, s3_info, **_):
     if not all(val for val in [collection_id, collection_upload, description]):
         return 'Not Found', 406
 
-    return {'success': hupload.handle_update_upload_details(db, s3_info, collection_id,
-                                                                    collection_upload, description)}
+    updated_coll = hupload.handle_update_upload_details(db, s3_info, collection_id,
+                                                                    collection_upload, description)
+    return {'success': updated_coll is not None, 'coll': updated_coll}

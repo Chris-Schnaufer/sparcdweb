@@ -318,7 +318,7 @@ def handle_upload_location(db: SPARCdDatabase, user_info: UserInfo, s3_info: S3I
 
 
 def handle_update_upload_details(db: SPARCdDatabase, s3_info: S3Info, collection_id: str,
-                                                        upload_id: str, description: str) -> bool:
+                                                upload_id: str, description: str) -> Optional[dict]:
     """ Updates the details of an upload
     Arguments:
         db: the database instance
@@ -327,14 +327,14 @@ def handle_update_upload_details(db: SPARCdDatabase, s3_info: S3Info, collection
         upload_id: the ID of the upload
         description: the updated description to save
     Return:
-        Returns True upon successful update and False when the update fails
+        Returns the updated collection upon successful update and None when the update fails
     """
     bucket = SPARCD_PREFIX + collection_id
     upload_path = make_s3_path((COLLECTIONS_FOLDER, collection_id, S3_UPLOADS_PATH_PART, upload_id))
 
     if not S3UploadConnection.update_upload_metadata_description(s3_info, bucket, upload_path,
                                                                                     description):
-        return False
+        return None
 
     # Update the collection to reflect the new upload metadata
     updated_collection = S3CollectionConnection.get_collection_info(s3_info, bucket)
@@ -344,4 +344,4 @@ def handle_update_upload_details(db: SPARCdDatabase, s3_info: S3Info, collection
         # Update the collection entry in the database
         sdc.collection_update(db, s3_info.id, updated_collection)
 
-    return True
+    return updated_collection

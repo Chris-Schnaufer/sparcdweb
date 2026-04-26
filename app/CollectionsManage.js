@@ -38,9 +38,11 @@ import * as utils from './utils';
  * @param {function} onSelectionChange Called when the user selects a new collection
  * @param {function} onEditUpload Called when the user wants to edit an upload of a collection
  * @param {function} searchSetup Call when settting up or clearing search elements
+ * @param {function} onUploadUpdateMetadata Called when an upload's metadata is changed
  * @returns {object} The rendered UI
  */
-export default function CollectionsManage({loadingCollections, selectedCollection, onSelectionChange, onEditUpload, searchSetup}) {
+export default function CollectionsManage({loadingCollections, selectedCollection, onSelectionChange, onEditUpload,
+                                            searchSetup, onUploadUpdateMetadata}) {
   const theme = useTheme();
   const sidebarRef = React.useRef();
   const addMessage = React.useContext(AddMessageContext); // Function adds messages for display
@@ -52,6 +54,7 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
   const serverURLRef = React.useRef(utils.getServer());    // The starting part of the url to call
   const [editingUploadMask, setEditingUploadMask] = React.useState(false);
   const [expandedUpload, setExpandedUpload] = React.useState(false);
+  const [pendingMessage, setPendingMessage] = React.useState(null);
   const [searchIsSetup, setSearchIsSetup] = React.useState(false);
   const [selectionIndex, setSelectionIndex] = React.useState(-1);
   const [totalHeight, setTotalHeight] = React.useState(null);  // Default value is recalculated at display time
@@ -165,7 +168,6 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
    * @param {function} [onFailure] The function to call upon filure
    */
   const handleUploadDetailChange = React.useCallback((upload, comment, onSuccess, onFailure) => {
-    console.log('HACK:',upload, comment, onSuccess, onFailure);
 
     onSuccess ||= () => {};
     onFailure ||= () => {};
@@ -179,15 +181,19 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
       return;
     }
 
+    setPendingMessage('Please wait while making the changes to the upload details');
     const success = Server.updateUploadDetails(serverURLRef.current, collectionToken,
                                 uploadDetailEdit.collectionId,
                                 upload.key,
                                 comment,
                                 setTokenExpired,
                                 (respData) => {   // Success
+                                  setPendingMessage(null);
                                   if (respData.success) {
                                     setUploadDetailEdit(null);
                                     onSuccess(upload.key);
+                                    // Reload the collections
+                                    onUploadUpdateMetadata();
                                   } else {
                                     addMessage(Level.Error, 'Unable to update the collection details');
                                     onFailure(upload.key);
@@ -196,6 +202,7 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
                                 (err) => {        // Failure
                                   addMessage(Level.Error, 'An problem occurred while updating the upload information');
                                   onFailure(upload.key);
+                                  setPendingMessage(null);
                                 }
     );
 
@@ -462,16 +469,25 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
               </Button>
           </WorkspaceOverlay>
       }
+      { pendingMessage && 
+          <WorkspaceOverlay>
+              <Typography gutterBottom variant="body2" color="lightgrey">
+                {pendingMessage}
+              </Typography>
+              <CircularProgress variant="indeterminate" />
+          </WorkspaceOverlay>
+      }
     </Box>
   );
 }
 
 CollectionsManage.propTypes = {
-  loadingCollections: PropTypes.bool.isRequired,
-  selectedCollection: PropTypes.string,
-  onSelectionChange:  PropTypes.func.isRequired,
-  onEditUpload:       PropTypes.func.isRequired,
-  searchSetup:        PropTypes.func.isRequired,
+  loadingCollections:     PropTypes.bool.isRequired,
+  selectedCollection:     PropTypes.string,
+  onSelectionChange:      PropTypes.func.isRequired,
+  onEditUpload:           PropTypes.func.isRequired,
+  searchSetup:            PropTypes.func.isRequired,
+  onUploadUpdateMetadata: PropTypes.func.isRequired,
 };
 
 CollectionsManage.defaultProps = {

@@ -59,7 +59,7 @@ export default function EditUploadDetails({upload, onChange, onClose}) {
     onChange?.(upload, description,
           () => onClose()   // Success
     );
-  }, [upload]);
+  }, [description, upload]);
 
   return (
     <ModalDialog id={'edit-upload-details-'+upload.key} backgroundColor="#D3DEE6" open={true} maxWidth='md' onClose={handleClose} >

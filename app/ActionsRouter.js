@@ -112,6 +112,7 @@ export default function ActionsRouter({action, curActionData, loadingCollections
                             searchSetup={setupSearch}
                             onEditUpload={handleEditUpload}
                             onSelectionChange={handleCollectionSelectionChange}
+                            onUploadUpdateMetadata={uploadUpdate}
         />
     );
     case UserActions.Query:
