@@ -17,9 +17,9 @@ from spd_types.userinfo import UserInfo
 from spd_types.s3info import S3Info
 import sparcd_upload_utils as sdupu
 import s3_utils as s3u
-from s3.s3_access_helpers import make_s3_path, DEPLOYMENT_CSV_FILE_NAME, MEDIA_CSV_FILE_NAME, \
-                                OBSERVATIONS_CSV_FILE_NAME, SPECIES_JSON_FILE_NAME, SPARCD_PREFIX, \
-                                S3_UPLOADS_PATH_PART
+from s3.s3_access_helpers import make_s3_path, COLLECTIONS_FOLDER, DEPLOYMENT_CSV_FILE_NAME, \
+                                MEDIA_CSV_FILE_NAME, OBSERVATIONS_CSV_FILE_NAME, \
+                                SPECIES_JSON_FILE_NAME, SPARCD_PREFIX, S3_UPLOADS_PATH_PART
 from s3.s3_collections import S3CollectionConnection
 from s3.s3_uploads import S3UploadConnection
 
@@ -284,8 +284,8 @@ def handle_upload_location(db: SPARCdDatabase, user_info: UserInfo, s3_info: S3I
         return None
 
     bucket = SPARCD_PREFIX + loc_params.upload.coll_id
-    upload_path = f'Collections/{loc_params.upload.coll_id}/{S3_UPLOADS_PATH_PART}' \
-                                                                    f'{loc_params.upload.upload_id}'
+    upload_path = make_s3_path((COLLECTIONS_FOLDER, loc_params.upload.coll_id,
+                                S3_UPLOADS_PATH_PART, loc_params.upload.upload_id))
 
     db.add_collection_edit(s3_info.id, bucket, upload_path, user_info.name,
                            loc_params.upload.timestamp, loc_params.location.loc_id,
@@ -313,5 +313,35 @@ def handle_upload_location(db: SPARCdDatabase, user_info: UserInfo, s3_info: S3I
     if updated_collection:
         # Update the collection entry in the database
         sdc.collection_update(db, s3_info.id, sdupu.normalize_collection(updated_collection))
+
+    return True
+
+
+def handle_update_upload_details(db: SPARCdDatabase, s3_info: S3Info, collection_id: str,
+                                                        upload_id: str, description: str) -> bool:
+    """ Updates the details of an upload
+    Arguments:
+        db: the database instance
+        s3_info: the S3 endpoint information
+        collection_id: the ID of the collection the upload belongs to
+        upload_id: the ID of the upload
+        description: the updated description to save
+    Return:
+        Returns True upon successful update and False when the update fails
+    """
+    bucket = SPARCD_PREFIX + collection_id
+    upload_path = make_s3_path((COLLECTIONS_FOLDER, collection_id, S3_UPLOADS_PATH_PART, upload_id))
+
+    if not S3UploadConnection.update_upload_metadata_description(s3_info, bucket, upload_path,
+                                                                                    description):
+        return False
+
+    # Update the collection to reflect the new upload metadata
+    updated_collection = S3CollectionConnection.get_collection_info(s3_info, bucket)
+    if updated_collection:
+        updated_collection = sdupu.normalize_collection(updated_collection)
+
+        # Update the collection entry in the database
+        sdc.collection_update(db, s3_info.id, updated_collection)
 
     return True

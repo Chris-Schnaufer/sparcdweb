@@ -5,12 +5,10 @@ from typing import Optional, Callable
 import traceback
 import concurrent.futures
 
-from minio import Minio
-
-from s3.s3_connect import s3_connect
 from spd_types.s3info import S3Info
-from s3.s3_access_helpers import (SPARCD_PREFIX, S3_UPLOADS_PATH_PART, temp_s3_file,
-                                apply_media_timestamps, apply_observation_species,
+from s3.s3_connect import s3_connect
+from s3.s3_access_helpers import (COLLECTIONS_FOLDER, SPARCD_PREFIX, S3_UPLOADS_PATH_PART,
+                                temp_s3_file, apply_media_timestamps, apply_observation_species,
                                 make_s3_path, get_uploaded_folders, get_image_counts,
                                 get_s3_images, download_data_thread)
 
@@ -32,7 +30,8 @@ class S3ImageConnection:
             the image file name, bucket s3_path, and unique key
         """
         bucket = SPARCD_PREFIX + collection_id
-        upload_path = make_s3_path(('Collections', collection_id, 'Uploads', upload_name)) + '/'
+        upload_path = make_s3_path((COLLECTIONS_FOLDER, collection_id, S3_UPLOADS_PATH_PART,
+                                                                                upload_name)) + '/'
         minio = s3_connect(conn_info)
         return get_s3_images(minio, bucket, [upload_path])
 
@@ -69,7 +68,7 @@ class S3ImageConnection:
             Returns the images, or None
         """
         bucket = SPARCD_PREFIX + collection_id
-        upload_path = make_s3_path(('Collections', collection_id,
+        upload_path = make_s3_path((COLLECTIONS_FOLDER, collection_id,
                                     S3_UPLOADS_PATH_PART, upload_name)) + '/'
         minio = s3_connect(conn_info)
         images = get_s3_images(minio, bucket, [upload_path], need_url)

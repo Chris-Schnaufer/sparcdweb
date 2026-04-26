@@ -21,9 +21,9 @@ from spd_types.s3info import S3Info
 import sparcd_utils as sdu
 import sparcd_timestamp_utils as sdtsu
 import sparcd_upload_utils as sdupu
-from s3.s3_access_helpers import make_s3_path, download_s3_file, MEDIA_CSV_FILE_NAME, \
-                                OBSERVATIONS_CSV_FILE_NAME, SPECIES_JSON_FILE_NAME, \
-                                SPARCD_PREFIX, S3_UPLOADS_PATH_PART
+from s3.s3_access_helpers import make_s3_path, download_s3_file, COLLECTIONS_FOLDER, \
+                                MEDIA_CSV_FILE_NAME, OBSERVATIONS_CSV_FILE_NAME, \
+                                SPECIES_JSON_FILE_NAME, SPARCD_PREFIX, S3_UPLOADS_PATH_PART
 from s3.s3_collections import S3CollectionConnection
 from s3.s3_connect import s3_connect
 from s3.s3_uploads import S3UploadConnection
@@ -412,7 +412,8 @@ def handle_images_all_edited(db: SPARCdDatabase, user_info: UserInfo,
                                 for one_file in edited_files_info]
 
     s3_bucket = SPARCD_PREFIX + params.coll_id
-    s3_path = make_s3_path(('Collections', params.coll_id, S3_UPLOADS_PATH_PART, params.upload_id))
+    s3_path = make_s3_path((COLLECTIONS_FOLDER, params.coll_id, S3_UPLOADS_PATH_PART,
+                                                                                params.upload_id))
 
     # Start updating the CAMTRAP information starting with observations
     __update_observations(s3_info, s3_bucket, s3_path, edited_files_info, params.timestamp)
@@ -562,7 +563,7 @@ def handle_adjust_timestamp(s3_info: S3Info) -> Union[bool, None]:
         return True
 
     s3_bucket = SPARCD_PREFIX + params.collection_id
-    s3_path = make_s3_path(('Collections', params.collection_id, S3_UPLOADS_PATH_PART,
+    s3_path = make_s3_path((COLLECTIONS_FOLDER, params.collection_id, S3_UPLOADS_PATH_PART,
                                                                                 params.upload_id))
 
     # Get the media file so we can update - use the file name as the index

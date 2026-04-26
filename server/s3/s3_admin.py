@@ -9,13 +9,13 @@ import uuid
 
 from minio import S3Error
 
-from s3.s3_connect import s3_connect
 from spd_types.s3info import S3Info
-from s3.s3_access_helpers import (SPARCD_PREFIX, SETTINGS_FOLDER, SETTINGS_BUCKET_PREFIX,
-                                COLLECTION_JSON_FILE_NAME, PERMISSIONS_JSON_FILE_NAME,
-                                CONFIGURATION_FILES_LIST, MAX_NEW_BUCKET_TRIES,
-                                temp_s3_file, make_s3_path, get_s3_file, put_s3_file,
-                                find_settings_bucket, create_new_bucket)
+from s3.s3_connect import s3_connect
+from s3.s3_access_helpers import (COLLECTIONS_FOLDER, SPARCD_PREFIX, SETTINGS_FOLDER,
+                                SETTINGS_BUCKET_PREFIX, COLLECTION_JSON_FILE_NAME,
+                                PERMISSIONS_JSON_FILE_NAME, CONFIGURATION_FILES_LIST,
+                                MAX_NEW_BUCKET_TRIES, temp_s3_file, make_s3_path, get_s3_file,
+                                put_s3_file, find_settings_bucket, create_new_bucket)
 from s3.s3_uploads import S3UploadConnection
 
 
@@ -82,7 +82,7 @@ class S3AdminConnection:
             bucket: the bucket to upload to
             coll_info: the collection information to save
         """
-        coll_info_path = make_s3_path(('Collections', bucket[len(SPARCD_PREFIX):],
+        coll_info_path = make_s3_path((COLLECTIONS_FOLDER, bucket[len(SPARCD_PREFIX):],
                                        COLLECTION_JSON_FILE_NAME))
         S3UploadConnection.upload_file_data(conn_info, bucket, coll_info_path,
                                             json.dumps(
@@ -103,7 +103,7 @@ class S3AdminConnection:
             bucket: the bucket to upload to
             perm_info: the tuple of permissions information
         """
-        perms_info_path = make_s3_path(('Collections', bucket[len(SPARCD_PREFIX):],
+        perms_info_path = make_s3_path((COLLECTIONS_FOLDER, bucket[len(SPARCD_PREFIX):],
                                         PERMISSIONS_JSON_FILE_NAME))
         S3UploadConnection.upload_file_data(conn_info, bucket, perms_info_path,
                                             json.dumps(

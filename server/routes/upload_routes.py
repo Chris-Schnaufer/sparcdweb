@@ -100,3 +100,35 @@ def check_changes(*, db, user_info, s3_info, **_):
                                           SPARCD_PREFIX + collection_id,
                                           collection_upload)
     return jsonify({'changesMade': have_changes})
+
+
+@upload_bp.route('/uploadUpdateDetails', methods=['POST'])
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
+@authenticated_route()
+def upload_update_details(*, db, user_info, s3_info, **_):
+    """ Checks if changes have been made to an upload and are stored in the database
+    Arguments:
+        db: the database instance (injected by authenticated_route)
+        user_info: the authenticated user's information (injected by authenticated_route)
+        s3_info: the S3 endpoint information (injected by authenticated_route)
+    Form parameters:
+        id - the collection ID of the upload
+        up - the upload ID of the new description
+        description - the new description
+    Returns:
+        200: JSON object containing whether changes have been made
+        401: if the session token is invalid or expired
+        404: if the request is malformed or the user cannot be found
+        406: if any of collection ID, upload ID, or description parameters are missing
+    """
+    print(f'CHECK CHANGES user={user_info.name}', flush=True)
+
+    collection_id = request.form.get('id')
+    collection_upload = request.form.get('up')
+    description = request.form.get('description')
+
+    if not all(val for val in [collection_id, collection_upload, description]):
+        return 'Not Found', 406
+
+    return {'success': hupload.handle_update_upload_details(db, s3_info, collection_id,
+                                                                    collection_upload, description)}

@@ -407,7 +407,7 @@ def get_user_collections(minio: Minio, user: str, buckets: tuple) -> tuple:
 
     with temp_s3_file() as temp_path:
         for one_bucket in buckets:
-            base_path = make_s3_path(('Collections', one_bucket[len(SPARCD_PREFIX):]))
+            base_path = make_s3_path((COLLECTIONS_FOLDER, one_bucket[len(SPARCD_PREFIX):]))
 
             coll_info_path = make_s3_path((base_path, COLLECTION_JSON_FILE_NAME))
             coll_data = get_s3_file(minio, one_bucket, coll_info_path, temp_path)
@@ -694,7 +694,6 @@ def check_incomplete_thread(minio: Minio, bucket: str) -> Optional[tuple]:
     Return:
         Returns the tuple of found incomplete uploads
     """
-    from s3_access_helpers import COLLECTIONS_FOLDER, S3_UPLOADS_PATH_PART
     coll_id = bucket[len(SPARCD_PREFIX):]
     uploads_path = make_s3_path((COLLECTIONS_FOLDER, coll_id, S3_UPLOADS_PATH_PART)) + '/'
 

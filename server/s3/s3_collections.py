@@ -1,17 +1,15 @@
 """ S3 collection and upload discovery operations for SPARCd """
 
+import os
 import concurrent.futures
 import dataclasses
-import traceback
 from typing import Optional
 
-from minio import Minio
-
-from s3.s3_connect import s3_connect
 from spd_types.s3info import S3Info
+from s3.s3_connect import s3_connect
 from s3.s3_access_helpers import (SPARCD_PREFIX, S3_UPLOADS_PATH_PART, COLLECTIONS_FOLDER,
                                 temp_s3_file, load_s3_json, load_deployment_location,
-                                load_upload_observations, make_s3_path, get_s3_file,
+                                load_upload_observations, make_s3_path,
                                 get_user_collections, get_uploaded_folders, update_user_collections,
                                 get_upload_data_thread, check_incomplete_thread, load_upload_meta,
                                 S3_UPLOAD_META_JSON_FILE_NAME)
@@ -129,12 +127,11 @@ class S3CollectionConnection:
         Returns:
             Returns the uploads, or None
         """
-        import os
         if not bucket.startswith(SPARCD_PREFIX):
             print(f'Invalid bucket name specified: {bucket}')
             return None
 
-        uploads_path = make_s3_path(('Collections', bucket[len(SPARCD_PREFIX):],
+        uploads_path = make_s3_path((COLLECTIONS_FOLDER, bucket[len(SPARCD_PREFIX):],
                                      S3_UPLOADS_PATH_PART)) + '/'
         minio = s3_connect(conn_info)
         coll_uploads = []

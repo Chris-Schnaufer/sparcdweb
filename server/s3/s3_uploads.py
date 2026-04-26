@@ -3,15 +3,12 @@
 import csv
 import dataclasses
 import datetime
-from io import StringIO
+from io import BytesIO, StringIO
 import json
-import os
 from typing import Optional
 
-from minio import Minio
-
-from s3.s3_connect import s3_connect
 from spd_types.s3info import S3Info
+from s3.s3_connect import s3_connect
 from s3.s3_access_helpers import (SPARCD_PREFIX, S3_UPLOADS_PATH_PART, COLLECTIONS_FOLDER,
                                 S3_UPLOAD_META_JSON_FILE_NAME, temp_s3_file,
                                 load_upload_meta, put_s3_json, make_s3_path,
@@ -39,7 +36,8 @@ class S3UploadConnection:
 
         bucket = SPARCD_PREFIX + collection_id
         upload_folder = timestamp.strftime('%Y.%m.%d.%H.%M.%S') + '_' + conn_info.access_key
-        new_path = make_s3_path(('Collections', collection_id, 'Uploads', upload_folder))
+        new_path = make_s3_path((COLLECTIONS_FOLDER, collection_id, S3_UPLOADS_PATH_PART,
+                                                                                    upload_folder))
 
         with temp_s3_file() as temp_path:
             with open(temp_path, 'w', encoding='utf-8') as o_file:
@@ -86,7 +84,6 @@ class S3UploadConnection:
             data: the data to upload
             content_type: the content type of the upload
         """
-        from io import BytesIO
         minio = s3_connect(conn_info)
         minio.put_object(bucket, path, BytesIO(data.encode()), len(data),
                          content_type=content_type)
@@ -152,6 +149,31 @@ class S3UploadConnection:
             return False
 
         coll_info['imagesWithSpecies'] = new_count
+        put_s3_json(minio, bucket,
+                      make_s3_path((upload_path, S3_UPLOAD_META_JSON_FILE_NAME)), coll_info)
+
+        return True
+
+    @staticmethod
+    def update_upload_metadata_description(conn_info: S3Info, bucket: str,
+                                             upload_path: str, description: str) -> bool:
+        """ Update the upload's metadata on the S3 instance with a description
+        Arguments:
+            conn_info: the connection information for the S3 endpoint
+            bucket: the bucket to upload to
+            upload_path: path under the bucket to the metadata
+            description: the updated description
+        Return:
+            Returns True if no problem was found and False otherwise
+        """
+        minio = s3_connect(conn_info)
+
+        coll_info = load_upload_meta(minio, bucket, upload_path,
+                                       'update_upload_metadata_description')
+        if not coll_info:
+            return False
+
+        coll_info['description'] = description
         put_s3_json(minio, bucket,
                       make_s3_path((upload_path, S3_UPLOAD_META_JSON_FILE_NAME)), coll_info)
 
