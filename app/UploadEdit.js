@@ -55,6 +55,13 @@ const SORT_FIELDS = {
   SPECIES_COUNT: 'speciesCount',
 };
 
+// Image prefetch directions
+const PREFETCH_PREV = -1;
+const PREFETCH_NEXT = 1;
+
+// Number of images to prefetch
+const PREFETCH_COUNT = 2;
+
 /**
  * Handles editing an upload from a collection
  * @function
@@ -410,8 +417,12 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
         }
       }
 
-      setMaxTilesDisplay(prev => prev + 40 + ((prev + 40) % rowTilesCount));
+      const newCount = maxTilesDisplay  + 40 + ((maxTilesDisplay + 40) % rowTilesCount);
+      setMaxTilesDisplay(newCount);
+      return newCount;
     }
+
+    return maxTilesDisplay;
   }, [curUpload, maxTilesDisplay]);
 
   // Check if we need to setup an interaction observer
@@ -450,6 +461,34 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
       }
     };
   }, [onMoreImages, curEditState, showGrid]);
+
+  /**
+   * Function to return next set of pre-fetch images
+   * @function
+   * @param {Array} images List of images to return a subset of
+   * @param {int} start The starting index into the list
+   * @param {int} direction The navigation direction PREFETCH_PREV or PREFETCH_NEXT
+   * @param {int} count The maximum number of images to return
+   * @return {Array|null} Returns the set of images to prefetch, or null if there aren't any
+   */
+  const getPrefetchImages = React.useCallback((images, start, direction, count) => {
+    // Make sure we have something to work with
+    if (!images?.length || start < 0 || start >= images.length) {
+        return null
+    }
+
+    const size = Math.max(1, count)
+    const isForward = direction >= PREFETCH_NEXT
+
+    const sliceStart = isForward ? Math.min(start + 1, images.length) : Math.max(0, start - size)
+    const sliceEnd = isForward ? Math.min(start + 1 + size, images.length) : start
+
+    if (sliceStart >= sliceEnd) {
+        return null
+    }
+
+    return images.slice(sliceStart, sliceEnd)
+  }, [])
 
   /**
    * Makes the call for an image to be finished with editing. Allows for retry events
@@ -558,7 +597,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
       if (imageEl) {
         imageEl.scrollIntoView();
       }
-      setNextImageEdit(curImageIdx < curUpload.images.length - 2 ? curUpload.images[curImageIdx+2] : null);
+      setNextImageEdit(getPrefetchImages(curUpload.images, curImageIdx, PREFETCH_NEXT, PREFETCH_COUNT))
       setNavigationRedraw('redraw-image-'+newImage.name);
       setCurImageModified(false);
 
@@ -606,7 +645,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
       if (imageEl) {
         imageEl.scrollIntoView();
       }
-      setNextImageEdit(curImageIdx > 1 ? curUpload.images[curImageIdx-2] : null);
+      setNextImageEdit(getPrefetchImages(curUpload.images, curImageIdx, PREFETCH_PREV, PREFETCH_COUNT))
       setNavigationRedraw('redraw-image-'+newImage.name);
       setCurImageModified(false);
 
@@ -767,9 +806,10 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
 
     const foundEl = document.getElementById(foundImage.name);
     if (!foundEl) {
+      let curMaxDisplay = maxTilesDisplay;
       const imageIndex = curUpload.images.findIndex((item) => item.name === foundImage.name);
-      while (maxTilesDisplay < imageIndex && maxTilesDisplay < curUpload.images.length - 1) {
-        onMoreImages();
+      while (curMaxDisplay < imageIndex && curMaxDisplay < curUpload.images.length - 1) {
+        curMaxDisplay = onMoreImages();
       }
 
       window.setTimeout(() => handleImageSearch(searchTerm, iterCount + 1), 500);
@@ -1162,7 +1202,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
     if (imageIdx >= 0) {
       setCurImageEdit(curUpload.images[imageIdx]);
       searchSetup();
-      setNextImageEdit(imageIdx < curUpload.images.length - 1 ? curUpload.images[imageIdx+1] : null);
+      setNextImageEdit(getPrefetchImages(curUpload.images, imageIdx, PREFETCH_NEXT, PREFETCH_COUNT))
     } else {
       console.log('WARNING: attempting to edit a nonexistent image', imageName);
     }
@@ -1262,6 +1302,32 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
   );
 
   }, [addMessage, handleAdjustTimestampClose, handleImageTimestampUpdates]);
+
+  /**
+   * Function to pre-fetch images to make loading faster
+   * @function
+   */
+  const prefetchImages = React.useCallback((startIdx, count) => {
+      // browser caches the response privately
+      for (let i = 0; i < nextImageEdit.length; i++) {
+          if (nextImageEdit[i].type === 'image') {
+            const img = new Image();
+            img.src = nextImageEdit[i].url;
+          }
+      }
+      return nextImageEdit.map((item, idx) => item.type === 'movie' && 
+                                <CardMedia key={"next-image-preload"+idx}
+                                           component='video'
+                                           image={item.url}
+                                           sx={{position:'absolute',
+                                                top:'0px',
+                                                left:'0px',
+                                                width:'0px',
+                                                height:'0px',
+                                                visibility:'hidden'}} 
+                                />
+                              )
+  }, [nextImageEdit]);
 
   // Variables to help with generating the UI
   const curHeight = totalHeight;
@@ -1576,12 +1642,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
                                                         }
                                         }
             />
-            {nextImageEdit && nextImageEdit.type === 'image' && 
-                                      <img id="next-image-preload" src={nextImageEdit.url} 
-                                                                  style={{position:'absolute', top:'0px', left:'0px', display:'none', visibility:'hidden'}} />}
-            {nextImageEdit && nextImageEdit.type === 'movie' && 
-                                      <CardMedia id="next-image-preload" component='video' image={nextImageEdit.url}
-                                                                  sx={{position:'absolute', top:'0px', left:'0px', display:'none', visibility:'hidden'}} />}
+            {nextImageEdit && prefetchImages()}
           </Grid>
         </Grid>
       }

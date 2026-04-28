@@ -1,5 +1,6 @@
 """ Utlities for images"""
 
+from dataclasses import dataclass
 import datetime
 import json
 import subprocess
@@ -25,7 +26,67 @@ MAX_TRIES_GEII = 2
 MAX_TRIES_GEMI = 2
 MAX_TRIES_WEII = 2
 
-def _parse_exiftool_readout(parse_lines: tuple) -> tuple:
+
+@dataclass
+class EmbeddedImageInfo:
+    """ Internal class which contains the parsed species, location and timestamp from an image """
+    species: Optional[list]
+    location: Optional[dict]
+    timestamp: Optional[datetime.datetime]
+
+
+@dataclass
+class ImageLocationData:
+    """ Contains the location data for updating an image's EXIF information """
+    loc_id: str
+    loc_name: str
+    loc_ele: float
+    loc_lat: float
+    loc_lon: float
+
+
+def __parse_embedded_info(species_string: str, location_string: str,
+                           date_string: str) -> EmbeddedImageInfo:
+    """ Parses the species, location and timestamp strings from exiftool output
+    Arguments:
+        species_string: the raw species string from exiftool
+        location_string: the raw location string from exiftool
+        date_string: the raw date string from exiftool
+    Return:
+        Returns an EmbeddedImageInfo instance with the parsed data
+    """
+    return_species = []
+    if len(species_string) > 0:
+        for one_species in _split_species_string(species_string):
+            common, scientific, count = [val.strip() for val in one_species.split(',')]
+            return_species.append({'common': common, 'scientific': scientific, 'count': count})
+
+    return_location = None
+    if len(location_string) > 0:
+        locs = location_string.rstrip('.').split('.')
+        return_location = {'name': locs[0], 'id': locs[len(locs)-1]}
+        if len(locs) == 4:
+            return_location['elevation'] = locs[1] + '.' + locs[2]
+        elif len(locs) == 3:
+            return_location['elevation'] = locs[1]
+        else:
+            print('WARNING: Unknown location format in image, returning 0 for elevation',
+                  flush=True)
+            return_location['elevation'] = 0
+
+    if '-' not in date_string and ' ' in date_string:
+        parts = date_string.split(' ')
+        parts[0] = parts[0].replace(':', '-')
+        date_string = ' '.join(parts)
+
+    return EmbeddedImageInfo(
+        species=return_species or None,
+        location=return_location,
+        timestamp=parser.parse(date_string) if date_string else None
+    )
+
+
+def __parse_exiftool_readout(parse_lines: tuple) -> tuple:
     """ Parses the output from an exiftool binary listing
     Arguments:
         parse_lines: a tuple of the lines to parse
@@ -208,40 +269,14 @@ def get_embedded_image_info(image_path: str) -> Optional[tuple]:
         return None, None, None
 
     location_string, species_string, date_string = \
-                                    _parse_exiftool_readout(res.stdout.decode("utf-8").split('\n'))
+                                    __parse_exiftool_readout(res.stdout.decode("utf-8").split('\n'))
 
     if len(species_string) <= 0 and len(location_string) <= 0:
         del res
         return None, None, None
 
-    return_species = []
-    if len(species_string) > 0:
-        for one_species in _split_species_string(species_string):
-            common, scientific, count = [val.strip() for val in one_species.split(',')]
-            return_species.append({'common': common, 'scientific': scientific, 'count': count})
-
-    return_location = None
-    if len(location_string) > 0:
-        locs = location_string.rstrip('.').split('.')
-        return_location = {"name": locs[0], "id": locs[len(locs)-1]}
-        if len(locs) == 4:
-            return_location["elevation"] = locs[1] + '.' + locs[2]
-        elif len(locs) == 3:
-            return_location["elevation"] = locs[1]
-        else:
-            print("WARNING: Unknown location format in image, returning 0 for elevation",
-                                                                                        flush=True)
-            return_location["elevation"] = 0
-
-    del res
-
-    # Check for formatting of date string
-    if '-' not in date_string and ' ' in date_string:
-        parts = date_string.split(' ')
-        parts[0] = parts[0].replace(':', '-')
-        date_string = ' '.join(parts)
-
-    return return_species, return_location, parser.parse(date_string)
+    info = __parse_embedded_info(species_string, location_string, date_string)
+    return info.species, info.location, info.timestamp
 
 
 def get_movie_timestamp(movie_path: str) -> Optional[datetime.datetime]:
@@ -329,25 +364,22 @@ def write_embedded_image_info(image_path: str, location_json: str, species_json:
     return tries < MAX_TRIES_WEII
 
 
-def update_image_file_exif(file_path: str, loc_id: str=None, loc_name: str=None, \
-                                            loc_ele: float=None, loc_lat: float=None, \
-                                            loc_lon: float=None, species_data: tuple=None) -> bool:
+def update_image_file_exif(file_path: str, location: ImageLocationData = None,
+                                                                species_data: tuple=None) -> bool:
     """ Updates the image file with location exif information
     Arguments:
         file_path: the path to the file to modify
-        loc_id: the location id
-        loc_name: the location name
-        loc_ele: the location elevation
-        loc_lat: the location latitude
-        loc_lon: the location longitude
+        location: the location data to embed, or None to skip location update
         species_data: a tuple containing dicts of each species' common and scientific names, and
                       count
     Return:
         Returns whether or not the file was successfully updated
     """
     exif_location_data = None
-    if loc_id and loc_name and loc_ele is not None:
-        exif_location_data = ",".join((loc_name, loc_id, str(loc_lat), str(loc_lon), str(loc_ele)))
+    if location and location.loc_id and location.loc_name and location.loc_ele is not None:
+        exif_location_data = ','.join((location.loc_name, location.loc_id,
+                                       str(location.loc_lat), str(location.loc_lon),
+                                       str(location.loc_ele)))
 
     exif_species_data = None
     if species_data is not None:

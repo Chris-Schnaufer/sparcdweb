@@ -12,6 +12,7 @@ import CardActionArea from '@mui/material/CardActionArea';
 import CardContent from '@mui/material/CardContent';
 import CardHeader from '@mui/material/CardHeader';
 import CircularProgress from '@mui/material/CircularProgress';
+import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton'
@@ -22,9 +23,12 @@ import { useTheme } from '@mui/material/styles';
 
 import PropTypes from 'prop-types';
 
-import { CollectionsInfoContext, NarrowWindowContext, SizeContext } from './serverInfo';
-
-import { pad } from './utils';
+import EditUploadDetails from './components/EditUploadDetails';
+import { Level } from './components/Messages';
+import * as Server from './ServerCalls';
+import { AddMessageContext, CollectionsInfoContext, NarrowWindowContext, SizeContext,
+         TokenContext, TokenExpiredFuncContext, UserNameContext } from './serverInfo';
+import * as utils from './utils';
 
 /**
  * Renders the UI for managing the list of uploaded folders
@@ -34,19 +38,29 @@ import { pad } from './utils';
  * @param {function} onSelectionChange Called when the user selects a new collection
  * @param {function} onEditUpload Called when the user wants to edit an upload of a collection
  * @param {function} searchSetup Call when settting up or clearing search elements
+ * @param {function} onUploadUpdateMetadata Called when an upload's metadata is changed
  * @returns {object} The rendered UI
  */
-export default function CollectionsManage({loadingCollections, selectedCollection, onSelectionChange, onEditUpload, searchSetup}) {
+export default function CollectionsManage({loadingCollections, selectedCollection, onSelectionChange, onEditUpload,
+                                            searchSetup, onUploadUpdateMetadata}) {
   const theme = useTheme();
   const sidebarRef = React.useRef();
+  const addMessage = React.useContext(AddMessageContext); // Function adds messages for display
   const collectionsItems = React.useContext(CollectionsInfoContext);
+  const collectionToken = React.useContext(TokenContext);  // Login token
   const narrowWindow = React.useContext(NarrowWindowContext);
   const uiSizes = React.useContext(SizeContext);
+  const userName = React.useContext(UserNameContext);
+  const setTokenExpired = React.useContext(TokenExpiredFuncContext);
+  const serverURLRef = React.useRef(utils.getServer());    // The starting part of the url to call
+  const [canEditUploads, setCanEditUploads] = React.useState(false); // Keeping track if user can edit uploads
   const [editingUploadMask, setEditingUploadMask] = React.useState(false);
   const [expandedUpload, setExpandedUpload] = React.useState(false);
+  const [pendingMessage, setPendingMessage] = React.useState(null);
   const [searchIsSetup, setSearchIsSetup] = React.useState(false);
   const [selectionIndex, setSelectionIndex] = React.useState(-1);
   const [totalHeight, setTotalHeight] = React.useState(null);  // Default value is recalculated at display time
+  const [uploadDetailEdit, setUploadDetailEdit] = React.useState(null);
   const [uploadSelectionIndex, setUploadSelectionIndex] = React.useState(-1);
 
   // Initialize collections information
@@ -137,6 +151,71 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
   }
 
   /**
+   * Handler for users wanting to edit upload details
+   * @function
+   * @param {string} upload The ID of the collection the upload belongs to
+   * @param {object} upload The upload information to edit
+   */
+  const handleUploadDetailsEdit = React.useCallback((collectionId, upload) => {
+    setUploadDetailEdit({collectionId, upload});
+  }, []);
+
+  /**
+   * Handles an edit change to an upload detail
+   * @function
+   * @param {Array} uploads The list of uploads related to the request
+   * @param {string} comment The updated comment
+   * @param {object} upload The upload associated with this change
+   * @param {function} [onSuccess] The function to call upon success
+   * @param {function} [onFailure] The function to call upon filure
+   */
+  const handleUploadDetailChange = React.useCallback((upload, comment, onSuccess, onFailure) => {
+
+    onSuccess ||= () => {};
+    onFailure ||= () => {};
+
+    if (!uploadDetailEdit) {
+      addMessage(Level.Error, 'Unable to find the upload to modify');
+      return;
+    }
+    // Somehow we aren't the current edit
+    if (upload.key !== uploadDetailEdit.upload.key) {
+      return;
+    }
+
+    setPendingMessage('Please wait while making the changes to the upload details');
+    const success = Server.updateUploadDetails(serverURLRef.current, collectionToken,
+                                uploadDetailEdit.collectionId,
+                                upload.key,
+                                comment,
+                                setTokenExpired,
+                                (respData) => {   // Success
+                                  setPendingMessage(null);
+                                  if (respData.success) {
+                                    setUploadDetailEdit(null);
+                                    onSuccess(upload.key);
+                                    // Reload the collections
+                                    onUploadUpdateMetadata();
+                                  } else {
+                                    addMessage(Level.Error, 'Unable to update the collection details');
+                                    onFailure(upload.key);
+                                  }
+                                },
+                                (err) => {        // Failure
+                                  addMessage(Level.Error, 'An problem occurred while updating the upload information');
+                                  onFailure(upload.key);
+                                  setPendingMessage(null);
+                                }
+    );
+
+    if (!success) {
+      addMessage(Level.Error, 'An unknown problem occurred while updating the upload information');
+      onFailure(key);
+    }
+
+  }, [addMessage, collectionToken, serverURLRef, setTokenExpired, uploadDetailEdit]);
+
+  /**
    * Handler for when the user's selection changes and prevents default behavior
    * @function
    * @param {object} event The event
@@ -163,17 +242,17 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
     if (uploadTS) {
       if (uploadTS.date) {
         if (uploadTS.date.year) {
-          returnStr += pad(uploadTS.date.year);
+          returnStr += utils.pad(uploadTS.date.year);
         } else {
           returnStr += 'XXXX';
         }
         if (uploadTS.date.month) {
-          returnStr += '-' + pad(uploadTS.date.month, 2, 0);
+          returnStr += '-' + utils.pad(uploadTS.date.month, 2, 0);
         } else {
           returnStr += '-XX';
         }
         if (uploadTS.date.day) {
-          returnStr += '-' + pad(uploadTS.date.day, 2, 0);
+          returnStr += '-' + utils.pad(uploadTS.date.day, 2, 0);
         } else {
           returnStr += '-XX';
         }
@@ -181,17 +260,17 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
 
       if (uploadTS.time) {
         if (uploadTS.time.hour !== null) {
-          returnStr += ' ' + pad(uploadTS.time.hour, 2, 0);
+          returnStr += ' ' + utils.pad(uploadTS.time.hour, 2, 0);
         } else {
           returnStr += ' XX';
         }
         if (uploadTS.time.minute !== null) {
-          returnStr += ':' + pad(uploadTS.time.minute, 2, 0);
+          returnStr += ':' + utils.pad(uploadTS.time.minute, 2, 0);
         } else {
           returnStr += ':XX';
         }
         if (uploadTS.time.second !== null) {
-          returnStr += ':' + pad(uploadTS.time.second, 2, 0);
+          returnStr += ':' + utils.pad(uploadTS.time.second, 2, 0);
         } else {
           returnStr += ':XX';
         }
@@ -204,6 +283,24 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
 
     return returnStr;
   }
+
+  // Keep collection upload edit permissions up to date
+  React.useEffect(() => {
+    let curEditUploads = false;
+
+    // Check for the necessary permissions
+    if (collectionsItems && selectedCollection.collectionName) {
+      const curColl = collectionsItems.find((item) => item.name === selectedCollection.collectionName);
+      if (curColl && curColl.permissions && curColl.permissions.usernameProperty === userName) {
+        if (curColl.permissions.ownerProperty || curColl.permissions.uploadProperty) {
+          curEditUploads = true;
+        }
+      }
+    }
+
+    setCanEditUploads(curEditUploads);
+
+  }, [collectionsItems, selectedCollection]);
 
   // Setup search
   React.useLayoutEffect(() => {
@@ -320,10 +417,17 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
                     </AccordionSummary>
                     <AccordionDetails id={`upload-details-content-${item.name}`} sx={{backgroundColor:'#C8D2E4'}}>
                       <Grid container id={'collection-upload-'+item.name} direction="column" alignItems="start" justifyContent="start">
-                        <Grid sx={{padding:'5px 0'}}>
-                          <Typography variant="body2">
-                            {item.imagesWithSpeciesCount + '/' + item.imagesCount + ' images tagged with species'}
-                          </Typography>
+                        <Grid sx={{padding:'5px 0', width:'100%'}}>
+                          <Grid container direction="row" alignItems="start" justifyContent="space-between">
+                            <Typography variant="body2">
+                              {item.imagesWithSpeciesCount + '/' + item.imagesCount + ' images tagged with species'}
+                            </Typography>
+                            { canEditUploads &&
+                                  <IconButton onClick={() => handleUploadDetailsEdit(curCollection.id, item)} sx={{marginLeft:'auto'}}>
+                                    <EditNoteOutlinedIcon fontSize="small" />
+                                  </IconButton>
+                            }
+                          </Grid>
                         </Grid>
                         <Grid sx={{padding:'5px 0'}}>
                           <Typography variant="body2">
@@ -331,8 +435,11 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
                           </Typography>
                         </Grid>
                         <Grid sx={{padding:'5px 0'}}>
-                          <Typography variant="body2">
-                            Uploaded folder{item.folders.length > 1 ? 's' : ''}: {item.folders.join(", ")}
+                          <Typography variant="body2" sx={{fontStyle:'italic'}}>
+                            Uploaded folder{item.folders.length > 1 ? 's' : ''}:
+                          </Typography>
+                          <Typography variant="body2" sx={{wordWrap:'break-word', wordBreak:'break-all'}}>
+                            {item.folders.join(", ")}
                           </Typography>
                         </Grid>
                         <Grid>
@@ -356,6 +463,12 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
           </Grid>
         </div>
       </Grid>
+      { uploadDetailEdit &&
+          <EditUploadDetails upload={uploadDetailEdit.upload}
+                            onChange={handleUploadDetailChange}
+                            onClose={() => setUploadDetailEdit(null)}
+          />
+      }
       { loadingCollections && 
           <WorkspaceOverlay>
             <Typography gutterBottom variant="body2" color="lightgrey">
@@ -378,16 +491,25 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
               </Button>
           </WorkspaceOverlay>
       }
+      { pendingMessage && 
+          <WorkspaceOverlay>
+              <Typography gutterBottom variant="body2" color="lightgrey">
+                {pendingMessage}
+              </Typography>
+              <CircularProgress variant="indeterminate" />
+          </WorkspaceOverlay>
+      }
     </Box>
   );
 }
 
 CollectionsManage.propTypes = {
-  loadingCollections: PropTypes.bool.isRequired,
-  selectedCollection: PropTypes.string,
-  onSelectionChange:  PropTypes.func.isRequired,
-  onEditUpload:       PropTypes.func.isRequired,
-  searchSetup:        PropTypes.func.isRequired,
+  loadingCollections:     PropTypes.bool.isRequired,
+  selectedCollection:     PropTypes.string,
+  onSelectionChange:      PropTypes.func.isRequired,
+  onEditUpload:           PropTypes.func.isRequired,
+  searchSetup:            PropTypes.func.isRequired,
+  onUploadUpdateMetadata: PropTypes.func.isRequired,
 };
 
 CollectionsManage.defaultProps = {

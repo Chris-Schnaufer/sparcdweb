@@ -7,6 +7,16 @@ from typing import Optional
 from cryptography.fernet import Fernet
 
 
+def hash2str(text: str) -> str:
+    """ Returns the hash of the passed in string
+    Arguments:
+        text: the string to hash
+    Return:
+        The hash value as a string
+    """
+    return hashlib.md5(text.encode('utf-8')).hexdigest()
+
+
 def generate_hash(values: tuple) -> str:
     """ Generates a value-order-dependent hash from the tuple values and returns it
     Arguments:

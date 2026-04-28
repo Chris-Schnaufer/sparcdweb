@@ -12,7 +12,8 @@ from minio import Minio
 
 from sparcd_file_utils import load_timed_info, save_timed_info
 from spd_types.s3info import S3Info
-from s3_access import S3Connection, find_settings_bucket
+from s3.s3_admin import S3AdminConnection
+from s3.s3_access_helpers import find_settings_bucket
 
 
 
@@ -108,7 +109,7 @@ def load_sparcd_config(sparcd_file: str, timed_file: str, s3_info: S3Info):
         return loaded_config
 
     # Try to get the configuration information from S3
-    loaded_config = S3Connection.get_configuration(s3_info, sparcd_file)
+    loaded_config = S3AdminConnection.get_configuration(s3_info, sparcd_file)
     if loaded_config is None:
         return None
 
@@ -133,7 +134,7 @@ def save_sparcd_config(config_data, sparcd_file: str, timed_file: str, s3_info: 
         s3_info: the information for connecting to the S3 endpoint
     """
     # Save to S3 and the local file system
-    S3Connection.put_configuration(s3_info, sparcd_file, json.dumps(config_data, indent=4))
+    S3AdminConnection.put_configuration(s3_info, sparcd_file, json.dumps(config_data, indent=4))
 
     config_file_path = os.path.join(tempfile.gettempdir(), timed_file)
     save_timed_info(config_file_path, config_data)

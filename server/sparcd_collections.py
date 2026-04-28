@@ -3,11 +3,11 @@
 import time
 from typing import Optional
 
-from s3_access import S3Connection
 from sparcd_db import SPARCdDatabase
-import sparcd_utils as sdu
-
+import sparcd_upload_utils as sdupu
 from spd_types.s3info import S3Info
+from s3.s3_collections import S3CollectionConnection
+from s3.s3_images import S3ImageConnection
 
 # Collections information timeout length
 TIMEOUT_COLLECTIONS_SEC = 12 * 60 * 60
@@ -61,11 +61,11 @@ def __get_loaded_collections(db: SPARCdDatabase, s3_info: S3Info) -> Optional[tu
         if lock_id is not None:
             have_lock = True
 
-            all_collections = S3Connection.get_collections(s3_info)
+            all_collections = S3CollectionConnection.get_collections(s3_info)
 
             loaded_colls = []
             for one_coll in all_collections:
-                loaded_colls.append(sdu.normalize_collection(one_coll))
+                loaded_colls.append(sdupu.normalize_collection(one_coll))
 
             db.save_all_collections(s3_info.id, loaded_colls)
 
@@ -201,7 +201,8 @@ def get_upload_images(db: SPARCdDatabase, bucket:str, collection_id: str, \
 
     if (not db_images or force_refresh):
         # Get the upload information from the server
-        s3_images = S3Connection.get_images(s3_info, collection_id, upload_name, not keep_image_url)
+        s3_images = S3ImageConnection.get_images(s3_info, collection_id, upload_name,
+                                                                                not keep_image_url)
 
     # Check if we're keeping the image URLs after loading all images from S3
     if db_images and keep_image_url:

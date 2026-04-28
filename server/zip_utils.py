@@ -9,7 +9,8 @@ import time
 import zipfile
 
 from spd_types.s3info import S3Info
-from s3_access import S3Connection, SPARCD_PREFIX, S3_UPLOADS_PATH_PART
+from s3.s3_access_helpers import SPARCD_PREFIX, S3_UPLOADS_PATH_PART
+from s3.s3_images import S3ImageConnection
 
 
 def zip_downloaded_files(write_fd: int, file_list: list, \
@@ -142,7 +143,7 @@ def generate_zip(s3_info: S3Info, s3_files: tuple, \
                          )
     zip_thread.start()
 
-    S3Connection.download_images_cb(s3_info,
+    S3ImageConnection.download_images_cb(s3_info,
                                         [get_zip_dl_info(one_file) for one_file in s3_files],
                                         save_folder, gzip_cb,
                                         (downloaded_files, download_files_lock, done_sem))

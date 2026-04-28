@@ -1387,3 +1387,61 @@ export function imagesAdjustTimestamp(serverURL, token, collectionId, uploadId, 
 
   return true;
 }
+
+/**
+ * Sends the upload detail information changes to the server
+ * @function
+ * @param {string} serverURL The URL to the server
+ * @param {string} token The authorization token
+ * @param {string} collectionId The collection ID of the upload
+ * @param {string} uploadId The ID of the upload to update
+ * @param {string} description The updated description to send to the server
+ * @param {function} onExpiredToken Function to call when we get an expired token return
+ * @param {function} onSuccess The function to call upon success
+ * @param {function} onFailure The function to call upon failure
+ * @return {boolean} Returns true if the call was successfullly made, false if not
+ */
+export function updateUploadDetails(serverURL, token, collectionId, uploadId, description, onExpiredToken, onSuccess, onFailure) {
+  onExpiredToken ||= () => {};
+  onSuccess ||= () => {};
+  onFailure ||= () => {};
+
+
+  const updateDetailsUrl = serverURL + '/uploadUpdateDetails?t=' + encodeURIComponent(token);
+
+  const formData = new FormData();
+
+  try {
+    formData.append('id',       collectionId);
+    formData.append('up',       uploadId);
+    formData.append('description',  description);
+
+    fetch(updateDetailsUrl, {
+      credentials: 'include',
+      method: 'POST',
+      body: formData
+    }).then(async (resp) => {
+          if (resp.ok) {
+            return resp.json();
+          } else {
+            if (resp.status === 401) {
+              // User needs to log in again
+              onExpiredToken();
+            }
+            throw new Error(`Failed to update upload details: ${resp.status}: ${await resp.text()}`);
+          }
+        })
+      .then((respData) => {
+        onSuccess(respData);
+      })
+      .catch(function(err) {
+        console.log('Update Upload Details Error: ',err);
+        onFailure(err);
+    });
+  } catch (err) {
+    console.log('Update Upload Details Unknown Error: ',err);
+    return false;
+  }
+
+  return true;
+}
