@@ -237,7 +237,7 @@ export default function TitleBar({searchTitle, breadcrumbs, size, onSearch, onBr
                     </Grid>
                 }
                 { searchTitle &&
-                  <TextField id={searchId} label={searchTitle} placeholder={searchTitle} size="small" variant="outlined" sx={extraInputSX}
+                  <TextField id={searchId} placeholder={searchTitle} size="small" variant="outlined" sx={extraInputSX}
                             onKeyDown={handleSearchChange}
                             slotProps={{
                               input: {
