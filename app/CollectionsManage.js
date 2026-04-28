@@ -27,7 +27,7 @@ import EditUploadDetails from './components/EditUploadDetails';
 import { Level } from './components/Messages';
 import * as Server from './ServerCalls';
 import { AddMessageContext, CollectionsInfoContext, NarrowWindowContext, SizeContext,
-         TokenContext, TokenExpiredFuncContext } from './serverInfo';
+         TokenContext, TokenExpiredFuncContext, UserNameContext } from './serverInfo';
 import * as utils from './utils';
 
 /**
@@ -50,8 +50,10 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
   const collectionToken = React.useContext(TokenContext);  // Login token
   const narrowWindow = React.useContext(NarrowWindowContext);
   const uiSizes = React.useContext(SizeContext);
+  const userName = React.useContext(UserNameContext);
   const setTokenExpired = React.useContext(TokenExpiredFuncContext);
   const serverURLRef = React.useRef(utils.getServer());    // The starting part of the url to call
+  const [canEditUploads, setCanEditUploads] = React.useState(false); // Keeping track if user can edit uploads
   const [editingUploadMask, setEditingUploadMask] = React.useState(false);
   const [expandedUpload, setExpandedUpload] = React.useState(false);
   const [pendingMessage, setPendingMessage] = React.useState(null);
@@ -282,6 +284,24 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
     return returnStr;
   }
 
+  // Keep collection upload edit permissions up to date
+  React.useEffect(() => {
+    let curEditUploads = false;
+
+    // Check for the necessary permissions
+    if (collectionsItems && selectedCollection.collectionName) {
+      const curColl = collectionsItems.find((item) => item.name === selectedCollection.collectionName);
+      if (curColl && curColl.permissions && curColl.permissions.usernameProperty === userName) {
+        if (curColl.permissions.ownerProperty || curColl.permissions.uploadProperty) {
+          curEditUploads = true;
+        }
+      }
+    }
+
+    setCanEditUploads(curEditUploads);
+
+  }, [collectionsItems, selectedCollection]);
+
   // Setup search
   React.useLayoutEffect(() => {
     if (!searchIsSetup) {
@@ -402,9 +422,11 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
                             <Typography variant="body2">
                               {item.imagesWithSpeciesCount + '/' + item.imagesCount + ' images tagged with species'}
                             </Typography>
-                            <IconButton onClick={() => handleUploadDetailsEdit(curCollection.id, item)} sx={{marginLeft:'auto'}}>
-                              <EditNoteOutlinedIcon fontSize="small" />
-                            </IconButton>
+                            { canEditUploads &&
+                                  <IconButton onClick={() => handleUploadDetailsEdit(curCollection.id, item)} sx={{marginLeft:'auto'}}>
+                                    <EditNoteOutlinedIcon fontSize="small" />
+                                  </IconButton>
+                            }
                           </Grid>
                         </Grid>
                         <Grid sx={{padding:'5px 0'}}>
