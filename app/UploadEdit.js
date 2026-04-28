@@ -1508,7 +1508,9 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
   const totalImages = curUpload && curUpload.images ? curUpload.images.length : 0;
   // Return the rendered page
   return (
-    <Stack id="upload-edit" direction={{xs:'column', md:"row"}} sx={{ flexGrow: 1, top:curStart+'px', height: uiSizes.workspace.height+'px', width: uiSizes.workspace.width+'px' }} >
+    <Stack id="upload-edit" direction={{xs:'column', md:"row"}}
+            sx={{ flexGrow: 1, top:curStart+'px', height: uiSizes.workspace.height+'px', width: uiSizes.workspace.width+'px' }}
+    >
       <SpeciesSidebar species={speciesItems}
                       position={narrowWindow?'top':'left'}
                       speciesSidebarRef={sidebarSpeciesRef}
@@ -1596,7 +1598,7 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
                            minWidth:(workspaceWidth-sidebarWidthLeft-(10*2))+'px',
                            maxWidth:(workspaceWidth-sidebarWidthLeft-(10*2))+'px',
                            width:(workspaceWidth-sidebarWidthLeft-(10*2))+'px', 
-                           overflow:'scroll' }}
+                           overflow:'auto' }}
             >
             {showGrid ?
               generateImageTiles(handleEditingImage) :
