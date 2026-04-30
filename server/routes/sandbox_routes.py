@@ -234,7 +234,7 @@ def sandbox_new(*, db, user_info, s3_info, **_):
 
 @sandbox_bp.route('/sandboxFile', methods=['POST'])
 @cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
-@authenticated_route()
+@authenticated_route(eager_password=True)
 def sandbox_file(*, db, user_info, s3_info, **_):
     """ Handles the upload of a new sandbox image file
     Arguments:

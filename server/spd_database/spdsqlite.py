@@ -64,7 +64,8 @@ class SPDSQLite:
                         f'database={database_path}' if database_path is not None else None,
                    ) if param is not None)
                 self._logger.info(f'Connecting to the database {print_params}')
-            self._conn = sqlite3.connect(database_path)
+            # We disable thread checking since we're using thread-safe Sqlite
+            self._conn = sqlite3.connect(database_path, check_same_thread=False)
 
     def reconnect(self) -> None:
         """Attempts a reconnection if we're not connected

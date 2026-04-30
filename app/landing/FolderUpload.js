@@ -433,7 +433,7 @@ export default function FolderUpload({loadingCollections, type, recovery, onComp
                 setUploadState(uploadingState.error);
                 cancelUpload();
               }
-      }, 100);
+      }, 0);
     }
   }, [addMessage, cancelUpload, havePrevUploadSuccess, haveUploadRecoverySuccess, recovery, serverURL, setUploadingFileCount,
       tokenExpiredFunc, uploadToken, workingUploadId]);

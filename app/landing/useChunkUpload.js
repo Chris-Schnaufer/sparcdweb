@@ -14,6 +14,11 @@ const SLOW_FILE_THRESHOLD_SEC = 7.0; // Files taking longer than this trigger ba
 
 const GET_COUNTS_CHECK_INTERVAL_MS = 5 * 1000;    // Number of seconds converted to milliseconds
 
+// Retry backoff lower and upper bounds for failed images
+const FAILED_UPLOAD_BASE_RETRY_MS = 3 * 1000;
+const FAILED_UPLOAD_MAX_RETRY_MS  = 15 * 1000;
+
+
 // Uploading state enum — re-exported so consumers don't need to redefine it
 export const uploadingState = Object.freeze({
   none: 0,
@@ -207,7 +212,10 @@ export function useChunkUpload(selectedTimezone) {
           addMessage(Level.Error, msg);
           uploadStateUpdate(uploadingState.error);
         } else {
-          window.setTimeout(() => handleFailedUploads(uploadId, uploadedFiles, onComplete, onFail, numRetries + 1), 10_000 * (numRetries + 1));
+          window.setTimeout(
+                  () => handleFailedUploads(uploadId, uploadedFiles, onComplete, onFail, numRetries + 1), 
+                  Math.min(FAILED_UPLOAD_BASE_RETRY_MS * (numRetries + 1), FAILED_UPLOAD_MAX_RETRY_MS)
+          );
         }
       },
     );
@@ -375,7 +383,7 @@ export function useChunkUpload(selectedTimezone) {
 
     for (let idx = 0; idx < uploadFiles.length; idx += chunkSize) {
       const chunk = uploadFiles.slice(idx, idx + chunkSize);
-      window.setTimeout(() => uploadChunk(chunk, uploadId), 10);
+      window.setTimeout(() => uploadChunk(chunk, uploadId), (idx / chunkSize) * 200); // Staggering the start times
     }
 
     if (pollingActiveRef.current === false) {

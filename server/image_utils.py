@@ -18,6 +18,11 @@ EXIF_CODE_SPARCD = "Exif_0x0227"
 EXIF_CODE_SPECIES = "Exif_0x0228"
 EXIF_CODE_LOCATION = "Exif_0x0229"
 
+
+EXIF_SPARCD_SPECIES_TAG  = 0x0228
+EXIF_SPARCD_LOCATION_TAG = 0x0229
+EXIF_SPARCD_TAGS = (EXIF_SPARCD_SPECIES_TAG, EXIF_SPARCD_LOCATION_TAG)
+
 ADJUST_FILE_TIME_FORMAT = '%Y:%m:%d %H:%M:%S'
 
 # Loop control definitions
@@ -43,6 +48,66 @@ class ImageLocationData:
     loc_ele: float
     loc_lat: float
     loc_lon: float
+
+
+def __parse_sparcd_ifd2(file_path: str) -> bool:
+    """ Parses EXIF IFD chain to IFD2 and checks for populated SPARCd tags
+    Arguments:
+        file_path: path to the image file
+    Return:
+        True if SPARCd species or location data is populated, False otherwise
+    Raises:
+        ValueError: if the file structure is invalid or SPARCd tags are not found
+        OSError: if the file cannot be read
+        IndexError: if the file data is malformed
+    """
+    with open(file_path, 'rb') as f:
+        if f.read(2) != b'\xff\xd8' or f.read(2) != b'\xff\xe1':
+            raise ValueError('Not a valid JPEG with APP1 segment')
+        app1_len = int.from_bytes(f.read(2), 'big')
+        app1_data = f.read(app1_len - 2)
+
+    if not app1_data.startswith(b'Exif\x00\x00'):
+        raise ValueError('No Exif header found')
+
+    tiff_data = app1_data[6:]
+    bo = 'little' if tiff_data[:2] == b'II' else 'big'
+    ifd_offset = int.from_bytes(tiff_data[4:8], bo)
+
+    for ifd_num in range(3):
+        if ifd_offset == 0:
+            raise ValueError('IFD chain ended before IFD2')
+        num_entries = int.from_bytes(tiff_data[ifd_offset:ifd_offset+2], bo)
+        next_ifd_pos = ifd_offset + 2 + num_entries * 12
+
+        if ifd_num < 2:
+            ifd_offset = int.from_bytes(tiff_data[next_ifd_pos:next_ifd_pos+4], bo)
+            continue
+
+        # At IFD2 — check species and location tag counts
+        for i in range(num_entries):
+            entry_offset = ifd_offset + 2 + i * 12
+            tag_id = int.from_bytes(tiff_data[entry_offset:entry_offset+2], bo)
+            if tag_id in EXIF_SPARCD_TAGS:
+                count = int.from_bytes(tiff_data[entry_offset+4:entry_offset+8], bo)
+                if count > 1:
+                    return True
+
+    return False
+
+
+def __has_sparcd_data(file_path: str) -> bool:
+    """ Checks for populated SPARCd data in IFD2 by parsing the EXIF
+        IFD chain directly, avoiding a full exiftool subprocess spawn.
+    Arguments:
+        file_path: path to the image file
+    Return:
+        True if SPARCd species or location data is populated, False otherwise
+    """
+    try:
+        return __parse_sparcd_ifd2(file_path)
+    except (OSError, ValueError, IndexError):
+        return False
 
 
 def __parse_embedded_info(species_string: str, location_string: str,
@@ -249,6 +314,10 @@ def get_embedded_image_info(image_path: str) -> Optional[tuple]:
         Retuns a tuple containing the species and location information that was
         embedded in the image
     """
+    # Avoid exiftool subprocess for untagged images
+    if not __has_sparcd_data(image_path):
+        return None, None, None
+
     # Loop through some tries to get the information
     tries = 0
     while tries < MAX_TRIES_GEII:
@@ -280,47 +349,26 @@ def get_embedded_image_info(image_path: str) -> Optional[tuple]:
 
 
 def get_movie_timestamp(movie_path: str) -> Optional[datetime.datetime]:
-    """ Gets the embedded timestamp from a movie file
+    """ Gets the embedded timestamp from a movie file using ffprobe
     Arguments:
         movie_path: the path to the movie file
     Return:
-        Returns the loaded timestamp as a datetime.datetime object, or None when the timestamp
-        isn't found
+        Returns the loaded timestamp as a datetime.datetime object, or None
     """
-    # Loop through some tries to get the information
-    tries = 0
-    while tries < MAX_TRIES_GEMI:
-        try:
-            cmd = ["exiftool", "-createdate", movie_path]
-            res = subprocess.run(cmd, capture_output=True, check=True)
-            break
-        except subprocess.CalledProcessError as ex:
-            if tries == MAX_TRIES_GEMI - 1:
-                print(f'ERROR: Exception getting exif information on movie {movie_path}',flush=True)
-                print(f'       {ex}', flush=True)
-                print(ex.stdout, flush=True)
-                print(ex.stderr, flush=True)
-            sleep(0.5)
-        tries += 1
-
-    if tries >= MAX_TRIES_GEMI:
-        return None
-
-    # Get what we are looking for in the output
-    date_string = __parse_movie_exif_readout(res.stdout.decode("utf-8").split('\n'))
-    if not date_string:
-        return None
-
-    # Check for formatting of date string
-    if '-' not in date_string and ' ' in date_string:
-        parts = date_string.split(' ')
-        parts[0] = parts[0].replace(':', '-')
-        date_string = ' '.join(parts)
-
-    # Return the timestamp
     try:
-        return parser.parse(date_string)
-    except ParserError:
+        cmd = [
+            'ffprobe', '-v', 'quiet',
+            '-print_format', 'json',
+            '-show_entries', 'format_tags=creation_time',
+            movie_path
+        ]
+        res = subprocess.run(cmd, capture_output=True, check=True)
+        data = json.loads(res.stdout)
+        ts_string = data.get('format', {}).get('tags', {}).get('creation_time')
+        if not ts_string:
+            return None
+        return parser.parse(ts_string)
+    except (subprocess.CalledProcessError, json.JSONDecodeError, ParserError):
         return None
 
 
