@@ -66,7 +66,6 @@ def __files_copy(minio: Minio, source_bucket: str, source_path: str, dest_bucket
         if cur_obj.is_dir:
             continue
 
-        print('HACK:   COPY: ',cur_obj.object_name,dest_bucket,get_dest_path(cur_obj.object_name),flush=True)
         minio.copy_object(dest_bucket, get_dest_path(cur_obj.object_name),
                             CopySource(source_bucket, cur_obj.object_name)
                             )
@@ -83,22 +82,17 @@ def __files_remove(minio: Minio, bucket: str, path: str) -> bool:
     """
     # Make sure we have a path that looks like it could be correct
     if not COLLECTIONS_FOLDER in path or not S3_UPLOADS_PATH_PART in path:
-        print('HACK:    DEL: NOT FOUND IN REMOVE PATH',flush=True)
         return False
     if path.endswith(S3_UPLOADS_PATH_PART) or path.endswith(S3_UPLOADS_PATH_PART[:-1]):
-        print('HACK:    DEL: WRONG PATH ENDING',flush=True)
         return False
 
     # Remove objects
-    print('HACK:    DEL: BUCKET: ',bucket,path,flush=True)
     remove_dirs = []
     for cur_obj in minio.list_objects(bucket, path, recursive=True):
         if cur_obj.is_dir:
-            print('HACK:    DEL: ADD DIR: ',cur_obj.object_name,flush=True)
             remove_dirs.append(DeleteObject(cur_obj.object_name))
             continue
 
-        print('HACK:    DEL: REMOVE: ',cur_obj.object_name,flush=True)
         minio.remove_object(bucket, cur_obj.object_name)
 
     # Remove folders
@@ -149,7 +143,6 @@ def __test_copy_access(minio: Minio, source_bucket: str, source_path: str,
         return True
 
     test_path = make_s3_path((get_dest_path(cur_obj.object_name) ))
-    print('HACK: __test_copy_access: BEFORECOPY: ',cur_obj.object_name,test_path, flush=True)
 
     try:
         minio.copy_object(dest_bucket, test_path,
@@ -327,12 +320,10 @@ def move_upload(s3_info: S3Info, source_bucket: str, dest_bucket: str, source_pa
 
     # Perform checks
     if not minio.bucket_exists(source_bucket) or not minio.bucket_exists(dest_bucket):
-        print('HACK: MOVEUPLOAD: NO BUCKET', flush=True)
         return False
 
     # Make sure we can access the buckets for reading at least
     if not __test_copy_access(minio, source_bucket, source_path, dest_bucket, get_dest_path):
-        print('HACK: MOVEUPLOAD: TEST COPY FAILED', flush=True)
         return False
 
     # Perform the complete copy
