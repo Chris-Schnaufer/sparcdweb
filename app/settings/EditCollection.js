@@ -175,7 +175,6 @@ export default function EditCollection({data, onUpdate, onClose}) {
     setRemoveUsers(false);
   }, [newPermissions]);
 
-
   /**
    * Generates the permissions UI
    * @function

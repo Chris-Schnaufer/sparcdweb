@@ -1,10 +1,7 @@
 /** @module CollectionsManage */
 
 import * as React from 'react';
-import Accordion from '@mui/material/Accordion';
-import AccordionDetails from '@mui/material/AccordionDetails';
-import AccordionSummary from '@mui/material/AccordionSummary';
-import BorderColorOutlinedIcon from '@mui/icons-material/BorderColorOutlined';
+import BackspaceOutlined from '@mui/icons-material/BackspaceOutlined';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
@@ -12,10 +9,11 @@ import CardActionArea from '@mui/material/CardActionArea';
 import CardContent from '@mui/material/CardContent';
 import CardHeader from '@mui/material/CardHeader';
 import CircularProgress from '@mui/material/CircularProgress';
-import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton'
+import InputAdornment from '@mui/material/InputAdornment';
+import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
+import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import WorkspaceOverlay from './components/WorkspaceOverlay';
@@ -23,7 +21,9 @@ import { useTheme } from '@mui/material/styles';
 
 import PropTypes from 'prop-types';
 
+import CollectionUploadTile from './components/CollectionUploadTile';
 import EditUploadDetails from './components/EditUploadDetails';
+import MoveUpload from './components/MoveUpload';
 import { Level } from './components/Messages';
 import * as Server from './ServerCalls';
 import { AddMessageContext, CollectionsInfoContext, NarrowWindowContext, SizeContext,
@@ -52,22 +52,46 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
   const uiSizes = React.useContext(SizeContext);
   const userName = React.useContext(UserNameContext);
   const setTokenExpired = React.useContext(TokenExpiredFuncContext);
-  const serverURLRef = React.useRef(utils.getServer());    // The starting part of the url to call
+  const serverURLRef = React.useRef(utils.getServer());   // The starting part of the url to call
+  const uploadFilterInputRef = React.useRef(null);        // Used to reference the upload filter
   const [canEditUploads, setCanEditUploads] = React.useState(false); // Keeping track if user can edit uploads
   const [editingUploadMask, setEditingUploadMask] = React.useState(false);
   const [expandedUpload, setExpandedUpload] = React.useState(false);
+  const [isAdminChecked, setIsAdminChecked] = React.useState(false); // Has checking for admin happened
+  const [isAdmin, setIsAdmin] = React.useState(null); // Null indicates it hasn't been checked yet. Boolean T/F is admin status
+  const [otherBuckets, setOtherBuckets] = React.useState(null); // Contains the loaded non-collection buckets
   const [pendingMessage, setPendingMessage] = React.useState(null);
   const [searchIsSetup, setSearchIsSetup] = React.useState(false);
   const [selectionIndex, setSelectionIndex] = React.useState(-1);
   const [totalHeight, setTotalHeight] = React.useState(null);  // Default value is recalculated at display time
   const [uploadDetailEdit, setUploadDetailEdit] = React.useState(null);
+  const [uploadFilter, setUploadFilter] = React.useState(null); // The upload filter string for a collection
+  const [uploadFiltering, setUploadFiltering] = React.useState(false); // The user wants to filter when set to true
+  const [uploadMove, setUploadMove] = React.useState(false); // The user wants to move an upload
   const [uploadSelectionIndex, setUploadSelectionIndex] = React.useState(-1);
+
+  React.useEffect(() => {
+    if ((isAdmin === null || isAdmin === undefined) && !isAdminChecked) {
+      setIsAdminChecked(true);
+      const success = Server.userIsAdminCheck(serverURLRef.current, collectionToken, setTokenExpired,
+                              (respData) => { // Success
+                                setIsAdmin(!!respData.isAdmin);
+                              },
+      );
+
+      if (!success) {
+        console.log('WARNING: (CollectionsManage) error detected when attmpting to see if user is admin');
+      }
+    }
+  }, [isAdmin]);
 
   // Initialize collections information
   React.useEffect(() => {
     if (collectionsItems && selectedCollection.collectionName && (selectionIndex === -1 || selectionIndex >= collectionsItems.length)) {
       const collIndex = collectionsItems.findIndex((item) => item.name === selectedCollection.collectionName);
       setSelectionIndex(collIndex);
+      setUploadFilter(null);
+      setUploadFiltering(false);
       if (collIndex >= 0 && selectedCollection.uploadKey) {
         setUploadSelectionIndex(collectionsItems[collIndex].uploads.findIndex((item) => item.key === selectedCollection.uploadKey));
       } else {
@@ -114,6 +138,8 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
                                                                item.description.toUpperCase().includes(ucSearchTerm));
     // Scroll finding into view
     if (foundCollections.length > 0) {
+      setUploadFilter(null);
+      setUploadFiltering(false);
       const elCollection = document.getElementById("collection-"+foundCollections[0].name);
       if (elCollection) {
         elCollection.scrollIntoView();
@@ -126,6 +152,35 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
 
     return false;
   }, [collectionsItems, searchSetup]);
+
+  /**
+   * Fetches the non-collection buckets from the server
+   * @function
+   */
+  const getBuckets = React.useCallback(() => {
+    setPendingMessage('Please wait we\'re loading the additional buckets');
+    const success = Server.getOtherBuckets(serverURLRef.current, collectionToken,
+                                setTokenExpired,
+                                (respData) => {   // Success
+                                  setPendingMessage(null);
+                                  if (respData.success) {
+                                    setOtherBuckets(respData.buckets);
+                                  } else {
+                                    addMessage(Level.Error, 'Unable to load additional bucket information');
+                                  }
+                                },
+                                (err) => {        // Failure
+                                  setPendingMessage(null);
+                                  addMessage(Level.Error, 'Error encountered while loadin additional bucket information');
+                                }
+    );
+
+    if (!success) {
+      setPendingMessage(null);
+      addMessage(Level.Error, 'An unknown problem occurred while getting additional buckets');
+    }
+
+  }, []);
 
   /**
    * Handle the user wanting to edit an upload
@@ -153,11 +208,22 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
   /**
    * Handler for users wanting to edit upload details
    * @function
-   * @param {string} upload The ID of the collection the upload belongs to
+   * @param {string} collectionId The ID of the collection the upload belongs to
    * @param {object} upload The upload information to edit
    */
-  const handleUploadDetailsEdit = React.useCallback((collectionId, upload) => {
+  const handleSetUploadDetailsEdit = React.useCallback((collectionId, upload) => {
     setUploadDetailEdit({collectionId, upload});
+  }, []);
+
+
+  /**
+   * Enables the user interface to move an upload
+   * @function
+   * @param {string} collectionId The ID of the collection the upload belongs to
+   * @param {object} upload The upload information to edit
+   */
+  const handleSetUploadMove = React.useCallback((collectionId, upload) => {
+    setUploadMove({collectionId, upload});
   }, []);
 
   /**
@@ -209,11 +275,53 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
     );
 
     if (!success) {
+      setPendingMessage(null);
       addMessage(Level.Error, 'An unknown problem occurred while updating the upload information');
-      onFailure(key);
+      onFailure(upload.key);
     }
 
   }, [addMessage, collectionToken, serverURLRef, setTokenExpired, uploadDetailEdit]);
+
+  /**
+   * Handles the moving of an upload to another collection
+   * @function
+   * @param {string} srcCollectionId The source collection ID
+   * @param {object} upload The upload to move
+   * @param {string} dstCollectionId The ID of the destination collection or bucket name
+   */
+  const handleUploadMove = React.useCallback((srcCollectionId, upload, dstCollectionId, onSuccess, onFailure) => {
+    onSuccess ||= () => {};
+    onFailure ||= () => {};
+
+    setPendingMessage('Please wait while the upload is being moved');
+    const success = Server.moveUpload(serverURLRef.current, collectionToken,
+                                srcCollectionId,
+                                upload.key,
+                                dstCollectionId,
+                                setTokenExpired,
+                                (respData) => {   // Success
+                                  setPendingMessage(null);
+                                  if (respData.success) {
+                                    onSuccess();
+                                  } else {
+                                    addMessage(Level.Error, 'Unable to move the upload');
+                                    onFailure(null);
+                                  }
+                                },
+                                (err) => {        // Failure
+                                  addMessage(Level.Error, 'An problem occurred while moving the upload');
+                                  setPendingMessage(null);
+                                  onFailure(null);
+                                }
+    );
+
+    if (!success) {
+      setPendingMessage(null);
+      addMessage(Level.Error, 'An unknown problem occurred while moving the upload');
+      onFailure(null);
+    }
+
+  }, []);
 
   /**
    * Handler for when the user's selection changes and prevents default behavior
@@ -227,9 +335,20 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
 
     const collIndex = collectionsItems.findIndex((item) => item.bucket === bucket && item.id === id);
     setSelectionIndex(collIndex);
+    setUploadFilter(null);
+    setUploadFiltering(false);
 
     onSelectionChange(collectionsItems[collIndex].name);
   }, [collectionsItems, onSelectionChange]);
+
+  /**
+   * Handles the upload filter changing
+   * @function
+   * @param {object} event The triggering event
+   */
+  const handleUploadFilterChange = React.useCallback((event) => {
+    setUploadFilter(event.target.value);
+  }, []);
 
   /**
    * Formats the upload timestamp for display
@@ -286,6 +405,11 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
 
   // Keep collection upload edit permissions up to date
   React.useEffect(() => {
+    if (isAdmin) {
+      setCanEditUploads(true);
+      return;
+    }
+
     let curEditUploads = false;
 
     // Check for the necessary permissions
@@ -301,6 +425,45 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
     setCanEditUploads(curEditUploads);
 
   }, [collectionsItems, selectedCollection]);
+
+  /**
+   * Function to handle the user clicking the filtering icons
+   * @function
+   */
+  const handlesUploadFiltering = React.useCallback(() => {
+    // If we're stopping filtering, we need to clear the filter
+    if (uploadFiltering) {
+      setUploadFilter(null);
+    }
+    setUploadFiltering(prev => !prev);
+  }, [uploadFiltering]);
+
+  /**
+   * Function that handles the user clearing the filder
+   * @function
+   * @param {object} event The triggering event
+   */
+  const handleClearFilter = React.useCallback((event) => {
+    setUploadFilter(null);
+  }, []);
+
+  // Keep the current uploads available
+  const filteredUploads = React.useMemo(() => {
+    const uploads = collectionsItems?.[selectionIndex]?.uploads;
+    if (!uploads?.length) return [];
+    if (!uploadFilter) return uploads;
+
+    const lowerFilter = uploadFilter.toLowerCase();
+    return uploads.filter((item) =>
+      item.name.toLowerCase().includes(lowerFilter) ||
+      item.key.toLowerCase().includes(lowerFilter) ||
+      item.description.toLowerCase().includes(lowerFilter) ||
+      item.location.toLowerCase().includes(lowerFilter) ||
+      item.edits?.some((e) => e.toLowerCase().includes(lowerFilter)) ||
+      item.folders?.some((folder) => folder.toLowerCase().includes(lowerFilter))
+    );
+
+  }, [collectionsItems, selectionIndex, uploadFilter]);
 
   // Setup search
   React.useLayoutEffect(() => {
@@ -375,94 +538,70 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
         </div>
         <div id='collection-manage-workspace-uploads-wrapper' style={{minWidth:'460px', maxWidth:'460px', maxHeight:curHeight, paddingRight:'10px', overflowY:"scroll"}}>
           <Grid id='collection-manage-workspace-uploads-details' container direction="column" alignItems='start' justifyContent="start">
-            { curCollection && curCollection.uploads.map((item, idx) =>
-              <Card id={"collection-upload-item-"+item.name} key={'collection-upload-item'+idx} variant="outlined" 
-                    data-active={uploadSelectionIndex === idx ? '' : undefined}
-                    sx={{minWidth:'100%', backgroundColor:'#D3DEE6', borderRadius:'10px', 
-                          '&:hover':{backgroundColor:'rgba(0, 0, 0, 0.25)'},
-                          '&[data-active]': {borderColor:'rgba(155, 175, 202, 0.85)',backgroundColor:'#BAC6CD'},
-                          '&[data-active]:hover': { backgroundColor:'rgba(0, 0, 0, 0.25)' },
-                        }}
+            { filteredUploads && 
+              <Grid container direction="row" alignItems="center" justifyContent="flex-end"
+                    onClick={uploadFiltering ? null : handlesUploadFiltering}
+                    sx={{backgroundColor:'snow', width:'100%', border:'1px solid grey', borderRadius:'7px'}}
               >
-                <CardHeader title={
-                                  <Grid id="collection-card-header-wrapper" container direction="row" alignItems="start" justifyContent="start" wrap="nowrap">
-                                    <Grid>
-                                      <Typography gutterBottom variant="h6" component="h4" noWrap>
-                                        {item.name}
-                                      </Typography>
-                                    </Grid>
-                                    <Grid sx={{marginLeft:'auto'}}>
-                                      <Tooltip title="Edit this upload">
-                                        <IconButton aria-label="Edit this upload" onClick={() => handleUploadEdit(curCollection.id, item.key)}>
-                                          <BorderColorOutlinedIcon fontSize="small"/>
-                                        </IconButton>
-                                      </Tooltip>
-                                    </Grid>
-                                  </Grid>
-                                  }
-                              style={{paddingBottom:'0px'}}
+                { uploadFiltering &&
+                  <TextField
+                    variant="standard"
+                    size="small"
+                    id="colleciton-upload-search"
+                    margin="dense"
+                    placeholder="Filter"
+                    sx={{paddingLeft:'10px', flexGrow:1}}
+                    value={uploadFilter || ''}
+                    autoFocus
+                    slotProps={{
+                      input: {
+                        inputRef:uploadFilterInputRef,
+                        endAdornment:(
+                          <InputAdornment position="end">
+                            <IconButton onClick={handleClearFilter} onMouseDown={(e) => e.preventDefault()}>
+                              <BackspaceOutlined/>
+                            </IconButton>
+                          </InputAdornment>
+                        )
+                      },
+                    }}
+                    onChange={handleUploadFilterChange}
+                  />
+                }
+                <IconButton 
+                          onClick={!uploadFiltering ? null : handlesUploadFiltering}
+                          onMouseDown={(e) => e.preventDefault()}
+                          sx={{marginLeft:'auto', fontSize:"small", padding:'1px'}}
+                >
+                  <SearchOutlinedIcon fontSize={uploadFiltering ? "large" : "small"}  />
+                </IconButton>
+              </Grid>
+            }
+            { filteredUploads && filteredUploads.map((item, idx) => 
+                <CollectionUploadTile
+                              key={'collection-upload-tile-'+item.key}
+                              upload={item}
+                              active={uploadSelectionIndex === idx}
+                              expanded={expandedUpload === 'upload-details-'+item.name}
+                              onUploadEdit={() => handleUploadEdit(curCollection.id, item.key)}
+                              onExpandChange={handleExpandedChange('upload-details-'+item.name)}
+                              onEditDetails={!canEditUploads ? null : () => handleSetUploadDetailsEdit(curCollection.id, item)}
+                              onUploadMove={!isAdmin ? null : () => handleSetUploadMove(curCollection.id, item)}
                 />
-                <CardContent sx={{paddingTop:'0px'}}>
-                  <Accordion expanded={expandedUpload === 'upload-details-'+item.name}
-                             onChange={handleExpandedChange('upload-details-'+item.name)}
-                             sx={{backgroundColor:'#BFCBE1'}}>
-                    <AccordionSummary
-                      id={'summary-'+item.name}
-                      expandIcon={<ExpandMoreIcon />}
-                      aria-controls={`upload-details-content-${item.name}`}
-                    >
-                      <Typography component="span">
-                        Advanced details
-                      </Typography>
-                    </AccordionSummary>
-                    <AccordionDetails id={`upload-details-content-${item.name}`} sx={{backgroundColor:'#C8D2E4'}}>
-                      <Grid container id={'collection-upload-'+item.name} direction="column" alignItems="start" justifyContent="start">
-                        <Grid sx={{padding:'5px 0', width:'100%'}}>
-                          <Grid container direction="row" alignItems="start" justifyContent="space-between">
-                            <Typography variant="body2">
-                              {item.imagesWithSpeciesCount + '/' + item.imagesCount + ' images tagged with species'}
-                            </Typography>
-                            { canEditUploads &&
-                                  <IconButton onClick={() => handleUploadDetailsEdit(curCollection.id, item)} sx={{marginLeft:'auto'}}>
-                                    <EditNoteOutlinedIcon fontSize="small" />
-                                  </IconButton>
-                            }
-                          </Grid>
-                        </Grid>
-                        <Grid sx={{padding:'5px 0'}}>
-                          <Typography variant="body2">
-                            {item.description}
-                          </Typography>
-                        </Grid>
-                        <Grid sx={{padding:'5px 0'}}>
-                          <Typography variant="body2" sx={{fontStyle:'italic'}}>
-                            Uploaded folder{item.folders.length > 1 ? 's' : ''}:
-                          </Typography>
-                          <Typography variant="body2" sx={{wordWrap:'break-word', wordBreak:'break-all'}}>
-                            {item.folders.join(", ")}
-                          </Typography>
-                        </Grid>
-                        <Grid>
-                          <Typography variant="body2" sx={{fontWeight:'500'}}>
-                            Edits
-                          </Typography>
-                        </Grid>
-                      </Grid>
-                      <Box sx={{border:"1px solid black", width:'100%', minHeight:'4em', maxHeight:'4em', overflow:"scroll"}} >
-                        {item.edits.map((editItem, idx) =>
-                          <Typography variant="body2" key={"collection-upload-edits-" + idx} sx={{padding:"0 5px"}} >
-                            {editItem}
-                          </Typography>
-                        )}
-                      </Box>
-                    </AccordionDetails>
-                  </Accordion>
-                </CardContent>
-              </Card>
             )}
           </Grid>
         </div>
       </Grid>
+      { uploadMove &&
+          <MoveUpload collectionId={uploadMove.collectionId}
+                      upload={uploadMove.upload}
+                      admin={isAdmin}
+                      buckets={isAdmin ? otherBuckets : undefined}
+                      getBuckets={isAdmin ? getBuckets : undefined}
+                      onMove={handleUploadMove}
+                      onClose={() => setUploadMove(null)}
+          />
+      }
       { uploadDetailEdit &&
           <EditUploadDetails upload={uploadDetailEdit.upload}
                             onChange={handleUploadDetailChange}

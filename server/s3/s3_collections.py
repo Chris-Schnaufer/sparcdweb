@@ -20,6 +20,18 @@ class S3CollectionConnection:
     """ Contains functions for collection and upload discovery on an S3 instance """
 
     @staticmethod
+    def list_not_collection_buckets(conn_info: S3Info) -> Optional[tuple]:
+        """ Returns the buckets that are not collections
+        Arguments:
+            conn_info: the connection information for the S3 endpoint
+        Returns:
+            Returns the collections, or None
+        """
+        minio = s3_connect(conn_info)
+        return [one_bucket.name for one_bucket in minio.list_buckets()
+                         if not one_bucket.name.startswith(SPARCD_PREFIX)]
+
+    @staticmethod
     def list_collections(conn_info: S3Info) -> Optional[tuple]:
         """ Returns the collection information
         Arguments:
@@ -28,8 +40,7 @@ class S3CollectionConnection:
             Returns the collections, or None
         """
         minio = s3_connect(conn_info)
-        all_buckets = minio.list_buckets()
-        found_buckets = [one_bucket.name for one_bucket in all_buckets
+        found_buckets = [one_bucket.name for one_bucket in minio.list_buckets()
                          if one_bucket.name.startswith(SPARCD_PREFIX)]
         return get_user_collections(minio, conn_info.access_key, found_buckets)
 
@@ -42,8 +53,7 @@ class S3CollectionConnection:
             Returns the collections, or None
         """
         minio = s3_connect(conn_info)
-        all_buckets = minio.list_buckets()
-        found_buckets = [one_bucket.name for one_bucket in all_buckets
+        found_buckets = [one_bucket.name for one_bucket in minio.list_buckets()
                          if one_bucket.name.startswith(SPARCD_PREFIX)]
         user_collections = get_user_collections(minio, conn_info.access_key, found_buckets)
         return update_user_collections(minio, user_collections)
@@ -61,8 +71,7 @@ class S3CollectionConnection:
             Returns the information on the collection or None if the collection isn't found
         """
         minio = s3_connect(conn_info)
-        all_buckets = minio.list_buckets()
-        found_buckets = [one_bucket.name for one_bucket in all_buckets
+        found_buckets = [one_bucket.name for one_bucket in minio.list_buckets()
                          if one_bucket.name == bucket]
         if not found_buckets:
             return None
@@ -92,8 +101,7 @@ class S3CollectionConnection:
             Returns the information on the upload or None if not found
         """
         minio = s3_connect(conn_info)
-        all_buckets = minio.list_buckets()
-        found_buckets = [one_bucket.name for one_bucket in all_buckets
+        found_buckets = [one_bucket.name for one_bucket in minio.list_buckets()
                          if one_bucket.name == bucket]
         if not found_buckets:
             return None
