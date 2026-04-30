@@ -6,6 +6,7 @@ from flask_cors import cross_origin
 import sparcd_collections as sdc
 import sparcd_location_utils as sdlu
 from sparcd_config import ALLOWED_ORIGINS, authenticated_route
+from s3.s3_collections import S3CollectionConnection
 
 misc_bp = Blueprint('misc', __name__)
 
@@ -54,3 +55,21 @@ def locations(*, s3_info, **_):
     print('LOCATIONS', flush=True)
 
     return jsonify(sdlu.load_locations(s3_info))
+
+
+@misc_bp.route('/additionalBuckets', methods=['GET'])
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
+@authenticated_route()
+def additional_buckets(*, s3_info, **_):
+    """ Returns the list of buckets that are not collections
+    Arguments:
+        s3_info: the S3 endpoint information (injected by authenticated_route)
+    Returns:
+        200: JSON list of additional buckets
+        401: if the session token is invalid or expired
+        404: if the request is malformed or the user cannot be found
+    """
+    print('ADDITIONAL BUCKETS', flush=True)
+
+    return jsonify({'success': True, 
+                    'buckets': S3CollectionConnection.list_not_collection_buckets(s3_info)})

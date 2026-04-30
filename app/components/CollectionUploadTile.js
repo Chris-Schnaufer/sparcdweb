@@ -16,6 +16,7 @@ import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton'
+import ReplyOutlinedIcon from '@mui/icons-material/ReplyOutlined';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
 import { useTheme } from '@mui/material/styles';
@@ -23,18 +24,62 @@ import { useTheme } from '@mui/material/styles';
 import PropTypes from 'prop-types';
 
 /**
+ * Header sub-component for CollectionUploadTile, memoized to prevent re-renders
+ * when only accordion state changes in the parent.
+ * @function
+ * @param {string} name The name to display
+ * @param {function} onUploadEdit Called when the user wants to edit this upload
+ * @param {function} [onUploadMove] Called when the user wants to move an upload. If falsey the associated element
+ *                                  is not added
+ * @returns {object} The UI to render
+ */
+const UploadTileHeader = React.memo(function UploadTileHeader({name, onUploadEdit, onUploadMove}) {
+  return (
+    <Grid container direction="row" alignItems="start" justifyContent="start" wrap="nowrap">
+      <Grid sx={{marginRight: 'auto'}} >
+        <Typography variant="h6" component="h4" noWrap>
+          {name}
+        </Typography>
+      </Grid>
+      { onUploadMove &&
+        <Grid>
+          <Tooltip title="Move this upload">
+            <IconButton aria-label="Move this upload" onClick={onUploadMove}>
+              <ReplyOutlinedIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+        </Grid>
+      }
+      <Grid >
+        <Tooltip title="Edit this upload">
+          <IconButton aria-label="Edit this upload" onClick={onUploadEdit}>
+            <BorderColorOutlinedIcon fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      </Grid>
+    </Grid>
+  );
+});
+
+UploadTileHeader.propTypes = {
+  name:         PropTypes.string.isRequired,
+  onUploadEdit: PropTypes.func.isRequired,
+};
+
+/**
  * Returns the UI for a collection upload
  * @function
- * @param {string} collectionId The ID of the collection this upload belongs to
  * @param {object} upload The upload to display
  * @param {string} key The item key
  * @param {boolean} active This tile is active when set to true
  * @param {boolean} expanded The details are expanded when set to true
  * @param {function} onUploadEdit Function to call when the upload is to be edited
  * @param {function} onExpandChange Function to call when the use expands or collapses the details
- * @param {function} [onEditDetails] When not null, enables editing upload details and is called if the user wants to edit details
+ * @param {function} [onEditDetails] When specified, enables editing upload details and is called if the user wants to edit details
+ * @param {function} [`onUploadMove`] When specified, enables the icon to move an upload to another collection and called if the user wants to move an upload
  */
-export default function CollectionUploadTile({collectionId, upload, active, expanded, onUploadEdit, onExpandChange, onEditDetails}) {
+const CollectionUploadTile = React.memo(function CollectionUploadTile({upload, active, expanded, onUploadEdit, onExpandChange,
+                                              onEditDetails, onUploadMove}) {
   return (
     <Card id={"collection-upload-item-"+upload.name} variant="outlined" 
           data-active={active ? '' : undefined}
@@ -44,25 +89,10 @@ export default function CollectionUploadTile({collectionId, upload, active, expa
                 '&[data-active]:hover': { backgroundColor:'rgba(0, 0, 0, 0.25)' },
               }}
     >
-      <CardHeader title={
-                        <Grid id="collection-card-header-wrapper" container direction="row" alignItems="start" justifyContent="start" wrap="nowrap">
-                          <Grid>
-                            <Typography gutterBottom variant="h6" component="h4" noWrap>
-                              {upload.name}
-                            </Typography>
-                          </Grid>
-                          <Grid sx={{marginLeft:'auto'}}>
-                            <Tooltip title="Edit this upload">
-                              <IconButton aria-label="Edit this upload" onClick={onUploadEdit}>
-                                <BorderColorOutlinedIcon fontSize="small"/>
-                              </IconButton>
-                            </Tooltip>
-                          </Grid>
-                        </Grid>
-                        }
-                    style={{paddingBottom:'0px'}}
+      <CardHeader sx={{ pb: 0 }}
+                  title={<UploadTileHeader name={upload.name} onUploadEdit={onUploadEdit} onUploadMove={onUploadMove} />} 
       />
-      <CardContent sx={{paddingTop:'0px'}}>
+      <CardContent sx={{ pt: 0 }}>
         <Accordion expanded={expanded}
                    onChange={onExpandChange}
                    sx={{backgroundColor:'#BFCBE1'}}>
@@ -120,4 +150,29 @@ export default function CollectionUploadTile({collectionId, upload, active, expa
       </CardContent>
     </Card>
     )
+});
+
+
+CollectionUploadTile.propTypes = {
+  upload: PropTypes.shape({
+    name:                   PropTypes.string.isRequired,
+    description:            PropTypes.string,
+    folders:                PropTypes.arrayOf(PropTypes.string),
+    edits:                  PropTypes.arrayOf(PropTypes.string),
+    imagesCount:            PropTypes.number,
+    imagesWithSpeciesCount: PropTypes.number,
+  }).isRequired,
+  active:         PropTypes.bool,
+  expanded:       PropTypes.bool,
+  onUploadEdit:   PropTypes.func.isRequired,
+  onExpandChange: PropTypes.func.isRequired,
+  onEditDetails:  PropTypes.func,
 };
+
+CollectionUploadTile.defaultProps = {
+  active:       false,
+  expanded:     false,
+  onEditDetails: null,
+};
+
+export default CollectionUploadTile;

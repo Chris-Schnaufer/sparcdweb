@@ -1445,3 +1445,156 @@ export function updateUploadDetails(serverURL, token, collectionId, uploadId, de
 
   return true;
 }
+
+
+/**
+ * Checks if the user is an admin
+ * @function
+ * @param {string} serverURL The URL to the server
+ * @param {string} token The authorization token
+ * @param {function} onExpiredToken Function to call when we get an expired token return
+ * @param {function} onSuccess The function to call upon success
+ * @param {function} onFailure The function to call upon failure
+ * @return {boolean} Returns true if the call was successfullly made, false if not
+ */
+export function userIsAdminCheck(serverURL, token, onExpiredToken, onSuccess, onFailure) {
+  onExpiredToken ||= () => {};
+  onSuccess ||= () => {};
+  onFailure ||= () => {};
+
+
+  try {
+    const updateDetailsUrl = serverURL + '/userIsAdmin?t=' + encodeURIComponent(token);
+    fetch(updateDetailsUrl, {
+      credentials: 'include',
+      method: 'GET',
+    }).then(async (resp) => {
+          if (resp.ok) {
+            return resp.json();
+          } else {
+            if (resp.status === 401) {
+              // User needs to log in again
+              onExpiredToken();
+            }
+            throw new Error(`Failed to check on user permissions: ${resp.status}: ${await resp.text()}`);
+          }
+        })
+      .then((respData) => {
+        onSuccess(respData);
+      })
+      .catch(function(err) {
+        console.log('User Permissions Error: ',err);
+        onFailure(err);
+    });
+  } catch (err) {
+    console.log('User Permissions Unknown Error: ',err);
+    return false;
+  }
+
+  return true;
+}
+
+/**
+ * Fetches the other buckets that are not a collection
+ * @function
+ * @param {string} serverURL The URL to the server
+ * @param {string} token The authorization token
+ * @param {function} onExpiredToken Function to call when we get an expired token return
+ * @param {function} onSuccess The function to call upon success
+ * @param {function} onFailure The function to call upon failure
+ * @return {boolean} Returns true if the call was successfullly made, false if not
+ */
+export function getOtherBuckets(serverURL, token, onExpiredToken, onSuccess, onFailure) {
+  onExpiredToken ||= () => {};
+  onSuccess ||= () => {};
+  onFailure ||= () => {};
+
+  try {
+    const updateDetailsUrl = serverURL + '/additionalBuckets?t=' + encodeURIComponent(token);
+    fetch(updateDetailsUrl, {
+      credentials: 'include',
+      method: 'GET',
+    }).then(async (resp) => {
+          if (resp.ok) {
+            return resp.json();
+          } else {
+            if (resp.status === 401) {
+              // User needs to log in again
+              onExpiredToken();
+            }
+            throw new Error(`Failed to check on additional buckets: ${resp.status}: ${await resp.text()}`);
+          }
+        })
+      .then((respData) => {
+        onSuccess(respData);
+      })
+      .catch(function(err) {
+        console.log('Additional Buckets Error: ',err);
+        onFailure(err);
+    });
+  } catch (err) {
+    console.log('Additional Buckets Unknown Error: ',err);
+    return false;
+  }
+
+  return true;
+}
+
+
+/**
+ * Makes a request to move an upload to another collection (or bucket)
+ * @function
+ * @param {string} serverURL The URL to the server
+ * @param {string} token The authorization token
+ * @param {string} sourceCollectionId The ID of the collection the upload is in
+ * @param {string} uploadKey The key of the collection to move
+ * @param {string} destinationCollectionId The ID of the collection to move the upload to (or bucket)
+ * @param {function} onExpiredToken Function to call when we get an expired token return
+ * @param {function} onSuccess The function to call upon success
+ * @param {function} onFailure The function to call upon failure
+ * @return {boolean} Returns true if the call was successfullly made, false if not
+ */
+export function moveUpload(serverURL, token, sourceCollectionId, uploadKey, destinationCollectionId,
+                                onExpiredToken, onSuccess, onFailure) {
+  onExpiredToken ||= () => {};
+  onSuccess ||= () => {};
+  onFailure ||= () => {};
+
+  try {
+    const updateDetailsUrl = serverURL + '/moveUpload?t=' + encodeURIComponent(token);
+
+    const formData = new FormData();
+
+    formData.append('s', sourceCollectionId);
+    formData.append('u', uploadKey);
+    formData.append('d', destinationCollectionId);
+
+    fetch(updateDetailsUrl, {
+      credentials: 'include',
+      method: 'POST',
+      body: formData
+    }).then(async (resp) => {
+          if (resp.ok) {
+            return resp.json();
+          } else {
+            if (resp.status === 401) {
+              // User needs to log in again
+              onExpiredToken();
+            }
+            throw new Error(`Failed moving upload to another collection: ${resp.status}: ${await resp.text()}`);
+          }
+        })
+      .then((respData) => {
+        onSuccess(respData);
+      })
+      .catch(function(err) {
+        console.log('Move Upload Error: ',err);
+        onFailure(err);
+    });
+  } catch (err) {
+    console.log('Move Upload Unknown Error: ',err);
+    return false;
+  }
+
+  return true;
+}

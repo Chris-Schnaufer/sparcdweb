@@ -2,7 +2,7 @@
 
 import hashlib
 
-from flask import Blueprint, jsonify, request, Response
+from flask import Blueprint, jsonify, make_response, request, Response
 from flask_cors import cross_origin
 import requests
 
@@ -18,6 +18,8 @@ import spd_crypt as crypt
 
 auth_bp = Blueprint('auth', __name__)
 
+
+IS_ADMIN_BROWSER_CACHE_TIMEOUT_SEC = 10 * 60 # How long to cache whether user is admin or not
 
 def __parse_range(range_header: str, object_size: int) -> tuple:
     """ Parses an HTTP Range header and returns (start, end) byte positions
@@ -323,3 +325,23 @@ def set_upload_complete(*, db, user_info, s3_info, **_):
     """
     print(f'SET UPLOAD COMPLETE user={user_info.name}', flush=True)
     return make_handler_response(hbase.handle_upload_complete(db, user_info, s3_info))
+
+
+@auth_bp.route('/userIsAdmin', methods=['GET'])
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
+@authenticated_route()
+def user_is_admin(*, user_info, **_):
+    """ Marks an incomplete upload as completed
+    Arguments:
+        user_info: the authenticated user's information (injected by authenticated_route)
+    Returns:
+        200: JSON object indicating success
+        401: if the session token is invalid or expired
+        404: if the request is malformed or the user cannot be found
+        406: if the upload cannot be marked complete
+    """
+    print(f'USER IS ADMIN user={user_info.name}', flush=True)
+    response = make_response({'success': True, 'isAdmin': user_info.admin})
+    response.headers.set('Cache-Control',
+                         f'private, max-age={IS_ADMIN_BROWSER_CACHE_TIMEOUT_SEC}')
+    return response

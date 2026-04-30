@@ -1196,8 +1196,8 @@ class SPARCdDatabase:
         # Map the priority
         mapped_priority = Priority.NORMAL
         match priority.lower():
-            case 'normal':
-                mapped_priority = Priority.NORMAL
+        #    case 'normal':
+        #        mapped_priority = Priority.NORMAL
             case 'important':
                 mapped_priority = Priority.IMPORTANT
             case 'urgent':

@@ -4,8 +4,6 @@ from dataclasses import dataclass
 import json
 from typing import Optional, Union
 
-from flask import request
-
 import sparcd_collections as sdc
 from sparcd_db import SPARCdDatabase
 from spd_types.userinfo import UserInfo
@@ -13,7 +11,8 @@ from spd_types.s3info import S3Info
 import sparcd_utils as sdu
 import sparcd_location_utils as sdlu
 import sparcd_upload_utils as sdupu
-from s3.s3_access_helpers import SPARCD_PREFIX, SPECIES_JSON_FILE_NAME
+from s3.s3_access_helpers import (make_s3_path, COLLECTIONS_FOLDER, SPARCD_PREFIX,
+                                    SPECIES_JSON_FILE_NAME, S3_UPLOADS_PATH_PART)
 from s3.s3_admin import S3AdminConnection
 from s3.s3_collections import S3CollectionConnection
 import s3_utils as s3u
@@ -68,25 +67,84 @@ class CollectionEditParams:
     col_all_perms: str
 
 
-def __check_incomplete_param() -> Optional[str]:
-    """ Returns the verified parameter for checking incomplete uploads
+@dataclass
+class CollectionAddParams:
+    """ Internal class which contains the parameters for a collection add request """
+    col_name: str
+    col_desc: str
+    col_email: str
+    col_org: str
+    col_all_perms: str
+
+
+@dataclass
+class SpeciesUpdateParams:
+    """ Parameter class for updating species information """
+    new_name: str
+    old_scientific: str
+    new_scientific: str
+    key_binding: str
+    icon_url: str
+
+
+@dataclass
+class UploadMoveParams:
+    """ Parameter class for moving uploads """
+    src_coll_id: str
+    upload_key:  str
+    dst_coll_id: str
+
+
+@dataclass
+class UserUpdateParams:
+    """ Paramter class for updating user information """
+    old_name: str
+    new_email: str
+    admin: bool
+
+
+
+def __authorized_move_collection(check_coll: dict, name: str, admin: bool, upload_id: str,
+                                                            check_has_upload: bool=True) -> bool:
+    """ Checks if the user is authorized to move an upload to or from this collection
+    Arguments:
+        check_coll: the collection to check
+        name: the user name to check for
+        admin: when True the user doesn't need explicit permission
+        upload_id: the ID of the upload that needs to be in the check collection
+        check_has_upload: when True will check if upload is in the collection. False causes this
+                        check to be skipped
     Return:
-        Returns the collections list upon success, None if there is a problem
-        with the parameter
+        Returns True if the user is authorized to change this collection and, if check_has_upload
+        is set to True, the upload is contained in the collection. False is returned if the user
+        is not authorized, and, if check_has_upload is set to True, the upload is contained in 
+        the collection.
     """
-    cur_colls = request.form.get('collections', None)
-    if cur_colls is None:
-        return None
+    # Make sure we have permissions to search through
+    if not check_coll['permissions']:
+        return False
 
-    # Get the list of collections
-    try:
-        cur_colls = json.loads(cur_colls)
-    except json.JSONDecodeError as ex:
-        print('ERROR: Received invalid collections list to check for incomplete uploads',flush=True)
-        print(ex, flush=True)
-        return None
+    # Check for permissions
+    auth = False
+    perm = check_coll['permissions']
+    if perm['usernameProperty'] == name:
+        if perm['ownerProperty'] or perm['uploadProperty']:
+            auth = True
 
-    return cur_colls
+    # If we don't have permission and we're not an administrator
+    if not auth and not admin:
+        return False
+
+    # They have permission and we don't care if the upload is in the collection
+    if check_has_upload is False:
+        return True
+
+    # Check that the upload is contained in the collection
+    for upload in check_coll['uploads']:
+        if upload['key'] == upload_id:
+            return True
+
+    return False
 
 
 def __check_location_edit_params(params: LocationEditParams) -> bool:
@@ -115,58 +173,76 @@ def __check_location_edit_params(params: LocationEditParams) -> bool:
     return True
 
 
-def __collection_update_request_params() -> Optional[CollectionEditParams]:
-    """ Gets and validates the collection update parameters for editing
+def __get_authorized_collection(collections: tuple, user_info: UserInfo, collection_id: str,
+                                    upload_id: str, check_has_upload: bool=True) -> Optional[dict]:
+    """ Returns a collection that's authorized to move for the user
+    Arguments:
+        collections: the collections to iterater through
+        user_inf: information on the used that made the request
+        collection_id: the ID of the collection of interest
+        upload_id: the ID of the upload to search for
+        check_had_upload: set to True to have the upload looked for in the collection
     Return:
-        Returns the parameters in CollectionEditParams when successful and None if validation
-        fails
     """
-    # Get the rest of the request parameters
-    params = CollectionEditParams(
-                        col_id = request.form.get('id'),
-                        col_name = request.form.get('name'),
-                        col_desc = request.form.get('description', ''),
-                        col_email = request.form.get('email', ''),
-                        col_org = request.form.get('organization', ''),
-                        col_all_perms = request.form.get('allPermissions')
-                    )
-
-    # Check what we have from the requestor
-    if not all(item for item in [params.col_id, params.col_name, params.col_all_perms]):
+    check_coll = [one_coll for one_coll in collections if one_coll['id'] == collection_id]
+    if not check_coll:
         return None
 
-    return params
+    check_coll = check_coll[0]
+
+    # Check user permissions level
+    if not __authorized_move_collection(check_coll, user_info.name, user_info.admin,
+                                                                    upload_id, check_has_upload):
+        return None
+
+    return check_coll
 
 
-def __location_update_request_params() -> Optional[LocationEditParams]:
-    """ Gets and valudates the request parameters for a location edit request
+def _handle_move_upload_result(db: SPARCdDatabase, s3_id: str, user: str,
+                                                            params: UploadMoveParams, res) -> dict:
+    """ Handles the result of copying an upload
+    Arguments:
+        db: the working database
+        s3_id: the ID of the S3 instance
+        user: the name of the user performing the move
+        params: the move request parameters
+        res: the result of the move
     Return:
-        Returns the request parameters in LocationEditParams
+        Returns the result of the move to be sent to the client
     """
-    utm = LocationUtmInfo(
-        utm_zone=request.form.get('utm_zone'),
-        utm_letter=request.form.get('utm_letter'),
-        utm_x=request.form.get('utm_x'),
-        utm_y=request.form.get('utm_y')
-    )
-    coords = LocationCoordInfo(
-        coordinate=request.form.get('coordinate'),
-        new_lat=request.form.get('new_lat'),
-        new_lng=request.form.get('new_lon'),
-        old_lat=request.form.get('old_lat'),
-        old_lng=request.form.get('old_lon'),
-        utm=utm
-    )
-    params = LocationEditParams(
-        loc_id=request.form.get('id'),
-        loc_name=request.form.get('name'),
-        loc_active=request.form.get('active'),
-        measure=request.form.get('measure'),
-        loc_ele=request.form.get('elevation'),
-        description=request.form.get('description'),
-        coords=coords
-    )
 
+    if res is None:
+        message = 'An unknown server error ocurred while attempting to copy the upload'
+        client_result = {'success': False,  'message': message}
+    elif isinstance(res, str):
+        message = res
+        client_result = {'success': False, 'message': res}
+    else:
+        message = f'The move of {params.upload_key} completed successfully'
+        client_result = {'success': True }
+
+    mail_message = f'Source collection: {params.src_coll_id}\n' \
+                        f'Upload: {params.upload_key}\n' \
+                        f'Destination: {params.dst_coll_id}\n\n' + \
+                        message
+
+    db.message_add(s3_id,
+                    user,
+                    user,
+                    'Move upload {params.upload_key} results', 
+                    mail_message,
+                    "normal")
+
+    return client_result
+
+
+def location_update_params_check(params: LocationEditParams) -> Optional[LocationEditParams]:
+    """ Validates the request parameters for a location update request
+    Arguments:
+        params: the location edit parameters
+    Return:
+        Returns the request parameters in LocationEditParams when valid. None is returned otherwise
+    """
     if not __check_location_edit_params(params):
         return None
 
@@ -195,58 +271,20 @@ def __location_update_request_params() -> Optional[LocationEditParams]:
     return params
 
 
-def __validate_collection_update_params(user_info: UserInfo,
-                                        must_be_admin: bool) -> Optional[CollectionEditParams]:
-    """ Validates and returns the collection update request parameters
-    Arguments:
-        user_info: the user information
-        must_be_admin: set to False if the user shouldn't be an admin
-    Return:
-        Returns the validated parameters, or None if validation fails
-    """
-    if bool(user_info.admin) != must_be_admin:
-        return None
-
-    params = __collection_update_request_params()
-    if params is None:
-        return None
-
-    try:
-        params.col_all_perms = json.loads(params.col_all_perms)
-    except json.JSONDecodeError as ex:
-        print(f'Unable to convert permissions for collection update: '
-              f'{params.col_id} {user_info.name}', flush=True)
-        print(ex)
-        return None
-
-    if not params.col_all_perms:
-        return None
-
-    return params
-
-
 def handle_admin_collection_details(db: SPARCdDatabase, user_info: UserInfo, s3_info: S3Info,
-                                                must_be_admin: bool=True) -> Union[dict,bool, None]:
+                                bucket: str, is_admin: bool=True) -> Union[dict,bool, None]:
     """ Implementation for getting collection details
     Arguments:
         db: the database instance
         user_info: the user information
         s3_info: the S3 endpoint information
-        must_be_admin: set to False if the user shouldn't be an admin
+        bucket: the bucket of interes
+        is_admin: True if the user is an administrator and False if not
     Return:
         Returns the loaded collection data upon success. Returns False if there's a problem with
         the request paramters. None is returned if the collection can't be found and the user is
         an administrator, otherwise False is returned if the collection can't be found
     """
-    bucket = request.form.get('bucket', None)
-    if bucket is None:
-        return False
-
-    # Check if the user has the correct admin permissions level
-    is_admin = bool(user_info.admin)
-    if is_admin != must_be_admin:
-        return False
-
     # Get the collection information
     collection = None
 
@@ -274,24 +312,16 @@ def handle_admin_collection_details(db: SPARCdDatabase, user_info: UserInfo, s3_
     return collection
 
 
-def handle_admin_location_details(user_info: UserInfo, s3_info: S3Info) -> Union[dict,bool, None]:
+def handle_admin_location_details(s3_info: S3Info, loc_id: str) -> Union[dict,bool, None]:
     """ Implementation for getting location details for administrators
     Arguments:
-        user_info: the user information
         s3_info: the S3 endpoint information
+        loc_id: the location ID of interest
     Return:
         Returns the location information identified in the request upon success. False
         is returned if there is a problem with the request parameterss. None is returned
         if the location can't be found
     """
-    # Make sure this user is an admin
-    if not bool(user_info.admin):
-        return False
-
-    loc_id = request.form.get('id', None)
-    if loc_id is None:
-        return False
-
     # Get the location information
     location = None
 
@@ -386,118 +416,83 @@ def handle_admin_species(user_info: UserInfo,
     return cur_species
 
 
-def handle_user_update(db:SPARCdDatabase, user_info: UserInfo,
-                                                        s3_info: S3Info) -> Union[dict,bool, None]:
+def handle_user_update(db:SPARCdDatabase, s3_info: S3Info,
+                                                params: UserUpdateParams) -> Union[dict,bool, None]:
     """ Implementation of updating user details when an administrator
     Arguments:
         db: the database instance
         user_info: the user information
         s3_info: the S3 endpoint information
+        params: the user update paramters
     Return:
         Returns a status dict when successful. False is returned if there was
         a problem with the request parameters. None is returned if the request couldn't be
         completed
     """
-    # Make sure the user requesting the change is an admin
-    if not bool(user_info.admin):
-        return None
-
-    # Get the rest of the request parameters
-    old_name = request.form.get('oldName')
-    new_email = request.form.get('newEmail')
-    admin = request.form.get('admin')
-
-    # Check what we have from the requestor
-    if not old_name or new_email is None:
-        return False
-
-    old_user_info = db.get_user(s3_info.id, old_name)
+    old_user_info = db.get_user(s3_info.id, params.old_name)
     if old_user_info is None:
-        return {'success': False, 'message': f'User "{old_name}" not found'}
+        return {'success': False, 'message': f'User "{params.old_name}" not found'}
 
-    if admin is not None:
-        admin = sdu.make_boolean(admin)
+    db.update_user(s3_info.id, params.old_name, params.new_email, params.admin)
 
-    db.update_user(s3_info.id, old_name, new_email, admin)
-
-    return {'success': True, 'message': f'Successfully updated user "{old_name}"', \
-            'email': sdu.secure_email(new_email)}
+    return {'success': True, 'message': f'Successfully updated user "{params.old_name}"', \
+            'email': sdu.secure_email(params.new_email)}
 
 
-def handle_species_update(db:SPARCdDatabase, user_info: UserInfo,
-                            s3_info: S3Info, species_temp_filename: str) -> Union[tuple,bool, None]:
+def handle_species_update(db:SPARCdDatabase, user_info: UserInfo, s3_info: S3Info,
+                            species_temp_filename: str,
+                            params: SpeciesUpdateParams) -> Union[tuple,bool, None]:
     """ Implementation of updating species details when an administrator
     Arguments:
         db: the database instance
         user_info: the user information
         s3_info: the S3 endpoint information
         species_temp_filename: the temporary filename used to store species information
+        params: the parameters for updating a species
     Return:
         Returns a status dict when successful. False is returned if there was
         a problem with the request parameters. None is returned if the request couldn't be
         completed
     """
-    # Make sure this user is an admin
-    if not bool(user_info.admin):
-        return None
-
-    # Get the rest of the request parameters
-    new_name = request.form.get('newName')
-    old_scientific = request.form.get('oldScientific')
-    new_scientific = request.form.get('newScientific')
-    key_binding = request.form.get('keyBinding', '')
-    icon_url = request.form.get('iconURL')
-
-    # Check what we have from the requestor
-    if not all(item for item in [new_name, new_scientific, icon_url]):
-        return False
-
     # Get the species
     cur_species = s3u.load_sparcd_config(SPECIES_JSON_FILE_NAME,
                                             species_temp_filename,
                                             s3_info)
 
     # Make sure this is OK to do
-    find_scientific = old_scientific if old_scientific else new_scientific
+    find_scientific = params.old_scientific if params.old_scientific else params.new_scientific
     found_match = [one_species for one_species in cur_species if \
                                                 one_species['scientificName'] == find_scientific]
 
     # If we're replacing, we should have found the entry
-    if old_scientific is not None and (not found_match or len(found_match) <= 0):
-        return {'success': False, 'message': f'Species "{old_scientific}" not found'}
+    if params.old_scientific is not None and (not found_match or len(found_match) <= 0):
+        return {'success': False, 'message': f'Species "{params.old_scientific}" not found'}
     # If we're not replaceing, we should NOT find the entry
-    if old_scientific is None and (found_match and len(found_match) > 0):
-        return {'success': False, 'message': f'Species "{new_scientific}" already exists'}
+    if params.old_scientific is None and (found_match and len(found_match) > 0):
+        return {'success': False, 'message': f'Species "{params.new_scientific}" already exists'}
 
     # Put the change in the DB
-    if db.update_species(s3_info.id, user_info.name, old_scientific, new_scientific, \
-                                                                new_name, key_binding, icon_url):
+    if db.update_species(s3_info.id,user_info.name, params.old_scientific, params.new_scientific,
+                                            params.new_name, params.key_binding, params.icon_url):
         return {'success': True, 'message': f'Successfully updated species "{find_scientific}"'}
 
     return {'success': False, \
                 'message': f'A problem ocurred while updating species "{find_scientific}"'}
 
 
-def handle_location_update(db:SPARCdDatabase, user_info: UserInfo,
-                                                        s3_info: S3Info) -> Union[tuple,bool, None]:
+def handle_location_update(db:SPARCdDatabase, user_info: UserInfo, s3_info: S3Info,
+                                            params: LocationEditParams) -> Union[tuple,bool, None]:
     """ Implementation of updating species details when an administrator
     Arguments:
         db: the database instance
         user_info: the user information
         s3_info: the S3 endpoint information
+        params: the location editing parameters
     Return:
         Returns a status dict when successful. False is returned if there was
         a problem with the request parameters. None is returned if the request couldn't be
         completed
     """
-    # Make sure this user is an admin
-    if not bool(user_info.admin):
-        return None
-
-    params = __location_update_request_params()
-    if not params:
-        return False
-
     # Get the locations to work with
     cur_locations = sdlu.load_locations(s3_info, True)
 
@@ -571,22 +566,20 @@ def handle_location_update(db:SPARCdDatabase, user_info: UserInfo,
 
 
 def handle_collection_update(db:SPARCdDatabase, user_info: UserInfo, s3_info: S3Info,
-                                            must_be_admin: bool=True) -> Union[tuple,bool, None]:
+                                        params: CollectionEditParams,
+                                        must_be_admin: bool=True) -> Union[tuple,bool, None]:
     """ Implementation of updating collection details when an administrator
     Arguments:
         db: the database instance
         user_info: the user information
         s3_info: the S3 endpoint information
+        params: the collection update parameters
         must_be_admin: set to False if the user shouldn't be an admin
     Return:
         Returns a status dict when successful. False is returned if there was
         a problem with the request parameters. None is returned if the request couldn't be
         completed
     """
-    params = __validate_collection_update_params(user_info, must_be_admin)
-    if params is None:
-        return False
-
     is_admin = bool(user_info.admin)
     s3_bucket = SPARCD_PREFIX + params.col_id
     all_collections = sdc.load_collections(db, is_admin, s3_info)
@@ -630,46 +623,30 @@ def handle_collection_update(db:SPARCdDatabase, user_info: UserInfo, s3_info: S3
 
 
 def handle_collection_add(db:SPARCdDatabase, user_info: UserInfo, s3_info: S3Info,
-                                            must_be_admin: bool=True) -> Union[tuple,bool, None]:
+                                            params:CollectionAddParams) -> Union[tuple,bool, None]:
     """ Implementation of adding a collection when an administrator
     Arguments:
         db: the database instance
         user_info: the user information
         s3_info: the S3 endpoint information
-        must_be_admin: set to False if the user shouldn't be an admin
+        params: the parameters for this call
     Return:
         Returns a status dict when successful. False is returned if there was
         a problem with the request parameters. None is returned if the request couldn't be
         completed
     """
-    # Check if the user has the correct admin permissions level
-    is_admin = bool(user_info.admin)
-    if is_admin != must_be_admin:
-        return False
-
-    # Get the rest of the request parameters
-    col_name = request.form.get('name')
-    col_desc = request.form.get('description', '')
-    col_email = request.form.get('email', '')
-    col_org = request.form.get('organization', '')
-    col_all_perms = request.form.get('allPermissions')
-
-    # Check what we have from the requestor
-    if not all(item for item in [col_name, col_all_perms]):
-        return "Not Found", 406
-
-    if col_desc is None:
-        col_desc = ''
-    if col_email is None:
-        col_email = ''
-    if col_org is None:
-        col_org = ''
+    if params.col_desc is None:
+        params.col_desc = ''
+    if params.col_email is None:
+        params.col_email = ''
+    if params.col_org is None:
+        params.col_org = ''
 
     try:
-        col_all_perms = json.loads(col_all_perms)
+        col_all_perms = json.loads(params.col_all_perms)
     except json.JSONDecodeError as ex:
         print('Unable to convert permissions for collection update: ' \
-                                                f'{col_name} {user_info.name}', flush=True)
+                                                f'{params.col_name} {user_info.name}', flush=True)
         print(ex)
         return False
     if not col_all_perms:
@@ -677,10 +654,10 @@ def handle_collection_add(db:SPARCdDatabase, user_info: UserInfo, s3_info: S3Inf
 
     # Add the collection
     s3_bucket = S3AdminConnection.add_collection(s3_info,
-                                {   'name': col_name,
-                                    'description': col_desc,
-                                    'email': col_email,
-                                    'organization': col_org,
+                                {   'name': params.col_name,
+                                    'description': params.col_desc,
+                                    'email': params.col_email,
+                                    'organization': params.col_org,
                                 },
                                 col_all_perms)
     print(f'INFO: Created new collection: {s3_bucket}', flush=True)
@@ -697,13 +674,14 @@ def handle_collection_add(db:SPARCdDatabase, user_info: UserInfo, s3_info: S3Inf
             'message': "Successfully updated the collection"}
 
 
-def handle_check_incomplete(db:SPARCdDatabase, user_info: UserInfo,
-                                                        s3_info: S3Info) -> Union[tuple,bool, None]:
+def handle_check_incomplete(db:SPARCdDatabase, user_info: UserInfo, s3_info: S3Info,
+                                                        colls: tuple) -> Union[tuple,bool, None]:
     """ Implementation of checking for incomplete uploads when an administrator
     Arguments:
         db: the database instance
         user_info: the user information
         s3_info: the S3 endpoint information
+        colls: the collections to check
     Return:
         Returns a status dict when successful. False is returned if there was
         a problem with the request parameters. None is returned if the request couldn't be
@@ -713,21 +691,16 @@ def handle_check_incomplete(db:SPARCdDatabase, user_info: UserInfo,
     if not bool(user_info.admin):
         return None
 
-    # Check the parameters we've received
-    cur_colls = __check_incomplete_param()
-    if cur_colls is None:
-        return None
-
     # Check if we're all done
-    if len(cur_colls) <= 0:
+    if len(colls) <= 0:
         return {'success': True}
 
     # Get the locations and species changes logged in the database
 
-    incomplete = S3CollectionConnection.check_incomplete_uploads(s3_info, cur_colls)
+    incomplete = S3CollectionConnection.check_incomplete_uploads(s3_info, colls)
 
     if incomplete is None:
-        print('ERROR: unable to check for incomplete uploads in indicated collections', cur_colls,
+        print('ERROR: unable to check for incomplete uploads in indicated collections', colls,
                                                                                         flush=True)
         return {'success': False}
 
@@ -805,3 +778,73 @@ def handle_abandon_changes(db:SPARCdDatabase, user_info: UserInfo,
     db.clear_admin_species_changes(s3_info.id, user_info.name)
 
     return {'success': True, 'message': "All changes were successully abandoned"}
+
+
+def handle_move_upload(db:SPARCdDatabase, user_info: UserInfo, s3_info: S3Info,
+                                                    params: UploadMoveParams) -> Union[tuple, None]:
+    """ Implementation of moving an upload
+    Arguments:
+        db: the database instance
+        user_info: the user information
+        s3_info: the S3 endpoint information
+        params: the parameters to move an upload
+        params.src_coll_id: the source collection ID
+        params.upload_key: the key of the upload to move
+        params.dst_coll_id: the destination collection ID or bucket name
+    Return:
+        Returns a status dict when successful. None is returned if the request couldn't be
+        completed
+    """
+    is_admin = bool(user_info.admin)
+
+    # Find the collection
+    all_collections = sdc.load_collections(db, is_admin, s3_info)
+    if not all_collections:
+        return False
+
+    # Get the authorized collection. If not found, assume it's a bucket if the user is an admin
+    auth_coll = __get_authorized_collection(all_collections, user_info, params.src_coll_id,
+                                                                            params.upload_key, True)
+    # The source must be a collection
+    if not auth_coll:
+        return False
+
+    # Get the destination collection. If we can't find it assume it's an S3 bucket
+    dst_coll = __get_authorized_collection(all_collections, user_info, params.dst_coll_id,
+                                                                                        None, False)
+    if dst_coll:
+        dst_bucket = dst_coll['bucket']
+    else:
+        dst_bucket = params.dst_coll_id
+
+    # Build up the upload starting path
+    start_path = make_s3_path((COLLECTIONS_FOLDER, auth_coll['id'], S3_UPLOADS_PATH_PART,
+                                                                                params.upload_key))
+    start_path_len = len(start_path)
+
+    # Get the destination path if we're a collection bucket
+    dest_path = None
+    if dst_coll:
+        dest_path = make_s3_path((COLLECTIONS_FOLDER, dst_coll['bucket'], S3_UPLOADS_PATH_PART,
+                                                                                params.upload_key))
+
+    def make_dest_path(src_path: str) -> str:
+        """ Internal function to map a source path from a collection to the destination
+            path of a collection
+        Arguments:
+            src_path: path from the source bucket
+        Return:
+            Returns the destination path
+        """
+        path_particle = src_path[start_path_len:]
+        if path_particle.startswith('/'):
+            path_particle = path_particle[1:]
+        return make_s3_path((dest_path, path_particle))
+
+    # Move the data
+    res = s3u.move_upload(s3_info, auth_coll['bucket'], dst_bucket, start_path,
+                            (lambda x: make_dest_path(x)) if dst_coll else (lambda x: x)
+                        )
+
+    # Make a message based upon our return value
+    return _handle_move_upload_result(db, s3_info.id, user_info.name, params, res)

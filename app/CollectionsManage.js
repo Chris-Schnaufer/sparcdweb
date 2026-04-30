@@ -1,11 +1,7 @@
 /** @module CollectionsManage */
 
 import * as React from 'react';
-import Accordion from '@mui/material/Accordion';
-import AccordionDetails from '@mui/material/AccordionDetails';
-import AccordionSummary from '@mui/material/AccordionSummary';
 import BackspaceOutlined from '@mui/icons-material/BackspaceOutlined';
-import BorderColorOutlinedIcon from '@mui/icons-material/BorderColorOutlined';
 import Box from '@mui/material/Box';
 import Button from '@mui/material/Button';
 import Card from '@mui/material/Card';
@@ -13,8 +9,6 @@ import CardActionArea from '@mui/material/CardActionArea';
 import CardContent from '@mui/material/CardContent';
 import CardHeader from '@mui/material/CardHeader';
 import CircularProgress from '@mui/material/CircularProgress';
-import EditNoteOutlinedIcon from '@mui/icons-material/EditNoteOutlined';
-import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import Grid from '@mui/material/Grid';
 import IconButton from '@mui/material/IconButton'
 import InputAdornment from '@mui/material/InputAdornment';
@@ -29,6 +23,7 @@ import PropTypes from 'prop-types';
 
 import CollectionUploadTile from './components/CollectionUploadTile';
 import EditUploadDetails from './components/EditUploadDetails';
+import MoveUpload from './components/MoveUpload';
 import { Level } from './components/Messages';
 import * as Server from './ServerCalls';
 import { AddMessageContext, CollectionsInfoContext, NarrowWindowContext, SizeContext,
@@ -62,6 +57,9 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
   const [canEditUploads, setCanEditUploads] = React.useState(false); // Keeping track if user can edit uploads
   const [editingUploadMask, setEditingUploadMask] = React.useState(false);
   const [expandedUpload, setExpandedUpload] = React.useState(false);
+  const [isAdminChecked, setIsAdminChecked] = React.useState(false); // Has checking for admin happened
+  const [isAdmin, setIsAdmin] = React.useState(null); // Null indicates it hasn't been checked yet. Boolean T/F is admin status
+  const [otherBuckets, setOtherBuckets] = React.useState(null); // Contains the loaded non-collection buckets
   const [pendingMessage, setPendingMessage] = React.useState(null);
   const [searchIsSetup, setSearchIsSetup] = React.useState(false);
   const [selectionIndex, setSelectionIndex] = React.useState(-1);
@@ -69,7 +67,23 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
   const [uploadDetailEdit, setUploadDetailEdit] = React.useState(null);
   const [uploadFilter, setUploadFilter] = React.useState(null); // The upload filter string for a collection
   const [uploadFiltering, setUploadFiltering] = React.useState(false); // The user wants to filter when set to true
+  const [uploadMove, setUploadMove] = React.useState(false); // The user wants to move an upload
   const [uploadSelectionIndex, setUploadSelectionIndex] = React.useState(-1);
+
+  React.useEffect(() => {
+    if ((isAdmin === null || isAdmin === undefined) && !isAdminChecked) {
+      setIsAdminChecked(true);
+      const success = Server.userIsAdminCheck(serverURLRef.current, collectionToken, setTokenExpired,
+                              (respData) => { // Success
+                                setIsAdmin(!!respData.isAdmin);
+                              },
+      );
+
+      if (!success) {
+        console.log('WARNING: (CollectionsManage) error detected when attmpting to see if user is admin');
+      }
+    }
+  }, [isAdmin]);
 
   // Initialize collections information
   React.useEffect(() => {
@@ -140,6 +154,35 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
   }, [collectionsItems, searchSetup]);
 
   /**
+   * Fetches the non-collection buckets from the server
+   * @function
+   */
+  const getBuckets = React.useCallback(() => {
+    setPendingMessage('Please wait we\'re loading the additional buckets');
+    const success = Server.getOtherBuckets(serverURLRef.current, collectionToken,
+                                setTokenExpired,
+                                (respData) => {   // Success
+                                  setPendingMessage(null);
+                                  if (respData.success) {
+                                    setOtherBuckets(respData.buckets);
+                                  } else {
+                                    addMessage(Level.Error, 'Unable to load additional bucket information');
+                                  }
+                                },
+                                (err) => {        // Failure
+                                  setPendingMessage(null);
+                                  addMessage(Level.Error, 'Error encountered while loadin additional bucket information');
+                                }
+    );
+
+    if (!success) {
+      setPendingMessage(null);
+      addMessage(Level.Error, 'An unknown problem occurred while getting additional buckets');
+    }
+
+  }, []);
+
+  /**
    * Handle the user wanting to edit an upload
    * @function
    */
@@ -165,11 +208,22 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
   /**
    * Handler for users wanting to edit upload details
    * @function
-   * @param {string} upload The ID of the collection the upload belongs to
+   * @param {string} collectionId The ID of the collection the upload belongs to
    * @param {object} upload The upload information to edit
    */
-  const handleUploadDetailsEdit = React.useCallback((collectionId, upload) => {
+  const handleSetUploadDetailsEdit = React.useCallback((collectionId, upload) => {
     setUploadDetailEdit({collectionId, upload});
+  }, []);
+
+
+  /**
+   * Enables the user interface to move an upload
+   * @function
+   * @param {string} collectionId The ID of the collection the upload belongs to
+   * @param {object} upload The upload information to edit
+   */
+  const handleSetUploadMove = React.useCallback((collectionId, upload) => {
+    setUploadMove({collectionId, upload});
   }, []);
 
   /**
@@ -221,11 +275,53 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
     );
 
     if (!success) {
+      setPendingMessage(null);
       addMessage(Level.Error, 'An unknown problem occurred while updating the upload information');
-      onFailure(key);
+      onFailure(upload.key);
     }
 
   }, [addMessage, collectionToken, serverURLRef, setTokenExpired, uploadDetailEdit]);
+
+  /**
+   * Handles the moving of an upload to another collection
+   * @function
+   * @param {string} srcCollectionId The source collection ID
+   * @param {object} upload The upload to move
+   * @param {string} dstCollectionId The ID of the destination collection or bucket name
+   */
+  const handleUploadMove = React.useCallback((srcCollectionId, upload, dstCollectionId, onSuccess, onFailure) => {
+    onSuccess ||= () => {};
+    onFailure ||= () => {};
+
+    setPendingMessage('Please wait while the upload is being moved');
+    const success = Server.moveUpload(serverURLRef.current, collectionToken,
+                                srcCollectionId,
+                                upload.key,
+                                dstCollectionId,
+                                setTokenExpired,
+                                (respData) => {   // Success
+                                  setPendingMessage(null);
+                                  if (respData.success) {
+                                    onSuccess();
+                                  } else {
+                                    addMessage(Level.Error, 'Unable to move the upload');
+                                    onFailure(null);
+                                  }
+                                },
+                                (err) => {        // Failure
+                                  addMessage(Level.Error, 'An problem occurred while moving the upload');
+                                  setPendingMessage(null);
+                                  onFailure(null);
+                                }
+    );
+
+    if (!success) {
+      setPendingMessage(null);
+      addMessage(Level.Error, 'An unknown problem occurred while moving the upload');
+      onFailure(null);
+    }
+
+  }, []);
 
   /**
    * Handler for when the user's selection changes and prevents default behavior
@@ -309,6 +405,11 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
 
   // Keep collection upload edit permissions up to date
   React.useEffect(() => {
+    if (isAdmin) {
+      setCanEditUploads(true);
+      return;
+    }
+
     let curEditUploads = false;
 
     // Check for the necessary permissions
@@ -451,7 +552,6 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
                     placeholder="Filter"
                     sx={{paddingLeft:'10px', flexGrow:1}}
                     value={uploadFilter || ''}
-//                    onBlur={() => setUploadFiltering(null)}
                     autoFocus
                     slotProps={{
                       input: {
@@ -479,18 +579,29 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
             }
             { filteredUploads && filteredUploads.map((item, idx) => 
                 <CollectionUploadTile
+                              key={'collection-upload-tile-'+item.key}
                               upload={item}
-                              key={"collection-upload-item-"+item.name}
                               active={uploadSelectionIndex === idx}
                               expanded={expandedUpload === 'upload-details-'+item.name}
                               onUploadEdit={() => handleUploadEdit(curCollection.id, item.key)}
                               onExpandChange={handleExpandedChange('upload-details-'+item.name)}
-                              onEditDetails={!canEditUploads ? null : () => handleUploadDetailsEdit(curCollection.id, item)}
+                              onEditDetails={!canEditUploads ? null : () => handleSetUploadDetailsEdit(curCollection.id, item)}
+                              onUploadMove={!isAdmin ? null : () => handleSetUploadMove(curCollection.id, item)}
                 />
             )}
           </Grid>
         </div>
       </Grid>
+      { uploadMove &&
+          <MoveUpload collectionId={uploadMove.collectionId}
+                      upload={uploadMove.upload}
+                      admin={isAdmin}
+                      buckets={isAdmin ? otherBuckets : undefined}
+                      getBuckets={isAdmin ? getBuckets : undefined}
+                      onMove={handleUploadMove}
+                      onClose={() => setUploadMove(null)}
+          />
+      }
       { uploadDetailEdit &&
           <EditUploadDetails upload={uploadDetailEdit.upload}
                             onChange={handleUploadDetailChange}

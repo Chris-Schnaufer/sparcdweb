@@ -137,6 +137,8 @@ export default function Home() {
     if (diffSec >= idleTimeoutSecRef.current) {
       lastIdleTimeoutIdRef.current = null;
       setUserIdleTimedOut(true);
+      setDisplayAdminSettings(false);
+      setDisplayOwnerSettings(false);
     } else {
       // Set the timeout for our remaining seconds
       setUserIdleTimedOut(false);
