@@ -1,5 +1,6 @@
 """ Functions to handle requests starting with /sandbox for SPARCd server """
 
+import concurrent.futures
 from dataclasses import dataclass
 import datetime
 import os
@@ -59,6 +60,7 @@ class FileUploadContext:
     temp_path: str
     file_ext: str
     upload_id: str
+    sb_location: Optional[dict]
 
 @dataclass
 class PreparedFile:
@@ -107,6 +109,16 @@ class UploadCounts:
     num_month: int
     num_year: int
     num_total: int
+
+@dataclass
+class FileProcessContext:
+    """ Contains the context needed to process a single uploaded file """
+    s3_target: S3UploadTarget
+    file_obj: FileStorage
+    file_ext: str
+    upload_id: str
+    tz_offset: float
+    sb_location: Optional[dict]
 
 
 def __compare_one_file(s3_info: S3Info, s3_bucket: str, s3_path: str,
@@ -270,23 +282,21 @@ def __prepare_upload_file(db: SPARCdDatabase,
     Return:
         Returns a PreparedFile instance containing the upload path, working name, and mimetype
     """
-    sb_location = db.sandbox_get_location(user_info.name, context.upload_id)
-
     # Update location in file metadata if needed
-    needs_location_update = not metadata.location or \
-        (sb_location and metadata.location and
-         sb_location['idProperty'] != metadata.location['id'])
+    needs_location_update = metadata is None or not metadata.location or \
+        (context.sb_location and metadata.location and
+         context.sb_location['idProperty'] != metadata.location['id'])
 
     if needs_location_update and context.file_ext not in sdupu.UPLOAD_KNOWN_MOVIE_EXT:
         if not image_utils.update_image_file_exif(context.temp_path,
-                                                   location=image_utils.ImageLocationData(
-                                                        loc_id=sb_location['idProperty'],
-                                                        loc_name=sb_location['nameProperty'],
-                                                        loc_ele=sb_location['elevationProperty'],
-                                                        loc_lat=sb_location['latProperty'],
-                                                        loc_lon=sb_location['lngProperty']
-                                                    )
-                                                 ):
+                                           location=image_utils.ImageLocationData(
+                                                loc_id=context.sb_location['idProperty'],
+                                                loc_name=context.sb_location['nameProperty'],
+                                                loc_ele=context.sb_location['elevationProperty'],
+                                                loc_lat=context.sb_location['latProperty'],
+                                                loc_lon=context.sb_location['lngProperty']
+                                            )
+                                         ):
             print(f'Warning: Unable to update sandbox file with the location: '
                   f'{context.file_obj.filename} with upload_id {context.upload_id}', flush=True)
 
@@ -311,6 +321,46 @@ def __prepare_upload_file(db: SPARCdDatabase,
     return PreparedFile(upload_path=upload_path,
                         working_name=working_name,
                         working_mimetype=working_mimetype)
+
+
+def __process_one_file(db: SPARCdDatabase,
+                       user_info: UserInfo,
+                       context: FileProcessContext) -> None:
+    """ Handles upload a file and updating the database
+    Arguments:
+        db: the database instance
+        user_info: the user information
+        context: the parameters needed for processing one file
+    """
+    temp_file = tempfile.mkstemp(suffix=context.file_ext, prefix=SPARCD_PREFIX)
+    os.close(temp_file[0])
+    context.file_obj.save(temp_file[1])
+
+    upload_context = FileUploadContext(file_obj=context.file_obj,
+                                       temp_path=temp_file[1],
+                                       file_ext=context.file_ext,
+                                       upload_id=context.upload_id,
+                                       sb_location=context.sb_location)
+    prepared_file = None
+    try:
+        if context.file_ext in sdupu.UPLOAD_KNOWN_MOVIE_EXT:
+            prepared_file = __prepare_upload_file(db, user_info,
+                                                  upload_context, None)
+            file_info = __get_file_info(prepared_file.upload_path, '.mp4', context.tz_offset)
+        else:
+            file_info = __get_file_info(upload_context.temp_path, upload_context.file_ext,
+                                        context.tz_offset)
+            prepared_file = __prepare_upload_file(db, user_info,
+                                                  upload_context, file_info)
+
+        __upload_and_record(DBContext(db=db, user_info=user_info),
+                            context.s3_target, upload_context, prepared_file, file_info)
+    finally:
+        if os.path.exists(upload_context.temp_path):
+            os.unlink(upload_context.temp_path)
+        if prepared_file and os.path.exists(prepared_file.upload_path):
+            os.unlink(prepared_file.upload_path)
+
 
 def __update_media_csv(db: SPARCdDatabase,
                        user_info: UserInfo,
@@ -396,7 +446,7 @@ def __upload_and_record(db_context: DBContext,
         file_info: the extracted file file_info
     """
     working_ts = file_info.timestamp.isoformat() if file_info.timestamp else None
-    
+
     S3UploadConnection.upload_file(target.s3_info, target.s3_bucket,
                              make_s3_path((target.s3_path, prepared.working_name)),
                              prepared.upload_path)
@@ -654,30 +704,23 @@ def handle_sandbox_file(db: SPARCdDatabase,
 
     s3_bucket, s3_path = db.sandbox_get_s3_info(user_info.name, file_params.upload_id)
     s3_target = S3UploadTarget(s3_info=s3_info, s3_bucket=s3_bucket, s3_path=s3_path)
+    sb_location = db.sandbox_get_location(user_info.name, file_params.upload_id)
 
-    for one_file in file_params.files:
-        file_obj = file_params.files[one_file]
-        file_ext = os.path.splitext(one_file)[1].lower()
-
-        temp_file = tempfile.mkstemp(suffix=file_ext, prefix=SPARCD_PREFIX)
-        os.close(temp_file[0])
-        file_obj.save(temp_file[1])
-
-        upload_context = FileUploadContext(file_obj=file_obj,
-                                    temp_path=temp_file[1],
-                                    file_ext=file_ext,
-                                    upload_id=file_params.upload_id)
-        prepared_file = None
-        try:
-            file_info = __get_file_info(upload_context.temp_path, upload_context.file_ext,tz_offset)
-            prepared_file = __prepare_upload_file(db, user_info, upload_context, file_info)
-            __upload_and_record(DBContext(db=db, user_info=user_info), s3_target, upload_context,
-                                                                        prepared_file, file_info)
-        finally:
-            if os.path.exists(upload_context.temp_path):
-                os.unlink(upload_context.temp_path)
-            if prepared_file and os.path.exists(prepared_file.upload_path):
-                os.unlink(prepared_file.upload_path)
+    max_workers = min(len(file_params.files), 4)
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [
+            executor.submit(__process_one_file, db, user_info,
+                                FileProcessContext(
+                                    s3_target=s3_target,
+                                    file_obj=file_params.files[one_file],
+                                    file_ext=os.path.splitext(one_file)[1].lower(),
+                                    upload_id=file_params.upload_id,
+                                    tz_offset=tz_offset,
+                                    sb_location=sb_location))
+            for one_file in file_params.files
+        ]
+        for future in futures:
+            future.result()
 
 
 def handle_sandbox_completed(db: SPARCdDatabase,
