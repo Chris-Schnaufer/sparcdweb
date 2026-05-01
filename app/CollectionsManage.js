@@ -16,7 +16,6 @@ import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import TextField from '@mui/material/TextField';
 import Tooltip from '@mui/material/Tooltip';
 import Typography from '@mui/material/Typography';
-import WorkspaceOverlay from './components/WorkspaceOverlay';
 import { useTheme } from '@mui/material/styles';
 
 import PropTypes from 'prop-types';
@@ -28,6 +27,7 @@ import { Level } from './components/Messages';
 import * as Server from './ServerCalls';
 import { AddMessageContext, CollectionsInfoContext, NarrowWindowContext, SizeContext,
          TokenContext, TokenExpiredFuncContext, UserNameContext } from './serverInfo';
+import WorkspaceOverlay from './components/WorkspaceOverlay';
 import * as utils from './utils';
 
 /**
@@ -157,7 +157,7 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
    * Fetches the non-collection buckets from the server
    * @function
    */
-  const getBuckets = React.useCallback(() => {
+  const getOtherBuckets = React.useCallback(() => {
     setPendingMessage('Please wait we\'re loading the additional buckets');
     const success = Server.getOtherBuckets(serverURLRef.current, collectionToken,
                                 setTokenExpired,
@@ -321,7 +321,7 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
       onFailure(null);
     }
 
-  }, []);
+  }, [addMessage, collectionToken, serverURLRef, setTokenExpired]);
 
   /**
    * Handler for when the user's selection changes and prevents default behavior
@@ -512,6 +512,11 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
                               </Grid>
                               <Grid>
                                 <Typography variant="body" sx={{whiteSpace:"pre-wrap"}} >
+                                  {item.id}
+                                </Typography>
+                              </Grid>
+                              <Grid>
+                                <Typography variant="body" sx={{whiteSpace:"pre-wrap"}} >
                                   {item.description}
                                 </Typography>
                               </Grid>
@@ -597,7 +602,7 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
                       upload={uploadMove.upload}
                       admin={isAdmin}
                       buckets={isAdmin ? otherBuckets : undefined}
-                      getBuckets={isAdmin ? getBuckets : undefined}
+                      getBuckets={isAdmin ? getOtherBuckets : undefined}
                       onMove={handleUploadMove}
                       onClose={() => setUploadMove(null)}
           />

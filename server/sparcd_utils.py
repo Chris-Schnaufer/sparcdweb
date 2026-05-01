@@ -171,11 +171,7 @@ def get_request_files() -> Optional[list]:
     if not all_files:
         return None
 
-    try:
-        all_files = json.loads(all_files)
-    except json.JSONDecodeError as ex:
-        print('ERROR: Unable to load file list JSON', ex, flush=True)
-        return None
+    all_files = all_files.splitlines()
 
     req_index = 1
     while True:
@@ -183,12 +179,7 @@ def get_request_files() -> Optional[list]:
         if not more_files:
             break
 
+        all_files.extend(more_files.splitlines())
         req_index += 1
-        try:
-            more_files = json.loads(more_files)
-            all_files = all_files + more_files
-        except json.JSONDecodeError as ex:
-            print('ERROR: Unable to load file list JSON', ex, flush=True)
-            return None
 
     return all_files

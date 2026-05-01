@@ -1,4 +1,8 @@
+'use client'
+
 /** @module ServerCalls */
+
+import * as utils from './utils';
 
 
 const LIMIT_FORM_FILE_CHUNK = 5000
@@ -1261,19 +1265,16 @@ export function imagesTimestamp(serverURL, token, collectionId, uploadId, files,
     formData.append('upload',     uploadId);
 
     // We send all the files in case some files don't have valid timestamps
-    if (files.length < LIMIT_FORM_FILE_CHUNK) {
-      formData.append('files', JSON.stringify(files.map((item) => item.s3_path)));
-    } else {
-      formData.append('files', JSON.stringify(files.slice(0,LIMIT_FORM_FILE_CHUNK).map((item) => item.s3_path)));
-      let index = 1;
-      let start = LIMIT_FORM_FILE_CHUNK;
-      while (start < files.length) {
-        let end = Math.min(start + LIMIT_FORM_FILE_CHUNK, files.length);
-        formData.append('files'+index, JSON.stringify(files.slice(start,end).map((item) => item.s3_path)));
-        start += LIMIT_FORM_FILE_CHUNK;
-        index += 1;
-      };
-    }
+    utils.addFilesToForm('files',
+                         (index) => {
+                            let start = Math.min(index * LIMIT_FORM_FILE_CHUNK, files.length);
+                            let stop = Math.min((index + 1) * LIMIT_FORM_FILE_CHUNK, files.length);
+
+                            if (start === stop) return null;
+
+                            return files.slice(start, stop).map((item) => item.s3_path);
+                         },
+                         formData)
 
     fetch(imageTimestampUrl, {
       credentials: 'include',
@@ -1344,19 +1345,17 @@ export function imagesAdjustTimestamp(serverURL, token, collectionId, uploadId, 
     formData.append('minute', adjMinute);
     formData.append('second', adjSecond);
 
-    if (files.length < LIMIT_FORM_FILE_CHUNK) {
-      formData.append('files', JSON.stringify(files.map((item) => item.name)));
-    } else {
-      formData.append('files', JSON.stringify(files.slice(0,LIMIT_FORM_FILE_CHUNK).map((item) => item.name)));
-      let index = 1;
-      let start = LIMIT_FORM_FILE_CHUNK;
-      while (start < files.length) {
-        let end = Math.min(start + LIMIT_FORM_FILE_CHUNK, files.length);
-        formData.append('files'+index, JSON.stringify(files.slice(start,end).map((item) => item.name)));
-        start += LIMIT_FORM_FILE_CHUNK;
-        index += 1;
-      };
-    }
+    // Break the list of files up into chunks if it's too large
+    utils.addFilesToForm('files',
+                         (index) => {
+                            let start = Math.min(index * LIMIT_FORM_FILE_CHUNK, files.length);
+                            let stop = Math.min((index + 1) * LIMIT_FORM_FILE_CHUNK, files.length);
+
+                            if (start === stop) return null;
+
+                            return files.slice(start, stop).map((item) => item.name);
+                         },
+                         formData)
 
     fetch(adjustTimestampUrl, {
       credentials: 'include',
