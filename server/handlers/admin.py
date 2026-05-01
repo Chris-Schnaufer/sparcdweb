@@ -198,7 +198,7 @@ def __get_authorized_collection(collections: tuple, user_info: UserInfo, collect
     return check_coll
 
 
-def _handle_move_upload_result(db: SPARCdDatabase, s3_id: str, user: str,
+def __handle_move_upload_result(db: SPARCdDatabase, s3_id: str, user: str,
                                                             params: UploadMoveParams, res) -> dict:
     """ Handles the result of copying an upload
     Arguments:
@@ -234,6 +234,40 @@ def _handle_move_upload_result(db: SPARCdDatabase, s3_id: str, user: str,
                     "normal")
 
     return client_result
+
+
+def __make_dest_path_func(start_path_len: int, dest_path: str):
+    """ Returns a function that maps a source path to its destination path
+    Arguments:
+        start_path_len: the length of the source starting path
+        dest_path: the destination base path
+    Return:
+        Returns a function that maps source paths to destination paths
+    """
+    def _map(src_path: str) -> str:
+        path_particle = src_path[start_path_len:]
+        if path_particle.startswith('/'):
+            path_particle = path_particle[1:]
+        return make_s3_path((dest_path, path_particle))
+    return _map
+
+
+def __update_move_collections(db: SPARCdDatabase, s3_info: S3Info,
+                               src_coll: dict, dst_coll: Union[dict, None]) -> None:
+    """ Updates the collection entries in the database after a move
+    Arguments:
+        db: the database instance
+        s3_info: the S3 endpoint information
+        src_coll: the source collection
+        dst_coll: the destination collection, or None if destination is a raw bucket
+    """
+    buckets = filter(None, [src_coll['bucket'],
+                             dst_coll.get('bucket') if isinstance(dst_coll, dict) else None])
+    for bucket in buckets:
+        updated_collection = S3CollectionConnection.get_collection_info(s3_info, bucket)
+        if updated_collection:
+            updated_collection = sdupu.normalize_collection(updated_collection)
+            sdc.collection_update(db, s3_info.id, updated_collection)
 
 
 def location_update_params_check(params: LocationEditParams) -> Optional[LocationEditParams]:
@@ -802,11 +836,11 @@ def handle_move_upload(db:SPARCdDatabase, user_info: UserInfo, s3_info: S3Info,
     if not all_collections:
         return False
 
-    # Get the authorized collection. If not found, assume it's a bucket if the user is an admin
-    auth_coll = __get_authorized_collection(all_collections, user_info, params.src_coll_id,
+    # Get the source collection
+    src_coll = __get_authorized_collection(all_collections, user_info, params.src_coll_id,
                                                                             params.upload_key, True)
     # The source must be a collection
-    if not auth_coll:
+    if not src_coll:
         return False
 
     # Get the destination collection. If we can't find it assume it's an S3 bucket
@@ -818,33 +852,21 @@ def handle_move_upload(db:SPARCdDatabase, user_info: UserInfo, s3_info: S3Info,
         dst_bucket = params.dst_coll_id
 
     # Build up the upload starting path
-    start_path = make_s3_path((COLLECTIONS_FOLDER, auth_coll['id'], S3_UPLOADS_PATH_PART,
+    start_path = make_s3_path((COLLECTIONS_FOLDER, src_coll['id'], S3_UPLOADS_PATH_PART,
                                                                                 params.upload_key))
-    start_path_len = len(start_path)
 
     # Get the destination path if we're a collection bucket
-    dest_path = None
-    if dst_coll:
-        dest_path = make_s3_path((COLLECTIONS_FOLDER, dst_coll['id'], S3_UPLOADS_PATH_PART,
-                                                                                params.upload_key))
+    dest_path = make_s3_path((COLLECTIONS_FOLDER, dst_coll['id'], S3_UPLOADS_PATH_PART,
+                                                        params.upload_key)) if dst_coll else None
 
-    def make_dest_path(src_path: str) -> str:
-        """ Internal function to map a source path from a collection to the destination
-            path of a collection
-        Arguments:
-            src_path: path from the source bucket
-        Return:
-            Returns the destination path
-        """
-        path_particle = src_path[start_path_len:]
-        if path_particle.startswith('/'):
-            path_particle = path_particle[1:]
-        return make_s3_path((dest_path, path_particle))
+    # Get the destination path mapping function
+    path_func = __make_dest_path_func(len(start_path), dest_path) if dst_coll else lambda x: x
 
     # Move the data
-    res = s3u.move_upload(s3_info, auth_coll['bucket'], dst_bucket, start_path,
-                            (lambda x: make_dest_path(x)) if dst_coll else (lambda x: x)
-                        )
+    res = s3u.move_upload(s3_info, src_coll['bucket'], dst_bucket, start_path, path_func)
+
+    # Update the collections to reflect the changed
+    __update_move_collections(db, s3_info, src_coll, dst_coll)
 
     # Make a message based upon our return value
-    return _handle_move_upload_result(db, s3_info.id, user_info.name, params, res)
+    return __handle_move_upload_result(db, s3_info.id, user_info.name, params, res)

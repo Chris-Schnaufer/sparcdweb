@@ -302,6 +302,7 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
                                 (respData) => {   // Success
                                   setPendingMessage(null);
                                   if (respData.success) {
+                                    onUploadUpdateMetadata();
                                     onSuccess();
                                   } else {
                                     addMessage(Level.Error, 'Unable to move the upload');
