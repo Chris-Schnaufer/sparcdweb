@@ -1,7 +1,5 @@
 """ Sandbox upload routes for SPARCd server """
 
-import json
-
 from flask import Blueprint, jsonify, request
 from flask_cors import cross_origin
 
@@ -338,14 +336,11 @@ def sandbox_reset(*, db, user_info, **_):
     print(f'SANDBOX RESET user={user_info.name}', flush=True)
 
     upload_id = request.form.get('id')
-    all_files = request.form.get('files')
-    if not upload_id or not all_files:
+    if not upload_id:
         return 'Not Found', 406
 
-    try:
-        all_files = json.loads(all_files)
-    except json.JSONDecodeError as ex:
-        print('ERROR: Unable to load file list JSON', ex, flush=True)
+    all_files = sdu.get_request_files()
+    if all_files is None:
         return 'Not Found', 406
 
     upload_id = db.sandbox_reset_upload(user_info.name, upload_id, all_files)

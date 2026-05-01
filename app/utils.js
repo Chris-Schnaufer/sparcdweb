@@ -88,3 +88,27 @@ export function coerceBool(value, defaultValue = false) {
   if (typeof value === 'boolean') return value;
   return String(value).toLowerCase() === 'true';
 }
+
+
+/**
+ * Function to break up large file name lists into chunks and add them to FormData. Each file name is
+ * concatenated with new line separations between entries. e.g. "file1\nfile2\n..."
+ * @function
+ * @param {string} fieldName The starting name of the field. The first chunk will have this field name, subsequent chunks will have
+ *                          an index number appended, starting at 1. e.g. "files",'files1',"files2",etc.
+ * @param {function} nextChunk The function to call to get the next chunk of file names. A null return indicates no more chunks
+ * @param {FormData} formData The form data to add the chunks to
+ * @return {FormData} The form data with the files added
+ */
+export function addFilesToForm(fieldName, nextChunk, formData) {
+  let index = 0;
+  do {
+    const curChunk = nextChunk(index);
+    if (curChunk !== null) {
+      formData.append(index === 0 ? fieldName : `${fieldName}${index}`, curChunk.join('\n'));
+    } else {
+      break;
+    }
+    index += 1;
+  } while (true);
+}

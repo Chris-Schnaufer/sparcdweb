@@ -2,6 +2,8 @@
 
 /** @module landing/LandingServerCalls */
 
+import * as utils from '../utils';
+
 const LIMIT_FORM_FILE_CHUNK = 5000;  // Maximum number of files to put into a form at one time
 
 /**
@@ -150,20 +152,17 @@ export function continueNewUpload(serverURL, token, collectionId, locationId, pa
     formData.append('ts', new Date().toISOString());
     formData.append('tz', Intl.DateTimeFormat().resolvedOptions().timeZone);
 
-    // Break the upload into pieces if it's too large
-    if (files.length < LIMIT_FORM_FILE_CHUNK) {
-      formData.append('files', JSON.stringify(files.map((item) => item.webkitRelativePath)));
-    } else {
-      formData.append('files', JSON.stringify(files.slice(0,LIMIT_FORM_FILE_CHUNK).map((item) => item.webkitRelativePath)));
-      let index = 1;
-      let start = LIMIT_FORM_FILE_CHUNK;
-      while (start < files.length) {
-        let end = Math.min(start + LIMIT_FORM_FILE_CHUNK, files.length);
-        formData.append('files'+index, JSON.stringify(files.slice(start,end).map((item) => item.webkitRelativePath)));
-        start += LIMIT_FORM_FILE_CHUNK;
-        index += 1;
-      };
-    }
+    // Break the file list into pieces if it's too large
+    utils.addFilesToForm('files',
+                         (index) => {
+                            let start = Math.min(index * LIMIT_FORM_FILE_CHUNK, files.length);
+                            let stop = Math.min((index + 1) * LIMIT_FORM_FILE_CHUNK, files.length);
+
+                            if (start === stop) return null;
+
+                            return files.slice(start, stop).map((item) => item.webkitRelativePath);
+                         },
+                         formData)
 
     fetch(sandboxNewUrl, {
       credentials: 'include',
@@ -218,7 +217,17 @@ export function prevUploadResetContinue(serverURL, token, uploadId, files, onExp
 
   try {
     formData.append('id', uploadId);
-    formData.append('files', JSON.stringify(files.map((item) => item.webkitRelativePath)));
+    // Break the file list into pieces if it's too large
+    utils.addFilesToForm('files',
+                         (index) => {
+                            let start = Math.min(index * LIMIT_FORM_FILE_CHUNK, files.length);
+                            let stop = Math.min((index + 1) * LIMIT_FORM_FILE_CHUNK, files.length);
+
+                            if (start === stop) return null;
+
+                            return files.slice(start, stop).map((item) => item.webkitRelativePath);
+                         },
+                         formData)
 
     fetch(sandboxResetUrl, {
       credentials: 'include',

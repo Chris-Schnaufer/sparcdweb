@@ -8,8 +8,6 @@ import tempfile
 from typing import Optional, Union
 from dateutil.relativedelta import relativedelta
 
-from flask import request
-
 from camtrap.v016 import camtrap
 import camtrap_utils as ctu
 import image_utils
@@ -18,7 +16,6 @@ import sparcd_collections as sdc
 import spd_crypt as crypt
 from spd_types.userinfo import UserInfo
 from spd_types.s3info import S3Info
-import sparcd_utils as sdu
 import sparcd_timestamp_utils as sdtsu
 import sparcd_upload_utils as sdupu
 from s3.s3_access_helpers import make_s3_path, download_s3_file, COLLECTIONS_FOLDER, \
@@ -51,6 +48,30 @@ class ImageAllEditedParams:
     force_all_changes: bool
 
 @dataclass
+class SpeciesParams:
+    """ Contains the species related parameters for an image """
+    common_name: str
+    scientific_name: str
+    count: str
+
+@dataclass
+class ImageSpeciesParams:
+    """ The parameters for adding/adjusting an iamge's species """
+    timestamp: str
+    coll_id: str
+    upload_id: str
+    path: str
+    reqid: str
+    species: SpeciesParams
+
+@dataclass
+class SpeciesKeybindParams:
+    """ The parameters for setting a species' keybind """
+    common: str
+    scientific: str
+    new_key: str
+
+@dataclass
 class AdjustTimestamp:
     """ Contains the timestamp parameters """
     year: int
@@ -68,52 +89,6 @@ class AdjustTimestampParams:
     upload_id: str
     files: list
     timestamp: AdjustTimestamp
-
-
-def __adjust_timestamp_params() -> Optional[AdjustTimestampParams]:
-    """ Gets and validates the adjust timestamp parameters
-    Returns:
-        The parameters in AdjustTimestampParams when successful, and None when not
-    """
-    # Get the rest of the request parameters
-    try:
-        collection_id = request.form.get('collection')
-        upload_id = request.form.get('upload')
-        year = int(request.form.get('year', 0))
-        month = int(request.form.get('month', 0))
-        day = int(request.form.get('day', 0))
-        hour = int(request.form.get('hour', 0))
-        minute = int(request.form.get('minute', 0))
-        second = int(request.form.get('second', 0))
-        all_files = request.form.get('files')
-    except ValueError:
-        return None
-
-    # Check for mandatory parameters
-    if not all([collection_id, upload_id]):
-        return None
-
-    # Get all the file names
-    if all_files is not None:
-        all_files = sdu.get_request_files()
-        if all_files is None:
-            return None
-
-    if not all_files:
-        all_files = []
-
-    return AdjustTimestampParams(
-        collection_id=collection_id,
-        upload_id=upload_id,
-        files=all_files,
-        timestamp=AdjustTimestamp(year=year,
-                                  month=month,
-                                  day=day,
-                                  hour=hour,
-                                  minute=minute,
-                                  second=second
-                                )
-        )
 
 
 def __has_last_edit(edit_files_info: list, last_reqid: str) -> bool:
@@ -145,59 +120,6 @@ def __has_last_edit_or_forced(edited_files_info: list,
         return True
     return any(one_edit['request_id'] == last_request_id
                for one_edit in edited_files_info)
-
-
-def __image_edit_request_params(passcode: str) -> Optional[ImageEditParams]:
-    """ Gets and validates the request parameters for an image edit complete request
-    Arguments:
-        passcode: the working passcode
-    Return:
-        Returns the request parameters in ImageEditParams when successful, or None if not
-    """
-    coll_id = request.form.get('collection')
-    upload_id = request.form.get('upload')
-    path_encrypted = request.form.get('path')
-    last_reqid = request.form.get('lastReqid')
-
-    if not all(item for item in [coll_id, upload_id, path_encrypted]):
-        return None
-
-    path = crypt.do_decrypt(passcode, path_encrypted)
-    if upload_id not in path or coll_id not in path:
-        return None
-
-    return ImageEditParams(coll_id=coll_id, upload_id=upload_id,
-                           path_encrypted=path_encrypted, path=path,
-                           last_reqid=last_reqid)
-
-
-def __images_all_edited_params(user_name: str) -> Optional[ImageAllEditedParams]:
-    """ Gets and validates the request parameters for an images all edited request
-    Arguments:
-        user_name: the user's name
-    Return:
-        Returns the request parameters in ImageAllEditedParams when successful, and None if not
-    """
-    coll_id = request.form.get('collection', None)
-    upload_id = request.form.get('upload', None)
-    last_request_id = request.form.get('requestId', None)
-    timestamp = request.form.get('timestamp', datetime.datetime.now().isoformat())
-    force_all_changes = request.form.get('force', None)
-
-    # Check what we have from the requestor
-    if not all(item for item in [coll_id, upload_id]):
-        return "Not Found", 406
-
-    if force_all_changes is not None and not isinstance(force_all_changes, bool):
-        force_all_changes = sdu.make_boolean(force_all_changes)
-    elif force_all_changes is None:
-        force_all_changes = False
-
-    return ImageAllEditedParams(coll_id=coll_id, upload_id=upload_id,
-                                last_request_id=last_request_id, timestamp=timestamp,
-                                force_all_changes=force_all_changes,
-                                user_name=user_name)
-
 
 
 def __make_edit_response(params: ImageEditParams, success: bool,
@@ -286,61 +208,40 @@ def __update_observations(s3_info: S3Info,
                                      [one_row for one_set in row_groups for one_row in one_set])
 
 
-def handle_image_species(db: SPARCdDatabase, user_info: UserInfo,
-                                            s3_info: S3Info, passcode: str) -> Union[bool, None]:
+def handle_image_species(db: SPARCdDatabase, user_info: UserInfo, s3_info: S3Info,
+                                                params: ImageSpeciesParams) -> Union[bool, None]:
     """ Implementation for adding an species entry for a file into the database
     Arguments:
         db: the database instance
         user_info: the user information
         s3_info: the S3 endpoint information
-        passcode: the working passcode
+        params: the parameters for adding/adjusting image species
     Return:
         Returns True if the database could be successfully updated, and False otherwise. If the
         image path is invalid, None is returned
     """
-    # Get the rest of the request parameters
-    timestamp = request.form.get('timestamp')
-    coll_id = request.form.get('collection')
-    upload_id = request.form.get('upload')
-    path = request.form.get('path') # Image path on S3 under bucket
-    common_name = request.form.get('common')
-    scientific_name = request.form.get('species') # Scientific name
-    count = request.form.get('count')
-    reqid = request.form.get('reqid', 0)  # Unique request identifier keeps track of requests
+    bucket = SPARCD_PREFIX + params.coll_id
 
-    # Check what we have from the requestor
-    if not all(item for item in [timestamp, coll_id, upload_id, path, common_name, \
-                                                                        scientific_name, count]):
-        return False
-
-    path = crypt.do_decrypt(passcode, path)
-    if upload_id not in path or coll_id not in path:
-        return None
-
-    bucket = SPARCD_PREFIX + coll_id
-
-    db.add_image_species_edit(s3_info.id, bucket, path, user_info.name, timestamp,
-                                                common_name, scientific_name, count, str(reqid))
+    db.add_image_species_edit(s3_info.id, bucket, params.path, user_info.name, params.timestamp,
+                                    params.species.common_name, params.species.scientific_name,
+                                    params.species.count, str(params.reqid))
 
     return True
 
 
 def handle_image_edit_complete(db: SPARCdDatabase, user_info: UserInfo, s3_info: S3Info, \
-                                    passcode: str, temp_species_filename: str) -> Optional[dict]:
+                                temp_species_filename: str,
+                                params: ImageEditParams) -> Optional[dict]:
     """ Implementation for updating one image with the changes made
     Arguments:
         db: the database instance
         user_info: the user information
         s3_info: the S3 endpoint information
-        passcode: the working passcode
         temp_species_filename: the filename of the temporary species storeage
+        params: the parameters for completing image edits
     Return:
         Returns the dict of information to return to the server, or None if there's a problen
     """
-    params = __image_edit_request_params(passcode)
-    if not params:
-        return None
-
     edit_files_info = db.get_next_files_info(s3_info.id, user_info.name, params.path)
     if not edit_files_info:
         return __make_edit_response(params, success=True, retry=True, error=False,
@@ -373,24 +274,20 @@ def handle_image_edit_complete(db: SPARCdDatabase, user_info: UserInfo, s3_info:
     return {'success': True, 'message': 'The images have been successfully updated', 'error': False}
 
 
-def handle_images_all_edited(db: SPARCdDatabase, user_info: UserInfo,
-                                                                s3_info: S3Info) -> Optional[tuple]:
+def handle_images_all_edited(db: SPARCdDatabase, user_info: UserInfo, s3_info: S3Info,
+                                                params: ImageAllEditedParams) -> Optional[tuple]:
     """ Implementation for completing changes after all images have been edited
     Arguments:
         db: the database instance
         user_info: the user information
         s3_info: the S3 endpoint information
+        params: the parameters for handling when all images are edited
     Return:
         Returns a tuple containing a boolean indicating whether (True) or not (False) information
         was updated with None being returned if there's a problem, and another bool indication
         indicating if the image URLs were updated (True) or kept the same (False) or None if there
         was a problem
     """
-    # Get the rest of the request parameters
-    params = __images_all_edited_params(user_info.name)
-    if not params:
-        return None
-
     # Get any and all changes
     edited_files_info = db.get_edited_files_info(s3_info.id, user_info.name, params.upload_id, True)
 
@@ -428,25 +325,17 @@ def handle_images_all_edited(db: SPARCdDatabase, user_info: UserInfo,
 
 
 def handle_species_keybind(db: SPARCdDatabase, user_info: UserInfo, s3_info: S3Info,
-                                        temp_species_filename: str) -> bool:
+                                temp_species_filename: str, params: SpeciesKeybindParams) -> bool:
     """ Implementation for updating a user's species keybind
     Arguments:
         db: the database instance
         user_info: the user information
         s3_info: the S3 endpoint information
         temp_species_filename: the name of the temporary species file
+        params: the parameters for the species' keybind
     Return:
         Returns True if updating the keybinding worked out, and False if not
     """
-    # Get the rest of the request parameters
-    common = request.form.get('common') # Species name
-    scientific = request.form.get('scientific') # Species scientific name
-    new_key = request.form.get('key')
-
-    # Check what we have from the requestor
-    if not common or not scientific or not new_key:
-        return False
-
     # Get the species
     if user_info.species:
         cur_species = user_info.species
@@ -458,45 +347,35 @@ def handle_species_keybind(db: SPARCdDatabase, user_info: UserInfo, s3_info: S3I
     # Update the species
     found = False
     for one_species in cur_species:
-        if one_species['scientificName'] == scientific:
-            one_species['keyBinding'] = new_key[0]
+        if one_species['scientificName'] == params.scientific:
+            one_species['keyBinding'] = params.new_key[0]
             found = True
             break
 
     # Add entry if it's not in the species
     if not found:
-        cur_species.append({'name':common, 'scientificName':scientific, 'keyBinding':new_key[0], \
-                                            "speciesIconURL": "https://i.imgur.com/4qz5mI0.png"})
+        cur_species.append({'name':params.common,
+                            'scientificName':params.scientific,
+                            'keyBinding':params.new_key[0],
+                            'speciesIconURL': 'https://i.imgur.com/4qz5mI0.png'})
 
     db.save_user_species(s3_info.id, user_info.name, json.dumps(cur_species))
 
     return True
 
 
-def handle_image_timestamp(s3_info: S3Info, passcode: str) -> Union[datetime.datetime, bool, None]:
+def handle_image_timestamp(s3_info: S3Info, collection_id: str, files: tuple,
+                                            passcode: str) -> Union[datetime.datetime, bool, None]:
     """ Implementation of fetching the first found timestamp in a file on S3
     Arguments:
-        db: the database instance
-        user_info: the user information
         s3_info: the S3 endpoint information
+        collection_id: the ID of the collection
+        files: the list of affected files
         passcode: the working passcode
     Return:
         Returns the first found timestamp when successful, False is returned if there's a problem
         with the request, and None if unable to get a timestamp
     """
-    # Get the rest of the request parameters
-    collection_id = request.form.get('collection')
-    upload_id = request.form.get('upload')
-    all_files = request.form.get('files')
-
-    # Check for mandatory parameters
-    if not all([collection_id, upload_id, all_files]):
-        return False
-
-    all_files = sdu.get_request_files()
-    if all_files is None:
-        return False
-
     # Setup for getting timestamps
     s3_bucket = SPARCD_PREFIX + collection_id
 
@@ -506,7 +385,7 @@ def handle_image_timestamp(s3_info: S3Info, passcode: str) -> Union[datetime.dat
 
     # Keep trying to get a file timestamp
     file_ts = None
-    for one_file in all_files:
+    for one_file in files:
         s3_file = crypt.do_decrypt(passcode, one_file)
 
         # Get the image from the server
@@ -535,20 +414,15 @@ def handle_image_timestamp(s3_info: S3Info, passcode: str) -> Union[datetime.dat
     return file_ts
 
 
-def handle_adjust_timestamp(s3_info: S3Info) -> Union[bool, None]:
+def handle_adjust_timestamp(s3_info: S3Info, params: AdjustTimestampParams) -> Union[bool, None]:
     """ Handles the adjust timestamps for the images files request
     Arguments:
-        db: the database instance
-        user_info: the user information
         s3_info: the S3 endpoint information
+        params: the parameters for adjusting the image timestamps
     Return:
         Returns True if everything has worked out, False if there's a problem with
         the parameters, and None if there was a problem
     """
-    params = __adjust_timestamp_params()
-    if params is None:
-        return False
-
     # If the time adjustments are all zero, we're done
     if all(val == 0 for val in [params.timestamp.year,
                                 params.timestamp.month,
