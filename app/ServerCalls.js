@@ -12,8 +12,8 @@ const LIMIT_FORM_FILE_CHUNK = 5000
  * @function
  * @param {string} serverURL The URL to the server
  * @param {object} formData The form data to send to the server
- * @param {function} onSuccess The function to call upon success
- * @param {function} onFailure The function to call upon failure
+ * @param {function} [onSuccess] The function to call upon success
+ * @param {function} [onFailure] The function to call upon failure
  * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function login(serverURL, formData, onSuccess, onFailure) {
@@ -54,9 +54,9 @@ export function login(serverURL, formData, onSuccess, onFailure) {
  * @param {string} serverURL The URL to the server
  * @param {string} token The authorization token
  * @param {string} pw The password to authorize administration funcitonality
- * @param {function} onExpiredToken Function to call when we get an expired token return
- * @param {function} onSuccess The function to call upon success
- * @param {function} onFailure The function to call upon failure
+ * @param {function} [onExpiredToken] Function to call when we get an expired token return
+ * @param {function} [onSuccess] The function to call upon success
+ * @param {function} [onFailure] The function to call upon failure
  * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function settingsAdminCheck(serverURL, token, pw, onExpiredToken, onSuccess, onFailure) {
@@ -109,9 +109,9 @@ export function settingsAdminCheck(serverURL, token, pw, onExpiredToken, onSucce
  * @param {string} serverURL The URL to the server
  * @param {string} token The authorization token
  * @param {string} pw The password to authorize administration funcitonality
- * @param {function} onExpiredToken Function to call when we get an expired token return
- * @param {function} onSuccess The function to call upon success
- * @param {function} onFailure The function to call upon failure
+ * @param {function} [onExpiredToken] Function to call when we get an expired token return
+ * @param {function} [onSuccess] The function to call upon success
+ * @param {function} [onFailure] The function to call upon failure
  * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function settingsOwnerCheck(serverURL, token, pw, onExpiredToken, onSuccess, onFailure) {
@@ -163,9 +163,9 @@ export function settingsOwnerCheck(serverURL, token, pw, onExpiredToken, onSucce
  * @function
  * @param {string} serverURL The URL to the server
  * @param {string} token The authorization token
- * @param {function} onExpiredToken Function to call when we get an expired token return
- * @param {function} onSuccess The function to call upon success
- * @param {function} onFailure The function to call upon failure
+ * @param {function} [onExpiredToken] Function to call when we get an expired token return
+ * @param {function} [onSuccess] The function to call upon success
+ * @param {function} [onFailure] The function to call upon failure
  * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function collections(serverURL, token, onExpiredToken, onSuccess, onFailure) {
@@ -209,9 +209,9 @@ export function collections(serverURL, token, onExpiredToken, onSuccess, onFailu
  * @function
  * @param {string} serverURL The URL to the server
  * @param {string} token The authorization token
- * @param {function} onExpiredToken Function to call when we get an expired token return
- * @param {function} onSuccess The function to call upon success
- * @param {function} onFailure The function to call upon failure
+ * @param {function} [onExpiredToken] Function to call when we get an expired token return
+ * @param {function} [onSuccess] The function to call upon success
+ * @param {function} [onFailure] The function to call upon failure
  * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function sandbox(serverURL, token, onExpiredToken, onSuccess, onFailure) {
@@ -255,9 +255,9 @@ export function sandbox(serverURL, token, onExpiredToken, onSuccess, onFailure) 
  * @function
  * @param {string} serverURL The URL to the server
  * @param {string} token The authorization token
- * @param {function} onExpiredToken Function to call when we get an expired token return
- * @param {function} onSuccess The function to call upon success
- * @param {function} onFailure The function to call upon failure
+ * @param {function} [onExpiredToken] Function to call when we get an expired token return
+ * @param {function} [onSuccess] The function to call upon success
+ * @param {function} [onFailure] The function to call upon failure
  * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function locations(serverURL, token, onExpiredToken, onSuccess, onFailure) {
@@ -301,9 +301,9 @@ export function locations(serverURL, token, onExpiredToken, onSuccess, onFailure
  * @function
  * @param {string} serverURL The URL to the server
  * @param {string} token The authorization token
- * @param {function} onExpiredToken Function to call when we get an expired token return
- * @param {function} onSuccess The function to call upon success
- * @param {function} onFailure The function to call upon failure
+ * @param {function} [onExpiredToken] Function to call when we get an expired token return
+ * @param {function} [onSuccess] The function to call upon success
+ * @param {function} [onFailure] The function to call upon failure
  * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function species(serverURL, token, onExpiredToken, onSuccess, onFailure) {
@@ -347,9 +347,9 @@ export function species(serverURL, token, onExpiredToken, onSuccess, onFailure) 
  * @function
  * @param {string} serverURL The URL to the server
  * @param {string} token The authorization token
- * @param {function} onExpiredToken Function to call when we get an expired token return
- * @param {function} onSuccess The function to call upon success
- * @param {function} onFailure The function to call upon failure
+ * @param {function} [onExpiredToken] Function to call when we get an expired token return
+ * @param {function} [onSuccess] The function to call upon success
+ * @param {function} [onFailure] The function to call upon failure
  * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function speciesOther(serverURL, token, onExpiredToken, onSuccess, onFailure) {
@@ -393,9 +393,9 @@ export function speciesOther(serverURL, token, onExpiredToken, onSuccess, onFail
  * @function
  * @param {string} serverURL The URL to the server
  * @param {string} token The authorization token
- * @param {function} onExpiredToken Function to call when we get an expired token return
- * @param {function} onSuccess The function to call upon success
- * @param {function} onFailure The function to call upon failure
+ * @param {function} [onExpiredToken] Function to call when we get an expired token return
+ * @param {function} [onSuccess] The function to call upon success
+ * @param {function} [onFailure] The function to call upon failure
  * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function messages(serverURL, token, onExpiredToken, onSuccess, onFailure) {
@@ -439,9 +439,9 @@ export function messages(serverURL, token, onExpiredToken, onSuccess, onFailure)
  * @function
  * @param {string} serverURL The URL to the server
  * @param {string} token The authorization token
- * @param {function} onExpiredToken Function to call when we get an expired token return
- * @param {function} onSuccess The function to call upon success
- * @param {function} onFailure The function to call upon failure
+ * @param {function} [onExpiredToken] Function to call when we get an expired token return
+ * @param {function} [onSuccess] The function to call upon success
+ * @param {function} [onFailure] The function to call upon failure
  * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function usernames(serverURL, token, onExpiredToken, onSuccess, onFailure) {
@@ -488,9 +488,9 @@ export function usernames(serverURL, token, onExpiredToken, onSuccess, onFailure
  * @param {string} recipients The comma separated list of recipients
  * @param {string} subject The subject of the message
  * @param {string} message The message itself
- * @param {function} onExpiredToken Function to call when we get an expired token return
- * @param {function} onSuccess The function to call upon success
- * @param {function} onFailure The function to call upon failure
+ * @param {function} [onExpiredToken] Function to call when we get an expired token return
+ * @param {function} [onSuccess] The function to call upon success
+ * @param {function} [onFailure] The function to call upon failure
  * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function messageAdd(serverURL, token, recipients, subject, message, onExpiredToken, onSuccess, onFailure) {
@@ -543,9 +543,9 @@ export function messageAdd(serverURL, token, recipients, subject, message, onExp
  * @param {string} serverURL The URL to the server
  * @param {string} token The authorization token
  * @param {Array} msgIds The array of message IDs to mark as read
- * @param {function} onExpiredToken Function to call when we get an expired token return
- * @param {function} onSuccess The function to call upon success
- * @param {function} onFailure The function to call upon failure
+ * @param {function} [onExpiredToken] Function to call when we get an expired token return
+ * @param {function} [onSuccess] The function to call upon success
+ * @param {function} [onFailure] The function to call upon failure
  * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function messageRead(serverURL, token, msgIds, onExpiredToken, onSuccess, onFailure) {
@@ -590,16 +590,15 @@ export function messageRead(serverURL, token, msgIds, onExpiredToken, onSuccess,
   return true;
 }
 
-
 /**
- * Marks messages as deleted
+ * Asks messages to be deleted
  * @function
  * @param {string} serverURL The URL to the server
  * @param {string} token The authorization token
  * @param {Array} msgIds The array of message IDs to mark as deleted
- * @param {function} onExpiredToken Function to call when we get an expired token return
- * @param {function} onSuccess The function to call upon success
- * @param {function} onFailure The function to call upon failure
+ * @param {function} [onExpiredToken] Function to call when we get an expired token return
+ * @param {function} [onSuccess] The function to call upon success
+ * @param {function} [onFailure] The function to call upon failure
  * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function messageDelete(serverURL, token, msgIds, onExpiredToken, onSuccess, onFailure) {
@@ -645,15 +644,68 @@ export function messageDelete(serverURL, token, msgIds, onExpiredToken, onSucces
 }
 
 /**
+ * Deletes a location
+ * @function
+ * @param {string} serverURL The URL to the server
+ * @param {string} token The authorization token
+ * @param {string} lcoationId
+ * @param {function} [onExpiredToken] Function to call when we get an expired token return
+ * @param {function} [onSuccess] The function to call upon success
+ * @param {function} [onFailure] The function to call upon failure
+ * @return {boolean} Returns true if the call was successfullly made, false if not
+ */
+export function locationDelete(serverURL, token, locationId, onExpiredToken, onSuccess, onFailure) {
+  onExpiredToken ||= () => {};
+  onSuccess ||= () => {};
+  onFailure ||= () => {};
+
+  const delLocationUrl = serverURL + '/deleteLocation?t=' + encodeURIComponent(token);
+
+  const formData = new FormData();
+
+  try {
+    formData.append('id', locationId);
+
+    const resp = fetch(delLocationUrl, {
+      credentials: 'include',
+      method: 'POST',
+      body: formData
+    }).then(async (resp) => {
+          if (resp.ok) {
+            return resp.json();
+          } else {
+            if (resp.status === 401) {
+              // User needs to log in again
+              onExpiredToken(true);
+            }
+            throw new Error(`Failed to delete location: ${resp.status}: ${await resp.text()}`);
+          }
+        })
+      .then((respData) => {
+        onSuccess(respData);
+      })
+      .catch(function(err) {
+        console.log('Delete Location Error: ', err);
+        onFailure(err);
+    });
+  } catch (err) {
+    console.log('Delete Location Unknown Error: ', err);
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Gets the images for an upload
  * @function
  * @param {string} serverURL The URL to the server
  * @param {string} token The authorization token
  * @param {string} collectionId The ID of the collection the upload is in
  * @param {string} uploadId The ID of the upload to fetch the images for
- * @param {function} onExpiredToken Function to call when we get an expired token return
- * @param {function} onSuccess The function to call upon success
- * @param {function} onFailure The function to call upon failure
+ * @param {function} [onExpiredToken] Function to call when we get an expired token return
+ * @param {function} [onSuccess] The function to call upon success
+ * @param {function} [onFailure] The function to call upon failure
  * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function uploadImages(serverURL, token, collectionId, uploadId, onExpiredToken, onSuccess, onFailure) {
@@ -704,9 +756,9 @@ export function uploadImages(serverURL, token, collectionId, uploadId, onExpired
  * @param {string} serverURL The URL to the server
  * @param {string} token The authorization token
  * @param {object} newSettings The new settings for the user
- * @param {function} onExpiredToken Function to call when we get an expired token return
- * @param {function} onSuccess The function to call upon success
- * @param {function} onFailure The function to call upon failure
+ * @param {function} [onExpiredToken] Function to call when we get an expired token return
+ * @param {function} [onSuccess] The function to call upon success
+ * @param {function} [onFailure] The function to call upon failure
  * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function userSettings(serverURL, token, newSettings, onExpiredToken, onSuccess, onFailure) {
@@ -765,9 +817,9 @@ export function userSettings(serverURL, token, newSettings, onExpiredToken, onSu
  * @param {string} token The authorization token
  * @param {object} formData The data to POST to the server
  * @param {number} interval The query interval between sightings
- * @param {function} onExpiredToken Function to call when we get an expired token return
- * @param {function} onSuccess The function to call upon success
- * @param {function} onFailure The function to call upon failure
+ * @param {function} [onExpiredToken] Function to call when we get an expired token return
+ * @param {function} [onSuccess] The function to call upon success
+ * @param {function} [onFailure] The function to call upon failure
  * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function query(serverURL, token, formData, interval, onExpiredToken, onSuccess, onFailure) {
@@ -823,9 +875,9 @@ export function query(serverURL, token, formData, interval, onExpiredToken, onSu
  * @param {string} scientificName The scientific name of the species
  * @param {string} count The new count of the species
  * @param {string} requestId The request ID associated with the image editing session
- * @param {function} onExpiredToken Function to call when we get an expired token return
- * @param {function} onSuccess The function to call upon success
- * @param {function} onFailure The function to call upon failure
+ * @param {function} [onExpiredToken] Function to call when we get an expired token return
+ * @param {function} [onSuccess] The function to call upon success
+ * @param {function} [onFailure] The function to call upon failure
  * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function imageSpecies(serverURL, token, timestamp, collectionId, uploadId, path, commonName, scientificName,
@@ -885,9 +937,9 @@ export function imageSpecies(serverURL, token, timestamp, collectionId, uploadId
  * @param {string} token The authorization token
  * @param {string} collectionId The ID of the collection to check
  * @param {string} uploadName The name of the upload within the collection
- * @param {function} onExpiredToken Function to call when we get an expired token return
- * @param {function} onSuccess The function to call upon success
- * @param {function} onFailure The function to call upon failure
+ * @param {function} [onExpiredToken] Function to call when we get an expired token return
+ * @param {function} [onSuccess] The function to call upon success
+ * @param {function} [onFailure] The function to call upon failure
  * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function checkChanges(serverURL, token, collectionId, uploadName, onExpiredToken, onSuccess, onFailure) {
@@ -947,9 +999,9 @@ export function checkChanges(serverURL, token, collectionId, uploadName, onExpir
  * @param {string} locElevation The elevation of the location
  * @param {string} locLat The latitude of the location
  * @param {string} locLon The longitude of the location
- * @param {function} onExpiredToken Function to call when we get an expired token return
- * @param {function} onSuccess The function to call upon success
- * @param {function} onFailure The function to call upon failure
+ * @param {function} [onExpiredToken] Function to call when we get an expired token return
+ * @param {function} [onSuccess] The function to call upon success
+ * @param {function} [onFailure] The function to call upon failure
  * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function uploadLocation(serverURL, token, timestamp, collectionId, uploadId, locId, locName, locElevation, locLat, locLon, 
@@ -1010,9 +1062,9 @@ export function uploadLocation(serverURL, token, timestamp, collectionId, upload
  * @param {string} commonName The common name of the keybound species
  * @param {string} scientificName The scientific name of the keybound species
  * @param {string} keybind The keybinding character
- * @param {function} onExpiredToken Function to call when we get an expired token return
- * @param {function} onSuccess The function to call upon success
- * @param {function} onFailure The function to call upon failure
+ * @param {function} [onExpiredToken] Function to call when we get an expired token return
+ * @param {function} [onSuccess] The function to call upon success
+ * @param {function} [onFailure] The function to call upon failure
  * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function speciesKeybind(serverURL, token, commonName, scientificName, keybind, onExpiredToken, onSuccess, onFailure) {
@@ -1068,9 +1120,9 @@ export function speciesKeybind(serverURL, token, commonName, scientificName, key
  * @param {string} lastRequestId The last request ID
  * @param {string} timestamp The timestamp associated with this change
  * @param {boolean} force Tell the server to force changes
- * @param {function} onExpiredToken Function to call when we get an expired token return
- * @param {function} onSuccess The function to call upon success
- * @param {function} onFailure The function to call upon failure
+ * @param {function} [onExpiredToken] Function to call when we get an expired token return
+ * @param {function} [onSuccess] The function to call upon success
+ * @param {function} [onFailure] The function to call upon failure
  * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function imagesAllEdited(serverURL, token, collectionId, uploadName, lastRequestId, timestamp, force, onExpiredToken, onSuccess, onFailure) {
@@ -1131,9 +1183,9 @@ export function imagesAllEdited(serverURL, token, collectionId, uploadName, last
  * @param {string} uploadName The name of the upload the image is in
  * @param {string} imagePath The path to the image
  * @param {string} lastRequestId The editing request ID
- * @param {function} onExpiredToken Function to call when we get an expired token return
- * @param {function} onSuccess The function to call upon success
- * @param {function} onFailure The function to call upon failure
+ * @param {function} [onExpiredToken] Function to call when we get an expired token return
+ * @param {function} [onSuccess] The function to call upon success
+ * @param {function} [onFailure] The function to call upon failure
  * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function imageEditComplete(serverURL, token, collectionId, uploadName, imagePath, lastRequestId, onExpiredToken, onSuccess, onFailure) {
@@ -1190,9 +1242,9 @@ export function imageEditComplete(serverURL, token, collectionId, uploadName, im
  * @param {string} locLat The latitude of the location
  * @param {string} locLon The longitude of the location
  * @param {string} locElevation The elevation of the location
- * @param {function} onExpiredToken Function to call when we get an expired token return
- * @param {function} onSuccess The function to call upon success
- * @param {function} onFailure The function to call upon failure
+ * @param {function} [onExpiredToken] Function to call when we get an expired token return
+ * @param {function} [onSuccess] The function to call upon success
+ * @param {function} [onFailure] The function to call upon failure
  * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function locationInfo(serverURL, token, locId, locName, locLat, locLon, locElevation, onExpiredToken, onSuccess, onFailure) {
@@ -1246,9 +1298,9 @@ export function locationInfo(serverURL, token, locId, locName, locLat, locLon, l
  * @param {string} serverURL The URL to the server
  * @param {string} token The authorization token
  * @param {Array} files The image files to look up a timestamp
- * @param {function} onExpiredToken Function to call when we get an expired token return
- * @param {function} onSuccess The function to call upon success
- * @param {function} onFailure The function to call upon failure
+ * @param {function} [onExpiredToken] Function to call when we get an expired token return
+ * @param {function} [onSuccess] The function to call upon success
+ * @param {function} [onFailure] The function to call upon failure
  * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function imagesTimestamp(serverURL, token, collectionId, uploadId, files, onExpiredToken, onSuccess, onFailure) {
@@ -1320,9 +1372,9 @@ export function imagesTimestamp(serverURL, token, collectionId, uploadId, files,
  * @param {number} adjHour The adjustment count of hours
  * @param {number} adjMinute The adjustment count of minutes
  * @param {number} adjSecond The adjustment count of seconds
- * @param {function} onExpiredToken Function to call when we get an expired token return
- * @param {function} onSuccess The function to call upon success
- * @param {function} onFailure The function to call upon failure
+ * @param {function} [onExpiredToken] Function to call when we get an expired token return
+ * @param {function} [onSuccess] The function to call upon success
+ * @param {function} [onFailure] The function to call upon failure
  * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function imagesAdjustTimestamp(serverURL, token, collectionId, uploadId, files, adjYear, adjMonth, adjDay, adjHour, adjMinute, adjSecond,
@@ -1395,9 +1447,9 @@ export function imagesAdjustTimestamp(serverURL, token, collectionId, uploadId, 
  * @param {string} collectionId The collection ID of the upload
  * @param {string} uploadId The ID of the upload to update
  * @param {string} description The updated description to send to the server
- * @param {function} onExpiredToken Function to call when we get an expired token return
- * @param {function} onSuccess The function to call upon success
- * @param {function} onFailure The function to call upon failure
+ * @param {function} [onExpiredToken] Function to call when we get an expired token return
+ * @param {function} [onSuccess] The function to call upon success
+ * @param {function} [onFailure] The function to call upon failure
  * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function updateUploadDetails(serverURL, token, collectionId, uploadId, description, onExpiredToken, onSuccess, onFailure) {
@@ -1451,9 +1503,9 @@ export function updateUploadDetails(serverURL, token, collectionId, uploadId, de
  * @function
  * @param {string} serverURL The URL to the server
  * @param {string} token The authorization token
- * @param {function} onExpiredToken Function to call when we get an expired token return
- * @param {function} onSuccess The function to call upon success
- * @param {function} onFailure The function to call upon failure
+ * @param {function} [onExpiredToken] Function to call when we get an expired token return
+ * @param {function} [onSuccess] The function to call upon success
+ * @param {function} [onFailure] The function to call upon failure
  * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function userIsAdminCheck(serverURL, token, onExpiredToken, onSuccess, onFailure) {
@@ -1498,9 +1550,9 @@ export function userIsAdminCheck(serverURL, token, onExpiredToken, onSuccess, on
  * @function
  * @param {string} serverURL The URL to the server
  * @param {string} token The authorization token
- * @param {function} onExpiredToken Function to call when we get an expired token return
- * @param {function} onSuccess The function to call upon success
- * @param {function} onFailure The function to call upon failure
+ * @param {function} [onExpiredToken] Function to call when we get an expired token return
+ * @param {function} [onSuccess] The function to call upon success
+ * @param {function} [onFailure] The function to call upon failure
  * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function getOtherBuckets(serverURL, token, onExpiredToken, onSuccess, onFailure) {
@@ -1548,9 +1600,9 @@ export function getOtherBuckets(serverURL, token, onExpiredToken, onSuccess, onF
  * @param {string} sourceCollectionId The ID of the collection the upload is in
  * @param {string} uploadKey The key of the collection to move
  * @param {string} destinationCollectionId The ID of the collection to move the upload to (or bucket)
- * @param {function} onExpiredToken Function to call when we get an expired token return
- * @param {function} onSuccess The function to call upon success
- * @param {function} onFailure The function to call upon failure
+ * @param {function} [onExpiredToken] Function to call when we get an expired token return
+ * @param {function} [onSuccess] The function to call upon success
+ * @param {function} [onFailure] The function to call upon failure
  * @return {boolean} Returns true if the call was successfullly made, false if not
  */
 export function moveUpload(serverURL, token, sourceCollectionId, uploadKey, destinationCollectionId,

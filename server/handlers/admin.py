@@ -11,8 +11,8 @@ from spd_types.s3info import S3Info
 import sparcd_utils as sdu
 import sparcd_location_utils as sdlu
 import sparcd_upload_utils as sdupu
-from s3.s3_access_helpers import (make_s3_path, COLLECTIONS_FOLDER, SPARCD_PREFIX,
-                                    SPECIES_JSON_FILE_NAME, S3_UPLOADS_PATH_PART)
+from s3.s3_access_helpers import (make_s3_path, COLLECTIONS_FOLDER, LOCATIONS_JSON_FILE_NAME,
+                                    SPARCD_PREFIX, SPECIES_JSON_FILE_NAME, S3_UPLOADS_PATH_PART)
 from s3.s3_admin import S3AdminConnection
 from s3.s3_collections import S3CollectionConnection
 import s3_utils as s3u
@@ -777,13 +777,10 @@ def handle_complete_changes(db:SPARCdDatabase, user_info: UserInfo, s3_info: S3I
 
     # Update the species
     if 'species' in changes and changes['species']:
-        updated_species = sdlu.update_admin_species(s3_info, changes)
+        updated_species = sdlu.update_admin_species(s3_info, changes, species_temp_filename)
         if updated_species is None:
             return 'Unable to update the species. Any changed locations were updated', 422
 
-        s3u.save_sparcd_config(updated_species, SPECIES_JSON_FILE_NAME,
-                                            species_temp_filename,
-                                            s3_info)
     # Mark the species as done in the DB
     db.clear_admin_species_changes(s3_info.id, user_info.name)
 
@@ -870,3 +867,45 @@ def handle_move_upload(db:SPARCdDatabase, user_info: UserInfo, s3_info: S3Info,
 
     # Make a message based upon our return value
     return __handle_move_upload_result(db, s3_info.id, user_info.name, params, res)
+
+
+def handle_delete_location(db:SPARCdDatabase, user_info: UserInfo, s3_info: S3Info,
+                                                            location_id: str) -> Union[bool, None]:
+    """ Handles removing the lcoation from the list of approved locations
+    Argument:
+        db: the database instance
+        user_info: the user information
+        s3_info: the S3 endpoint information
+        location_id: the ID of the location to delete
+    Return:
+        Returns None if the location can't be found. Returns True if the location was deleted and
+        False if the location was found but couldn't be removed
+    """
+    # Make sure we're admin
+    if not user_info.admin:
+        return None
+
+    # Get the locations to from the server
+    all_locs = S3AdminConnection.get_configuration(s3_info, LOCATIONS_JSON_FILE_NAME)
+    if all_locs is None:
+        return False
+
+    all_locs = json.loads(all_locs)
+    cur_loc_len = len(all_locs)
+
+    all_locs = [loc for loc in all_locs if loc['idProperty'] != location_id]
+
+    # If the new count's the same or somehow more than the original count, we haven't found
+    # the location to remove. Maybe it's gone already? No way of telling so we say it's good
+    if cur_loc_len == len(all_locs):
+        return {'success': True}
+
+    # Remove the location from any the databse entries
+    db.remove_location_and_edits(s3_info.id, location_id)
+
+    all_locs = [loc for loc in all_locs if loc['idProperty']]
+
+    s3u.save_sparcd_config(all_locs, LOCATIONS_JSON_FILE_NAME,
+                            f'{s3_info.id}-{sdlu.TEMP_LOCATIONS_FILE_NAME}', s3_info)
+
+    return {'success': True}

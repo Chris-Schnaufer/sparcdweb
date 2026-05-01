@@ -1536,8 +1536,8 @@ class SPDSQLite:
 
         # Get the file mime type
         cursor = self._conn.cursor()
-        cursor.execute('SELECT source_path, created_timestamp FROM sandbox_files WHERE sandbox_id IN '\
-                        '(SELECT id FROM sandbox WHERE name=? AND upload_id=?)',
+        cursor.execute('SELECT source_path, created_timestamp FROM sandbox_files WHERE sandbox_id '\
+                        'IN (SELECT id FROM sandbox WHERE name=? AND upload_id=?)',
                                                                             (username, upload_id))
 
         res = cursor.fetchall()
@@ -1968,6 +1968,23 @@ class SPDSQLite:
         query = 'UPDATE admin_species_edits SET s3_updated = 1 WHERE s3_id=? AND user_id in ' \
                     '(SELECT id FROM users where name=? AND s3_id=?)'
         cursor.execute(query, (s3_id, username, s3_id))
+
+        self._conn.commit()
+        cursor.close()
+
+    def remove_edit_locations(self, s3_id: str, location_id: str) -> None:
+        """ Removes location edits that reference this location
+        Arguments:
+            s3_id: the ID of the S3 endpoint that's affected
+            location_id: the ID of the location to delete edit records for
+        """
+        if self._conn is None:
+            raise RuntimeError('Attempting to remove administrative location edits in the '\
+                                                                    'database before connecting')
+
+        cursor = self._conn.cursor()
+        cursor.execute('DELETE FROM admin_location_edits WHERE s3_id=? AND loc_id=?',
+                                                                        (s3_id, location_id))
 
         self._conn.commit()
         cursor.close()
