@@ -825,7 +825,7 @@ def handle_move_upload(db:SPARCdDatabase, user_info: UserInfo, s3_info: S3Info,
     # Get the destination path if we're a collection bucket
     dest_path = None
     if dst_coll:
-        dest_path = make_s3_path((COLLECTIONS_FOLDER, dst_coll['bucket'], S3_UPLOADS_PATH_PART,
+        dest_path = make_s3_path((COLLECTIONS_FOLDER, dst_coll['id'], S3_UPLOADS_PATH_PART,
                                                                                 params.upload_key))
 
     def make_dest_path(src_path: str) -> str:

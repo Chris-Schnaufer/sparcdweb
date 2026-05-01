@@ -512,6 +512,11 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
                               </Grid>
                               <Grid>
                                 <Typography variant="body" sx={{whiteSpace:"pre-wrap"}} >
+                                  {item.id}
+                                </Typography>
+                              </Grid>
+                              <Grid>
+                                <Typography variant="body" sx={{whiteSpace:"pre-wrap"}} >
                                   {item.description}
                                 </Typography>
                               </Grid>
