@@ -1,12 +1,9 @@
 """ Location and species admin update utilities for SPARCd server """
 
 import json
-import os
-import tempfile
 from typing import Optional
 
 import spd_crypt as crypt
-import sparcd_file_utils as sdfu
 import s3_utils as s3u
 from s3.s3_access_helpers import LOCATIONS_JSON_FILE_NAME, SPECIES_JSON_FILE_NAME, SPARCD_PREFIX
 from s3.s3_admin import S3AdminConnection
@@ -120,21 +117,18 @@ def update_admin_locations(s3_info: S3Info, changes: dict) -> bool:
 
     all_locs = tuple(all_locs.values())
 
-    S3AdminConnection.put_configuration(s3_info, LOCATIONS_JSON_FILE_NAME,
-                                        json.dumps(all_locs, indent=4))
-
-    config_file_path = os.path.join(tempfile.gettempdir(),
-                                    s3_info.id + '-' + TEMP_LOCATIONS_FILE_NAME)
-    sdfu.save_timed_info(config_file_path, all_locs)
-
+    s3u.save_sparcd_config(all_locs, LOCATIONS_JSON_FILE_NAME,
+                            f'{s3_info.id}-{TEMP_LOCATIONS_FILE_NAME}', s3_info)
     return True
 
 
-def update_admin_species(s3_info: S3Info, changes: dict) -> Optional[tuple]:
+def update_admin_species(s3_info: S3Info, changes: dict,
+                                                    species_temp_filename: str) -> Optional[tuple]:
     """ Updates the master list of species with the changes under the 'species' key
     Arguments:
         s3_info: the information on the S3 endpoint
         changes: the list of changes for species
+        species_temp_filename: the temporary species file name to use
     Return:
         Returns the tuple of updated species, or None if a problem is found
     """
@@ -163,4 +157,8 @@ def update_admin_species(s3_info: S3Info, changes: dict) -> Optional[tuple]:
                                      'speciesIconURL': one_change[changes['sp_icon_url']],
                                      'keyBinding': one_change[changes['sp_keybind']]}
 
+
+    s3u.save_sparcd_config(all_species.values(), SPECIES_JSON_FILE_NAME,
+                                        species_temp_filename,
+                                        s3_info)
     return tuple(all_species.values())

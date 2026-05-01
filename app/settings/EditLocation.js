@@ -8,6 +8,10 @@ import CardContent from '@mui/material/CardContent';
 import CardHeader from '@mui/material/CardHeader';
 import Checkbox from '@mui/material/Checkbox';
 import CloseOutlinedIcon from '@mui/icons-material/CloseOutlined';
+import DialogActions from '@mui/material/DialogActions';
+import DialogContent from '@mui/material/DialogContent';
+import DialogContentText from '@mui/material/DialogContentText';
+import DialogTitle from '@mui/material/DialogTitle';
 import FormControlLabel from '@mui/material/FormControlLabel';
 import Grid from '@mui/material/Grid';
 import HttpsIcon from '@mui/icons-material/Https';
@@ -26,6 +30,7 @@ import PropTypes from 'prop-types';
 import { AddMessageContext, geographicCoordinates, LocationsInfoContext, UserSettingsContext } from '../serverInfo';
 import { Level } from '../components/Messages';
 import { meters2feet } from '../utils';
+import ModalDialog from '../components/ModalDialog';
 
 /**
  * Handles editing a location's entry
@@ -35,7 +40,7 @@ import { meters2feet } from '../utils';
  * @param {function} onClose Called when the editing is completed
  * @return {object} The UI for editing locations
  */
-export default function EditLocation({data, onUpdate, onClose}) {
+export default function EditLocation({data, onUpdate, onDelete, onClose}) {
   const theme = useTheme();
   const addMessage = React.useContext(AddMessageContext); // Function adds messages for display
   const locationItems = React.useContext(LocationsInfoContext);
@@ -55,6 +60,7 @@ export default function EditLocation({data, onUpdate, onClose}) {
   const [isModified, setIsModified] = React.useState(false);
   const [selectedCoordinate, setSelectedCoordinate] = React.useState(userSettings['coordinatesDisplay'] ?? 'LATLON');
   const [selectedMeasure, setSelectedMeasure] = React.useState(userSettings['measurementFormat'] ?? 'meters');
+  const [showDeleteConfirm, setShowDeleteConfirm] = React.useState(false);
   const [curData, setCurData] = React.useState(data || {
                                                         elevationProperty: 0,
                                                         idProperty: '',
@@ -270,238 +276,281 @@ export default function EditLocation({data, onUpdate, onClose}) {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /**
+   * Handles the user wanting to delete the current location
+   * @function
+   */
+  const handleDelete = React.useCallback(() => {
+    setShowDeleteConfirm(true);
+  }, []);
+
+  /**
+   * Handles closing the location delete confirm dialog
+   * @function
+   */
+  const handleCloseDeleteConfirm = React.useCallback(() => {
+    setShowDeleteConfirm(false);
+  }, []);
+
+  /**
+   * Handles the user confirming deletion of location
+   * @function
+   */
+  const handleDeleteLocation = React.useCallback(() => {
+    setShowDeleteConfirm(false);
+    onDelete(onClose /* Success callback */);
+  }, []);
+
   return (
-   <Grid sx={{minWidth:'50vw'}} > 
-    <Card id="edit-species" sx={{backgroundColor:'#EFEFEF', border:"none", boxShadow:"none"}} >
-      <CardHeader id='edit-species-header' title={
-                    <Grid container direction="row" alignItems="start" justifyContent="start" sx={{flexWrap:'nowrap'}}>
-                      <Grid>
-                        <Typography gutterBottom variant="h6" component="h4" noWrap>
-                          Edit Location
-                        </Typography>
+    <React.Fragment>
+     <Grid sx={{minWidth:'50vw'}} > 
+      <Card id="edit-species" sx={{backgroundColor:'#EFEFEF', border:"none", boxShadow:"none"}} >
+        <CardHeader id='edit-species-header' title={
+                      <Grid container direction="row" alignItems="start" justifyContent="start" sx={{flexWrap:'nowrap'}}>
+                        <Grid>
+                          <Typography gutterBottom variant="h6" component="h4" noWrap>
+                            Edit Location
+                          </Typography>
+                        </Grid>
+                        <Grid sx={{marginLeft:'auto'}} >
+                          <div onClick={onClose}>
+                            <Tooltip title="Close without saving">
+                              <Typography gutterBottom variant="body2" noWrap
+                                          sx={{textTransform:'uppercase',
+                                          color:'grey',
+                                          cursor:'pointer',
+                                          fontWeight:'500',
+                                          backgroundColor:'rgba(0,0,0,0.03)',
+                                          padding:'3px 3px 3px 3px',
+                                          borderRadius:'3px',
+                                          '&:hover':{backgroundColor:'rgba(255,255,255,0.7)', color:'black'}
+                                       }}
+                              >
+                                <CloseOutlinedIcon fontSize="small" />
+                              </Typography>
+                            </Tooltip>
+                          </div>
+                        </Grid>
                       </Grid>
-                      <Grid sx={{marginLeft:'auto'}} >
-                        <div onClick={onClose}>
-                          <Tooltip title="Close without saving">
-                            <Typography gutterBottom variant="body2" noWrap
-                                        sx={{textTransform:'uppercase',
-                                        color:'grey',
-                                        cursor:'pointer',
-                                        fontWeight:'500',
-                                        backgroundColor:'rgba(0,0,0,0.03)',
-                                        padding:'3px 3px 3px 3px',
-                                        borderRadius:'3px',
-                                        '&:hover':{backgroundColor:'rgba(255,255,255,0.7)', color:'black'}
-                                     }}
-                            >
-                              <CloseOutlinedIcon fontSize="small" />
-                            </Typography>
-                          </Tooltip>
-                        </div>
-                      </Grid>
-                    </Grid>
-                    }
-                style={{paddingTop:'0px', paddingBottom:'0px'}}
-      />
-      <CardContent id='edit-location-details' sx={{paddingTop:'0px', paddingBottom:'0px'}}>
-        <Grid container direction="column" justifyContent="start" alignItems="stretch"
-              sx={{minWidth:'400px', border:'1px solid black', borderRadius:'5px', backgroundColor:'rgb(255,255,255,0.3)' }}>
-          <TextField required
-                id='edit-location-name'
-                label="Name"
-                defaultValue={curData.nameProperty}
-                size='small'
-                sx={{margin:'10px'}}
-                onChange={() => setIsModified(true)}
-                slotProps={{
-                  input: {inputRef:locationNameRef},
-                  htmlInput: {style:{fontSize:12}},
-                  inputLabel: {shrink: true},
-                }}
-                />
-          <TextField disabled={curData && curData.idProperty && !canEditId}
-                id='edit-location-id'
-                label="ID"
-                defaultValue={curData && curData.idProperty ? curData.idProperty : null}
-                size='small'
-                sx={{margin:'10px'}}
-                onChange={() => setIsModified(true)}
-                slotProps={{
-                  htmlInput: {style:{fontSize:12}},
-                  inputLabel: {shrink: true},
-                  input: {
-                    inputRef:locationIdRef,
-                    endAdornment: 
-                      <InputAdornment position='end'>
-                        <IconButton
-                          aria-label={'Unlock editing location ID'}
-                          onClick={handleUnlockEditingId}
-                          onMouseDown={handleMouseDownId}
-                          onMouseUp={handleMouseUpId}
-                          edge='end'
-                        >
-                          {canEditId ? <LockOpenIcon style={{color:"RosyBrown"}} /> : <HttpsIcon style={{color:"RosyBrown"}} />}
-                        </IconButton>
-                      </InputAdornment>,
-                  },
-                }}
-                />
-          <TextField
-                id='edit-location-description'
-                label="Geographic Area"
-                placeholder="e.g. Mountain range"
-                defaultValue={curData.descriptionProperty}
-                size='small'
-                sx={{margin:'10px'}}
-                onChange={() => setIsModified(true)}
-                slotProps={{
-                  input:{inputRef:locationDescRef},
-                  htmlInput: {style:{fontSize:12}},
-                  inputLabel: {shrink: true},
-                }}
-                />
-          <RadioGroup
-            id='edit-location-measure1'
-            value={selectedMeasure}
-            onChange={handleMeasureChange}              
-          >
-            <Grid container direction="row" spacing={2} justifyContent="stretch" alignItems="center">
-              <FormControlLabel value="feet" control={<Radio size="small"/>} label=<Typography gutterBottom variant="body2" noWrap>Feet</Typography>
-                                                 sx={{paddingLeft:'10px'}}/>
-              <FormControlLabel value="meters" control={<Radio size="small"/>} label=<Typography gutterBottom variant="body2" noWrap>Meters</Typography>
-                                                 />
-            </Grid>
-          </RadioGroup>
-          <TextField 
-                id='edit-location-elevation'
-                label={"Elevation" + (selectedMeasure === 'feet' ? ' (feet)' : ' (meters)')}
-                value={displayElevation}
-                size='small'
-                sx={{margin:'10px'}}
-                onChange={(event) => {setDisplayElevation(event.target.value);setIsModified(true);}}
-                slotProps={{
-                  input: {inputRef:locationEleRef},
-                  htmlInput: {style:{fontSize:12}, minLength:1},
-                  inputLabel: {shrink: true},
-                }}
-                />
-          <RadioGroup
-            id='edit-location-measure2'
-            value={selectedCoordinate}
-            onChange={handleCoordinateChange}              
-          >
-            <Grid container direction="row" spacing={2} justifyContent="stretch" alignItems="center">
-            { geographicCoordinates.map((item, idx) => 
-                <FormControlLabel value={item.value} key={item.value} 
-                                  control={<Radio size="small"/>}
-                                                label=<Typography gutterBottom variant="body2" noWrap>{item.label}</Typography>
-                                                sx={{paddingLeft:idx === 0 ? '10px' : 'revert'}}/>
-              )
+                      }
+                  style={{paddingTop:'0px', paddingBottom:'0px'}}
+        />
+        <CardContent id='edit-location-details' sx={{paddingTop:'0px', paddingBottom:'0px'}}>
+          <Grid container direction="column" justifyContent="start" alignItems="stretch"
+                sx={{minWidth:'400px', border:'1px solid black', borderRadius:'5px', backgroundColor:'rgb(255,255,255,0.3)' }}>
+            <TextField required
+                  id='edit-location-name'
+                  label="Name"
+                  defaultValue={curData.nameProperty}
+                  size='small'
+                  sx={{margin:'10px'}}
+                  onChange={() => setIsModified(true)}
+                  slotProps={{
+                    input: {inputRef:locationNameRef},
+                    htmlInput: {style:{fontSize:12}},
+                    inputLabel: {shrink: true},
+                  }}
+                  />
+            <TextField disabled={curData && curData.idProperty && !canEditId}
+                  id='edit-location-id'
+                  label="ID"
+                  defaultValue={curData && curData.idProperty ? curData.idProperty : null}
+                  size='small'
+                  sx={{margin:'10px'}}
+                  onChange={() => setIsModified(true)}
+                  slotProps={{
+                    htmlInput: {style:{fontSize:12}},
+                    inputLabel: {shrink: true},
+                    input: {
+                      inputRef:locationIdRef,
+                      endAdornment: 
+                        <InputAdornment position='end'>
+                          <IconButton
+                            aria-label={'Unlock editing location ID'}
+                            onClick={handleUnlockEditingId}
+                            onMouseDown={handleMouseDownId}
+                            onMouseUp={handleMouseUpId}
+                            edge='end'
+                          >
+                            {canEditId ? <LockOpenIcon style={{color:"RosyBrown"}} /> : <HttpsIcon style={{color:"RosyBrown"}} />}
+                          </IconButton>
+                        </InputAdornment>,
+                    },
+                  }}
+                  />
+            <TextField
+                  id='edit-location-description'
+                  label="Geographic Area"
+                  placeholder="e.g. Mountain range"
+                  defaultValue={curData.descriptionProperty}
+                  size='small'
+                  sx={{margin:'10px'}}
+                  onChange={() => setIsModified(true)}
+                  slotProps={{
+                    input:{inputRef:locationDescRef},
+                    htmlInput: {style:{fontSize:12}},
+                    inputLabel: {shrink: true},
+                  }}
+                  />
+            <RadioGroup
+              id='edit-location-measure1'
+              value={selectedMeasure}
+              onChange={handleMeasureChange}              
+            >
+              <Grid container direction="row" spacing={2} justifyContent="stretch" alignItems="center">
+                <FormControlLabel value="feet" control={<Radio size="small"/>} label=<Typography gutterBottom variant="body2" noWrap>Feet</Typography>
+                                                   sx={{paddingLeft:'10px'}}/>
+                <FormControlLabel value="meters" control={<Radio size="small"/>} label=<Typography gutterBottom variant="body2" noWrap>Meters</Typography>
+                                                   />
+              </Grid>
+            </RadioGroup>
+            <TextField 
+                  id='edit-location-elevation'
+                  label={"Elevation" + (selectedMeasure === 'feet' ? ' (feet)' : ' (meters)')}
+                  value={displayElevation}
+                  size='small'
+                  sx={{margin:'10px'}}
+                  onChange={(event) => {setDisplayElevation(event.target.value);setIsModified(true);}}
+                  slotProps={{
+                    input: {inputRef:locationEleRef},
+                    htmlInput: {style:{fontSize:12}, minLength:1},
+                    inputLabel: {shrink: true},
+                  }}
+                  />
+            <RadioGroup
+              id='edit-location-measure2'
+              value={selectedCoordinate}
+              onChange={handleCoordinateChange}              
+            >
+              <Grid container direction="row" spacing={2} justifyContent="stretch" alignItems="center">
+              { geographicCoordinates.map((item, idx) => 
+                  <FormControlLabel value={item.value} key={item.value} 
+                                    control={<Radio size="small"/>}
+                                                  label=<Typography gutterBottom variant="body2" noWrap>{item.label}</Typography>
+                                                  sx={{paddingLeft:idx === 0 ? '10px' : 'revert'}}/>
+                )
+              }
+              </Grid>
+            </RadioGroup>
+            { selectedCoordinate === 'LATLON' &&
+              <React.Fragment>
+              <TextField 
+                    id='edit-location-lat'
+                    label="Latitude"
+                    defaultValue={curData.latProperty}
+                    size='small'
+                    sx={{margin:'10px'}}
+                    onChange={() => setIsModified(true)}
+                    slotProps={{
+                      input:{inputRef:locationLatRef},
+                      htmlInput: {style:{fontSize:12}},
+                      inputLabel: {shrink: true},
+                    }}
+                    />
+              <TextField 
+                    id='edit-location-lon'
+                    label="Longitude"
+                    defaultValue={curData.lngProperty}
+                    size='small'
+                    sx={{margin:'10px'}}
+                    onChange={() => setIsModified(true)}
+                    slotProps={{
+                      input:{inputRef:locationLonRef},
+                      htmlInput: {style:{fontSize:12}},
+                      inputLabel: {shrink: true},
+                    }}
+                    />
+              </React.Fragment>
             }
-            </Grid>
-          </RadioGroup>
-          { selectedCoordinate === 'LATLON' &&
-            <React.Fragment>
-            <TextField 
-                  id='edit-location-lat'
-                  label="Latitude"
-                  defaultValue={curData.latProperty}
-                  size='small'
-                  sx={{margin:'10px'}}
-                  onChange={() => setIsModified(true)}
-                  slotProps={{
-                    input:{inputRef:locationLatRef},
-                    htmlInput: {style:{fontSize:12}},
-                    inputLabel: {shrink: true},
-                  }}
-                  />
-            <TextField 
-                  id='edit-location-lon'
-                  label="Longitude"
-                  defaultValue={curData.lngProperty}
-                  size='small'
-                  sx={{margin:'10px'}}
-                  onChange={() => setIsModified(true)}
-                  slotProps={{
-                    input:{inputRef:locationLonRef},
-                    htmlInput: {style:{fontSize:12}},
-                    inputLabel: {shrink: true},
-                  }}
-                  />
-            </React.Fragment>
-          }
-          { selectedCoordinate === 'UTM' && 
-            <React.Fragment>
-            <TextField 
-                  id='edit-location-utm-zone'
-                  label="UTM Zone"
-                  defaultValue={curData && curData.utm_zone ? curData.utm_zone : null}
-                  size='small'
-                  sx={{margin:'10px'}}
-                  onChange={() => setIsModified(true)}
-                  slotProps={{
-                    input:{inputRef:locationUTMZoneRef},
-                    htmlInput: {style:{fontSize:12}},
-                    inputLabel: {shrink: true},
-                  }}
-                  />
-            <TextField 
-                  id='edit-location-utm-letter'
-                  label="Letter"
-                  defaultValue={curData && curData.utm_letter ? curData.utm_letter : null}
-                  size='small'
-                  sx={{margin:'10px'}}
-                  onChange={() => setIsModified(true)}
-                  slotProps={{
-                    input:{inputRef:locationUTMLetterRef},
-                    htmlInput: {style:{fontSize:12}},
-                    inputLabel: {shrink: true},
-                  }}
-                  />
-            <TextField 
-                  id='edit-location-utm-x'
-                  label="X"
-                  defaultValue={curData.utm_x}
-                  size='small'
-                  sx={{margin:'10px'}}
-                  onChange={() => setIsModified(true)}
-                  slotProps={{
-                    input:{inputRef:locationUTMXRef},
-                    htmlInput: {style:{fontSize:12}},
-                    inputLabel: {shrink: true},
-                  }}
-                  />
-            <TextField 
-                  id='edit-location-utm-y'
-                  label="Y"
-                  defaultValue={curData.utm_y}
-                  size='small'
-                  sx={{margin:'10px'}}
-                  onChange={() => setIsModified(true)}
-                  slotProps={{
-                    input:{inputRef:locationUTMYRef},
-                    htmlInput: {style:{fontSize:12}},
-                    inputLabel: {shrink: true},
-                  }}
-                  />
-            </React.Fragment>
-          }
-          <FormControlLabel sx={{paddingLeft:'10px'}}
-                            control={<Checkbox id="edit-location-active"
-                                               size="small" 
-                                               defaultChecked={curData.activeProperty}
-                                               onChange={() => setIsModified(true)}
-                                               inputRef={locationActiveRef}
-                                      />} 
-                            label={<Typography variant="body2">Active location entry</Typography>} />
-        </Grid>          
-        </CardContent>
-        <CardActions id='filter-content-actions'>
-          <Button sx={{flex:1}} disabled={!isModified} onClick={onSaveChanges}>Save</Button>
-          <Button sx={{flex:1}} onClick={onClose} >Cancel</Button>
-        </CardActions>
-    </Card>
-  </Grid>
+            { selectedCoordinate === 'UTM' && 
+              <React.Fragment>
+              <TextField 
+                    id='edit-location-utm-zone'
+                    label="UTM Zone"
+                    defaultValue={curData && curData.utm_zone ? curData.utm_zone : null}
+                    size='small'
+                    sx={{margin:'10px'}}
+                    onChange={() => setIsModified(true)}
+                    slotProps={{
+                      input:{inputRef:locationUTMZoneRef},
+                      htmlInput: {style:{fontSize:12}},
+                      inputLabel: {shrink: true},
+                    }}
+                    />
+              <TextField 
+                    id='edit-location-utm-letter'
+                    label="Letter"
+                    defaultValue={curData && curData.utm_letter ? curData.utm_letter : null}
+                    size='small'
+                    sx={{margin:'10px'}}
+                    onChange={() => setIsModified(true)}
+                    slotProps={{
+                      input:{inputRef:locationUTMLetterRef},
+                      htmlInput: {style:{fontSize:12}},
+                      inputLabel: {shrink: true},
+                    }}
+                    />
+              <TextField 
+                    id='edit-location-utm-x'
+                    label="X"
+                    defaultValue={curData.utm_x}
+                    size='small'
+                    sx={{margin:'10px'}}
+                    onChange={() => setIsModified(true)}
+                    slotProps={{
+                      input:{inputRef:locationUTMXRef},
+                      htmlInput: {style:{fontSize:12}},
+                      inputLabel: {shrink: true},
+                    }}
+                    />
+              <TextField 
+                    id='edit-location-utm-y'
+                    label="Y"
+                    defaultValue={curData.utm_y}
+                    size='small'
+                    sx={{margin:'10px'}}
+                    onChange={() => setIsModified(true)}
+                    slotProps={{
+                      input:{inputRef:locationUTMYRef},
+                      htmlInput: {style:{fontSize:12}},
+                      inputLabel: {shrink: true},
+                    }}
+                    />
+              </React.Fragment>
+            }
+            <FormControlLabel sx={{paddingLeft:'10px'}}
+                              control={<Checkbox id="edit-location-active"
+                                                 size="small" 
+                                                 defaultChecked={curData.activeProperty}
+                                                 onChange={() => setIsModified(true)}
+                                                 inputRef={locationActiveRef}
+                                        />} 
+                              label={<Typography variant="body2">Active location entry</Typography>} />
+          </Grid>          
+          </CardContent>
+          <CardActions id='filter-content-actions'>
+            <Button sx={{flex:1}} disabled={!isModified} onClick={onSaveChanges}>Save</Button>
+            <Button sx={{flex:1}} onClick={handleDelete} >Delete</Button>
+            <Button sx={{flex:1}} onClick={onClose} >Cancel</Button>
+          </CardActions>
+        </Card>
+      </Grid>
+      {
+        showDeleteConfirm && 
+        <ModalDialog id="delete-location-confirm" backgroundColor="#EFEFEF" open={true} maxWidth='sm' onClose={handleCloseDeleteConfirm} >
+          <DialogTitle>Confirm Location Delete</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              Are you sure you want to delete location <span style={{fontWeight:'bold'}}>{curData.nameProperty}</span>?
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleDeleteLocation}>Delete</Button>
+            <Button onClick={handleCloseDeleteConfirm} variant="contained">Cancel</Button>
+          </DialogActions>
+        </ModalDialog>
+      }
+    </React.Fragment>
   );
 }
 

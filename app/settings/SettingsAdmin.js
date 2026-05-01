@@ -53,6 +53,8 @@ const SortDirection = {
   Descending: 1,
 };
 
+const SETTINGS_ADMIN_Z_INDEX = 10000
+
 /**
  * Returns the UI for administrator tasks
  * @function
@@ -60,10 +62,11 @@ const SortDirection = {
  * @param {boolean} loadingLocations Flag indicating locations are being loaded
  * @param {function} onConfirmPassword Function for confirming a password re-entry
  * @param {function} onSandboxRefresh Function for refreshing the sandbox entries
+ * @param {function} onLocationDelete Function for when the user deletes a location
  * @param {function} onClose Function for when the user wants to close this
  * @return {object} The UI to render
  */
-export default function SettingsAdmin({loadingCollections, loadingLocations, onConfirmPassword, onSandboxRefresh, onClose}) {
+export default function SettingsAdmin({loadingCollections, loadingLocations, onConfirmPassword, onSandboxRefresh, onLocationDelete, onClose}) {
   const theme = useTheme();
   const addMessage = React.useContext(AddMessageContext); // Function adds messages for display
   const collectionInfo = React.useContext(CollectionsInfoContext);
@@ -119,6 +122,13 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
 
     }
   }, [addMessage, serverModificationsChecked, serverURL, setTokenExpired, settingsToken,])
+
+  // Keep our selected locations up to date
+  React.useEffect(() => {
+    if (!loadingLocations) {
+      setSelectedLocations(locationItems);
+    }
+  }, [locationItems, loadingLocations]);
 
   // Recalcuate available space in the window
   React.useLayoutEffect(() => {
@@ -457,6 +467,33 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
       addMessage(Level.Warning, 'An unknown error occurred when attempting to update location information');
     }
   }, [addMessage, editingState, locationItems, serverURL, setLocationsModified, setTokenExpired, settingsToken]);
+
+  /**
+   * Handles the user wanting to delete a location
+   * @function
+   * @param {object} location The location item to delete
+   */
+  const handleDeleteLocation = React.useCallback((location, onSuccess, onFailure) => {
+    onSuccess ||= () => {};
+    onFailure ||= () => {};
+
+    // Somehow have stale data
+    if (editingState.data.idProperty !== location.idProperty) {
+      onSuccess();
+      return;
+    }
+
+    onLocationDelete(location.idProperty,
+                              (respData) => {   // Success
+                                setLocationsModified(true);
+                                onSuccess();
+                              },
+                              (err) => {        // Failure
+                                onFailure(err);
+                              }
+    );
+
+  }, [editingState, onLocationDelete]);
 
   /**
    * Handles the commit of any species or location changes
@@ -916,7 +953,10 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
       {editingState.type === EditingStates.Species && <EditSpecies data={editingState.data} onUpdate={updateSpecies} 
                                                                       onClose={() => setEditingState({type:EditingStates.None, data:null})}/> }
       {editingState.type === EditingStates.Location && <EditLocation data={editingState.data} onUpdate={updateLocation}
-                                                                      onClose={() => setEditingState({type:EditingStates.None, data:null})}/> }
+                                                                      onDelete={(onSuccess, onFailure) => handleDeleteLocation(editingState.data, onSuccess, onFailure)}
+                                                                      onClose={() => setEditingState({type:EditingStates.None, data:null})}
+
+                                                        /> }
       </Grid>
     );
   }
@@ -1019,7 +1059,8 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
   const activeTabInfo = adminTabs[activeTab];
   return (
     <Grid id="settings-admin-wrapper" container direction="row" alignItems="center" justifyContent="center"
-          sx={{position:'absolute', top:0, left:0, width:'100vw', height:'100vh', backgroundColor:'rgb(0,0,0,0.5)', zIndex:10000}}
+          sx={{position:'absolute', top:0, left:0, width:'100vw', height:'100vh', backgroundColor:'rgb(0,0,0,0.5)',
+                zIndex:SETTINGS_ADMIN_Z_INDEX, '--parent-z-index':SETTINGS_ADMIN_Z_INDEX}}
     >
       <Grid container size="grow" alignItems="start" justifyContent="start" sx={{padding:'15px 15px', borderRadius:'20px', overflow:'scroll'}}>
         <Grid size={1}  sx={{backgroundColor:"#EAEAEA", borderRadius:'10px 0px 0px 10px'}}>
@@ -1111,7 +1152,10 @@ export default function SettingsAdmin({loadingCollections, loadingLocations, onC
       </Grid>
       { editingState.type !== EditingStates.None && generateEditingUI() }
       { checkIncompleteUploads === true && 
-          <Box id="admin-settings-check-uploads" sx={{...theme.palette.screen_overlay_grey, zIndex:11111}} >
+          <Box id="admin-settings-check-uploads" sx={{...theme.palette.screen_overlay_grey,
+                                                      zIndex:`calc(var(--parent-z-index, ${SETTINGS_ADMIN_Z_INDEX}) + 1000)`
+                                                    }}
+          >
             <div style={{padding:'25px 10px'}}>
               <Grid container direction="column" alignItems="center" justifyContent="center">
                 <CheckIncompleteUploads onSandboxRefresh={onSandboxRefresh} onCancel={() => setCheckIncompleteUploads(false)} />

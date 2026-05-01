@@ -1024,6 +1024,33 @@ export default function Home() {
   }, [lastToken]);
 
   /**
+   * Handles deleting a location
+   * @function
+   * @param {string} locationId The ID of the location to delete
+   * @param {function} [onSuccess] Called upon successful deletion
+   * @param {function} [onFailure] Called upon failing to delete the location
+   */
+  const handleDeleteLocation = React.useCallback((locationId, onSuccess, onFailure) => {
+    onSuccess ||= () => {};
+    onFailure ||= () => {};
+
+    const success = Server.locationDelete(serverURLRef.current, lastToken, locationId, setUserLoginAgain,
+                        (respData) => {   // Success
+                          window.setTimeout(loadLocations, 0);
+                          onSuccess();
+                        },
+                        (err) => {        // Failure
+                          addMessage(Level.Error, 'Unable to delete the location')
+                        }
+    );
+
+    if (!success) {
+      addMessage(Level.Error, 'An unknown problem occurred while trying to delete the location');
+    }
+  }, [addMessage, lastToken, loadLocations, setUserLoginAgain]);
+
+
+  /**
    * Handles deleting messages
    * @function
    * @param {object} msgIds The array of message IDs to delete
@@ -1285,6 +1312,7 @@ export default function Home() {
                               loadingLocations={loadingLocations}
                               onConfirmPassword={confirmAdminPassword}
                               onSandboxRefresh={handleSandboxRefresh}
+                              onLocationDelete={handleDeleteLocation}
                               onClose={handleCloseSettingsAdmin}
               />
           }

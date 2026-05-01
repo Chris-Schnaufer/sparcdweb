@@ -8,6 +8,8 @@ import { useTheme } from '@mui/material/styles';
 
 import PropTypes from 'prop-types';
 
+const DEFAULT_DIALOG_ZINDEX = 10000
+
 /**
  * Implementation of a modal dialog
  * @function
@@ -25,8 +27,10 @@ export default function ModalDialog({ backgroundColor, extraSx, open, maxWidth, 
   const isOpen = open ?? true;
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth={maxWidth ? maxWidth: "md"} fullWidth
-      sx={{"& .MuiPaper-root": {borderRadius: '25px', ...(backgroundColor && { backgroundColor }),}, ...extraSx}}
+    <Dialog open={isOpen} onClose={onClose} maxWidth={maxWidth ? maxWidth: "md"} fullWidth
+      sx={{"& .MuiPaper-root": {borderRadius: '25px', ...(backgroundColor && { backgroundColor }) },
+            zIndex: `calc(var(--parent-z-index, ${DEFAULT_DIALOG_ZINDEX}) + 1000)`,
+            ...extraSx}}
     >
       {children}
     </Dialog>

@@ -283,7 +283,6 @@ def load_sparcd_config(sparcd_file: str, timed_file: str, s3_info: S3Info):
     return loaded_config
 
 
-# pylint: disable=too-many-arguments,too-many-positional-arguments
 def save_sparcd_config(config_data, sparcd_file: str, timed_file: str, s3_info: S3Info) -> None:
     """ Saves the species on S3 and locally
     Arguments:

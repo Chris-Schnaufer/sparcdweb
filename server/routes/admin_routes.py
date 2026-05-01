@@ -591,3 +591,28 @@ def move_upload(*, db, user_info, s3_info, **_):
                                                                 dst_coll_id=dst_coll_id
                                         )
                                 ))
+
+
+@admin_bp.route('/deleteLocation', methods=['POST'])
+@cross_origin(origins=ALLOWED_ORIGINS, supports_credentials=True)
+@authenticated_route(admin_only=True)
+def delete_location(*, db, user_info, s3_info, **_):
+    """ Discards all pending location and species changes
+    Arguments:
+        db: the database instance (injected by authenticated_route)
+        user_info: the authenticated user's information (injected by authenticated_route)
+        s3_info: the S3 endpoint information (injected by authenticated_route)
+    Returns:
+        200: JSON object indicating success
+        401: if the session token is invalid or expired
+        404: if the changes cannot be found
+        406: if the request is malformed
+    """
+    print(f'DELETE LOCATION user={user_info.name}', flush=True)
+
+    location_id = request.form.get('id')
+
+    if not location_id:
+        return "Not found", 406
+
+    return make_handler_response(hadmin.handle_delete_location(db, user_info, s3_info, location_id))

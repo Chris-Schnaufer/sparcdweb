@@ -787,6 +787,15 @@ class SPARCdDatabase:
         """
         self._db.clear_admin_species_changes(s3_id, username)
 
+    def remove_location_and_edits(self, s3_id: str, location_id: str) -> None:
+        """ Removes references to the location from the database where it's cached
+        Arguments:
+            s3_id: the ID of the S3 endpoint
+            location_id: the ID of the location to clear
+        """
+        # Remove all editing references
+        self._db.remove_edit_locations(s3_id, location_id)
+
     def get_next_upload_location(self, s3_id: str, username: str) -> Optional[dict]:
         """ Returns the next edit location for this user at the specified endpoint
         Arguments:
