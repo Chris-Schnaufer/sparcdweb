@@ -186,7 +186,7 @@ export default function MoveUploads({collectionId, upload, admin, buckets, getBu
       { showSuccessMessage && 
         <WorkspaceOverlay>
             <Typography gutterBottom variant="body2" color="lightgrey">
-              Upload {upload.name} has been successfully moved
+              {upload.name} has been successfully moved
             </Typography>
             <Button onClick={handleSuccessClose}>OK</Button>
         </WorkspaceOverlay>

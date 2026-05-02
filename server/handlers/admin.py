@@ -121,15 +121,19 @@ def __authorized_move_collection(check_coll: dict, name: str, admin: bool, uploa
         the collection.
     """
     # Make sure we have permissions to search through
-    if not check_coll['permissions']:
+    if not check_coll.get('permissions') and not check_coll.get('allPermissions'):
         return False
 
     # Check for permissions
     auth = False
-    perm = check_coll['permissions']
-    if perm['usernameProperty'] == name:
-        if perm['ownerProperty'] or perm['uploadProperty']:
-            auth = True
+    all_perms = (check_coll['permissions'],) \
+                        if 'permissions' in check_coll and check_coll['permissions'] \
+                                                                else check_coll['allPermissions']
+    for perm in all_perms:
+        if perm['usernameProperty'] == name:
+            if perm['ownerProperty'] or perm['uploadProperty']:
+                auth = True
+                break
 
     # If we don't have permission and we're not an administrator
     if not auth and not admin:

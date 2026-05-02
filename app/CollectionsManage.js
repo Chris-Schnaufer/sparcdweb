@@ -467,12 +467,12 @@ export default function CollectionsManage({loadingCollections, selectedCollectio
   }, [collectionsItems, selectionIndex, uploadFilter]);
 
   // Setup search
-  React.useLayoutEffect(() => {
-    if (!searchIsSetup) {
+  React.useEffect(() => {
+    if (!searchIsSetup && collectionsItems) {
       searchSetup('Collection Name', handleCollectionSearch);
       setSearchIsSetup(true);
     }
-  }, [handleCollectionSearch, searchIsSetup, searchSetup]);
+  }, [collectionsItems, handleCollectionSearch, loadingCollections, searchIsSetup, searchSetup]);
 
   // Render the UI
   const curHeight = (totalHeight || 480) + 'px';
