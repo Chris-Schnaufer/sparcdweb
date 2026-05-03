@@ -115,7 +115,7 @@ ENV SERVER_DIR=${WORKDIR} \
     SERVER_WORKERS=4
 
 RUN echo "nginx -g 'daemon on;'" > ${WORKDIR}/startup_server.sh
-RUN echo gunicorn -w \$\{SERVER_WORKERS\} -b \$\{WEB_SITE_URL\} --access-logfile '-' sparcd:app --timeout 18000 >> ${WORKDIR}/startup_server.sh
+RUN echo gunicorn  -w \$\{SERVER_WORKERS\} -threads \$\{SERVER_THREADS\} -b \$\{WEB_SITE_URL\} --access-logfile '-' sparcd:app --timeout 18000 >> ${WORKDIR}/startup_server.sh
 RUN chmod +x ${WORKDIR}/startup_server.sh
 
 ENTRYPOINT ["sh", "./startup_server.sh"]
