@@ -1342,6 +1342,8 @@ class SPDSQLite:
                                                         (filename, username, upload_id))
 
         res = cursor.fetchall()
+        cursor.close()
+
         if not res or len(res) < 1:
             return None
 
@@ -1353,6 +1355,7 @@ class SPDSQLite:
             return None
 
         # Update the file's mimetype
+        cursor = self._conn.cursor()
         cursor.execute('UPDATE sandbox_files SET uploaded=TRUE, mimetype=?, created_timestamp=? '\
                             'WHERE sandbox_files.filename=? AND id=?',
                                                 (mimetype, timestamp, filename, sandbox_file_id))
