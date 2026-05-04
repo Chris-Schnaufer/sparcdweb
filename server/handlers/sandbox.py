@@ -33,12 +33,6 @@ from s3.s3_images import S3ImageConnection
 from s3.s3_uploads import S3UploadConnection
 
 @dataclass
-class DBContext:
-    """ Internal use class which contains the database access context """
-    db: SPARCdDatabase
-    user_info: UserInfo
-
-@dataclass
 class FileCompareResult:
     """ Internal use class for the return from comparing file checksum results """
     matched: bool | str | None  # True, False, 'Missing', or None
@@ -103,13 +97,7 @@ class S3UploadTarget:
     s3_bucket: str
     s3_path: str
 
-@dataclass
-class UploadCounts:
-    """ Contains the counts of uploads over different time periods """
-    num_month: int
-    num_year: int
-    num_total: int
-
+# Needs to be after S3UploadTarget instead of alphabetic order
 @dataclass
 class FileProcessContext:
     """ Contains the context needed to process a single uploaded file """
@@ -119,6 +107,24 @@ class FileProcessContext:
     upload_id: str
     tz_offset: float
     sb_location: Optional[dict]
+
+@dataclass
+class UploadCounts:
+    """ Contains the counts of uploads over different time periods """
+    num_month: int
+    num_year: int
+    num_total: int
+
+@dataclass
+class UploadResult:
+    """ Contains the result of preparing and uploading a single file """
+    working_name: str
+    working_mimetype: str
+    timestamp: Optional[str]
+    species: Optional[tuple]
+    location: Optional[dict]
+    upload_id: str
+    original_name: str
 
 
 def __compare_one_file(s3_info: S3Info, s3_bucket: str, s3_path: str,
@@ -163,13 +169,9 @@ def __compare_one_file(s3_info: S3Info, s3_bucket: str, s3_path: str,
                 os.unlink(path)
 
 
-def __convert_movie(db: SPARCdDatabase, user_info: UserInfo, upload_id: str,
-                                                        source_name: str, s3_name: str) -> tuple:
+def __convert_movie(source_name: str, s3_name: str) -> tuple:
     """ Converts movie to MP4 format
     Arguments:
-        db: the database instance
-        user_info: the user information
-        upload_id: the upload id of the file
         source_name: the name of the source file to convert
         s3_name: the name of the file on S3
     Return:
@@ -187,16 +189,15 @@ def __convert_movie(db: SPARCdDatabase, user_info: UserInfo, upload_id: str,
                          logger=None)
         video_clip.close()
 
-        # Re-mux the converted file with metadata copied from the original
         metadata_output = mp4_filename.replace('.mp4', '_meta.mp4')
         subprocess.run(
             [
                 'ffmpeg', '-y',
-                '-i', mp4_filename,        # converted video (video/audio streams)
-                '-i', source_name,         # original file (metadata source)
-                '-map', '0',               # use all streams from converted file
-                '-map_metadata', '1',      # copy metadata from original file
-                '-codec', 'copy',          # no re-encoding
+                '-i', mp4_filename,
+                '-i', source_name,
+                '-map', '0',
+                '-map_metadata', '1',
+                '-codec', 'copy',
                 metadata_output
             ],
             check=True,
@@ -204,20 +205,12 @@ def __convert_movie(db: SPARCdDatabase, user_info: UserInfo, upload_id: str,
         )
         os.replace(metadata_output, mp4_filename)
 
-        upload_file = mp4_filename
-        working_name = remote_name
-        working_mimetype = 'video/mp4'
-        db.sandbox_file_rename(user_info.name,
-                                   upload_id,
-                                   s3_name,
-                                   working_name)
+        return mp4_filename, remote_name, 'video/mp4'
+
     except (OSError, subprocess.CalledProcessError) as ex:
-        # Clean up files we might have created
         if os.path.exists(mp4_filename):
             os.unlink(mp4_filename)
         raise ex
-
-    return upload_file, working_name, working_mimetype
 
 
 def __count_uploads(all_collections: list) -> UploadCounts:
@@ -269,14 +262,10 @@ def __get_file_info(temp_path: str, file_ext: str, tz_offset: float) -> FileInfo
     return FileInfo(species=species, location=location, timestamp=timestamp)
 
 
-def __prepare_upload_file(db: SPARCdDatabase,
-                          user_info: UserInfo,
-                          context: FileUploadContext,
+def __prepare_upload_file(context: FileUploadContext,
                           metadata: FileInfo) -> PreparedFile:
     """ Updates file location metadata and converts format if needed
     Arguments:
-        db: the database instance
-        user_info: the user information
         context: the file upload context
         metadata: the extracted file metadata
     Return:
@@ -300,12 +289,10 @@ def __prepare_upload_file(db: SPARCdDatabase,
             print(f'Warning: Unable to update sandbox file with the location: '
                   f'{context.file_obj.filename} with upload_id {context.upload_id}', flush=True)
 
-    # Convert movie format if needed
     if context.file_ext in ('.mov', '.avi'):
         try:
             upload_path, working_name, working_mimetype = \
-                __convert_movie(db, user_info, context.upload_id,
-                                context.temp_path, context.file_obj.filename)
+                __convert_movie(context.temp_path, context.file_obj.filename)
         except (OSError, subprocess.CalledProcessError) as ex:
             print(f'Exception caught when converting MOV to .mp4: {context.temp_path}',
                   flush=True)
@@ -323,14 +310,12 @@ def __prepare_upload_file(db: SPARCdDatabase,
                         working_mimetype=working_mimetype)
 
 
-def __process_one_file(db: SPARCdDatabase,
-                       user_info: UserInfo,
-                       context: FileProcessContext) -> None:
-    """ Handles upload a file and updating the database
+def __prepare_and_upload(context: FileProcessContext) -> UploadResult:
+    """ Handles preparing and uploading a file to S3 with no database access
     Arguments:
-        db: the database instance
-        user_info: the user information
         context: the parameters needed for processing one file
+    Return:
+        Returns an UploadResult containing everything needed for the database write
     """
     temp_file = tempfile.mkstemp(suffix=context.file_ext, prefix=SPARCD_PREFIX)
     os.close(temp_file[0])
@@ -344,22 +329,60 @@ def __process_one_file(db: SPARCdDatabase,
     prepared_file = None
     try:
         if context.file_ext in sdupu.UPLOAD_KNOWN_MOVIE_EXT:
-            prepared_file = __prepare_upload_file(db, user_info,
-                                                  upload_context, None)
+            prepared_file = __prepare_upload_file(upload_context, None)
             file_info = __get_file_info(prepared_file.upload_path, '.mp4', context.tz_offset)
         else:
             file_info = __get_file_info(upload_context.temp_path, upload_context.file_ext,
                                         context.tz_offset)
-            prepared_file = __prepare_upload_file(db, user_info,
-                                                  upload_context, file_info)
+            prepared_file = __prepare_upload_file(upload_context, file_info)
 
-        __upload_and_record(DBContext(db=db, user_info=user_info),
-                            context.s3_target, upload_context, prepared_file, file_info)
+        working_ts = file_info.timestamp.isoformat() if file_info.timestamp else None
+
+        S3UploadConnection.upload_file(context.s3_target.s3_info,
+                                       context.s3_target.s3_bucket,
+                                       make_s3_path((context.s3_target.s3_path,
+                                                     prepared_file.working_name)),
+                                       prepared_file.upload_path)
+
+        return UploadResult(working_name=prepared_file.working_name,
+                            working_mimetype=prepared_file.working_mimetype,
+                            timestamp=working_ts,
+                            species=file_info.species,
+                            location=file_info.location,
+                            upload_id=context.upload_id,
+                            original_name=context.file_obj.filename)
     finally:
         if os.path.exists(upload_context.temp_path):
             os.unlink(upload_context.temp_path)
         if prepared_file and os.path.exists(prepared_file.upload_path):
             os.unlink(prepared_file.upload_path)
+
+
+def __record_uploaded_file(db: SPARCdDatabase,
+                            user_info: UserInfo,
+                            result: UploadResult) -> None:
+    """ Handles all database writes for an uploaded file
+    Arguments:
+        db: the database instance
+        user_info: the user information
+        result: the result from __prepare_and_upload
+    """
+    if result.original_name != result.working_name:
+        db.sandbox_file_rename(user_info.name, result.upload_id,
+                               result.original_name, result.working_name)
+
+    file_id = db.sandbox_file_uploaded(user_info.name,
+                                       result.upload_id,
+                                       result.working_name,
+                                       result.working_mimetype,
+                                       result.timestamp)
+    if file_id is None:
+        print(f'INFO: file {result.original_name} with upload ID {result.upload_id} '
+              'was uploaded but not found in the database - database not updated')
+        return
+
+    if (result.species and result.timestamp) or result.location:
+        db.sandbox_add_file_info(file_id, result.species, result.location, result.timestamp)
 
 
 def __update_media_csv(db: SPARCdDatabase,
@@ -431,39 +454,6 @@ def __update_observations_csv(db: SPARCdDatabase,
                                 [one_row for one_set in row_groups for one_row in one_set])
 
     return len(obs_info)
-
-def __upload_and_record(db_context: DBContext,
-                        target: S3UploadTarget,
-                        context: FileUploadContext,
-                        prepared: PreparedFile,
-                        file_info: FileInfo) -> None:
-    """ Uploads a prepared file to S3 and records it in the database
-    Arguments:
-        db_context: the database context
-        target: the S3 destination information
-        context: the file upload context
-        prepared: the prepared file information
-        file_info: the extracted file file_info
-    """
-    working_ts = file_info.timestamp.isoformat() if file_info.timestamp else None
-
-    S3UploadConnection.upload_file(target.s3_info, target.s3_bucket,
-                             make_s3_path((target.s3_path, prepared.working_name)),
-                             prepared.upload_path)
-
-    file_id = db_context.db.sandbox_file_uploaded(db_context.user_info.name,
-                                                  context.upload_id,
-                                                  prepared.working_name,
-                                                  prepared.working_mimetype,
-                                                  working_ts)
-    if file_id is None:
-        print(f'INFO: file {context.file_obj.filename} with upload ID {context.upload_id} '
-              'was uploaded but not found in the database - database not updated')
-        return
-
-    if (file_info.species and file_info.timestamp) or file_info.location:
-        db_context.db.sandbox_add_file_info(file_id, file_info.species, file_info.location,
-                                 working_ts)
 
 
 def handle_sandbox(db: SPARCdDatabase, user_info: UserInfo, s3_info: S3Info) -> tuple:
@@ -688,6 +678,7 @@ def handle_sandbox_new(db: SPARCdDatabase,
     # Return the new ID
     return upload_id
 
+
 def handle_sandbox_file(db: SPARCdDatabase,
                        user_info: UserInfo,
                        s3_info: S3Info,
@@ -708,19 +699,20 @@ def handle_sandbox_file(db: SPARCdDatabase,
 
     max_workers = min(len(file_params.files), 4)
     with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [
-            executor.submit(__process_one_file, db, user_info,
-                                FileProcessContext(
-                                    s3_target=s3_target,
-                                    file_obj=file_params.files[one_file],
-                                    file_ext=os.path.splitext(one_file)[1].lower(),
-                                    upload_id=file_params.upload_id,
-                                    tz_offset=tz_offset,
-                                    sb_location=sb_location))
+        futures = {
+            executor.submit(__prepare_and_upload,
+                            FileProcessContext(
+                                s3_target=s3_target,
+                                file_obj=file_params.files[one_file],
+                                file_ext=os.path.splitext(one_file)[1].lower(),
+                                upload_id=file_params.upload_id,
+                                tz_offset=tz_offset,
+                                sb_location=sb_location)): one_file
             for one_file in file_params.files
-        ]
-        for future in futures:
-            future.result()
+        }
+        for future in concurrent.futures.as_completed(futures):
+            result = future.result()
+            __record_uploaded_file(db, user_info, result)
 
 
 def handle_sandbox_completed(db: SPARCdDatabase,
