@@ -42,11 +42,6 @@ FROM nginx:alpine
 ENV WORKDIR=/website
 WORKDIR ${WORKDIR}
 
-# Allow port number overrides
-ENV PORT_NUMBER=3000
-ENV HTTPS_PORT=443
-
-
 # Install python stuff
 COPY ./requirements.txt ./
 
@@ -105,6 +100,14 @@ RUN mkdir -p /etc/nginx/certs && \
 RUN mv /etc/nginx/nginx.conf /etc/nginx/nginx.conf.orig
 COPY ./nginx.conf /etc/nginx/nginx.conf
 
+# Allow port number overrides
+ENV PORT_NUMBER=3000
+ENV HTTPS_PORT=443
+
+# Allow worker and thread overrides
+ENV SERVER_WORKERS=4
+ENV SERVER_THREADS=4
+
 # Expose the port
 EXPOSE ${HTTPS_PORT}
 
@@ -112,10 +115,12 @@ EXPOSE ${HTTPS_PORT}
 ENV SERVER_DIR=${WORKDIR} \
     WEB_SITE_URL="127.0.0.1:"${PORT_NUMBER} \
     SPARCD_DB=${WORKDIR}/sparcd.sqlite \
-    SERVER_WORKERS=4
+    SERVER_WORKERS=${SERVER_WORKERS} \
+    SERVER_THREADS=${SERVER_THREADS}
 
 RUN echo "nginx -g 'daemon on;'" > ${WORKDIR}/startup_server.sh
-RUN echo gunicorn  -w \$\{SERVER_WORKERS\} -threads \$\{SERVER_THREADS\} -b \$\{WEB_SITE_URL\} --access-logfile '-' sparcd:app --timeout 18000 >> ${WORKDIR}/startup_server.sh
+RUN echo "echo gunicorn: Workers: " \$\{SERVER_WORKERS\} "Threads: " \$\{SERVER_THREADS\} "Url: " \$\{WEB_SITE_URL\} >> ${WORKDIR}/startup_server.sh
+RUN echo gunicorn  -w \$\{SERVER_WORKERS\} --threads \$\{SERVER_THREADS\} -b \$\{WEB_SITE_URL\} --access-logfile '-' sparcd:app --timeout 18000 >> ${WORKDIR}/startup_server.sh
 RUN chmod +x ${WORKDIR}/startup_server.sh
 
 ENTRYPOINT ["sh", "./startup_server.sh"]
