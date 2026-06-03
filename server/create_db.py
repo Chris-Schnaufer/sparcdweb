@@ -15,6 +15,9 @@ import s3_utils as s3u
 # The name of our script
 SCRIPT_NAME = os.path.basename(__file__)
 
+# Version number of DB instance
+DB_VERSION = '"1.0"'
+
 # Environment variable name for database
 DB_ENV_NAME = 'SPARCD_DB'
 # Environment database variable value
@@ -29,13 +32,14 @@ if DB_ENV_PATH is not None:
 
 # Argparse-related definitions
 # Declare the progam description
-ARGPARSE_PROGRAM_DESC = 'Creates a SQLite database for the SPARCd web server'
+ARGPARSE_PROGRAM_DESC = 'Creates SQLite databases for the SPARCd web server'
 # Epilog for help
-ARGPARSE_EPILOG = f'Can set the {DB_ENV_NAME} environment variable to the database path'
+ARGPARSE_EPILOG = 'All database names are based upon the main database file name.\n' \
+                  f'Can set the {DB_ENV_NAME} environment variable to the full database path'
 # Help for the database path
 ARGPARSE_DB_PATH_HELP = f'Path to create the database file on (default: {DB_PATH_DEFAULT})'
 # Help for the database name
-ARGPARSE_DB_NAME_HELP = f'Name of the database file to create (default: {DB_NAME_DEFAULT})'
+ARGPARSE_DB_NAME_HELP = f'Name of the main database file to create (default: {DB_NAME_DEFAULT})'
 # Help for forcing an overwrite of an existing database file
 ARGPARSE_OVERWRITE_HELP = 'Specify this flag if you want to force the destructive overwrite of ' \
                           'an existing file'
@@ -83,7 +87,9 @@ def get_arguments() -> str:
 
     # We only need to check one admin parameter since we already checked for
     # admin parameter sameness
-    return os.path.join(args.db_path, args.db_name), args.overwrite, \
+    base, ext = os.path.splitext(args.db_name)
+    sandbox_path = base + '_sandbox' + ext
+    return os.path.join(args.db_path, args.db_name), sandbox_path, args.overwrite, \
                             (args.admin, args.admin_email, args.admin_url) if args.admin else None
 
 
@@ -138,40 +144,6 @@ def build_database(path: str, admin_info: tuple=None) -> None:
              'CREATE TABLE queries(id INTEGER PRIMARY KEY ASC, ' \
                 'timestamp INTEGER, ' \
                 'token TEXT, path TEXT NOT NULL)',
-             'CREATE TABLE sandbox(id INTEGER PRIMARY KEY ASC, ' \
-                'name TEXT NOT NULL, ' \
-                'path TEXT NOT NULL, ' \
-                's3_id TEXT NOT NULL, ' \
-                'bucket TEXT NOT NULL, ' \
-                's3_base_path TEXT NOT NULL, ' \
-                'location_id TEXT DEFAULT NULL, ' \
-                'location_name TEXT DEFAULT NULL, ' \
-                'location_lat REAL DEFAULT NULL, ' \
-                'location_lon READ DEFAULT NULL, ' \
-                'location_ele REAL DEFAULT NULL, ' \
-                'recovered INT DEFAULT 0, ' \
-                'timestamp INTEGER, ' \
-                'upload_id TEXT DEFAULT NULL)',
-             'CREATE TABLE sandbox_files(id INTEGER PRIMARY KEY ASC, ' \
-                'sandbox_id INTEGER NOT NULL, '\
-                'filename TEXT NOT NULL, ' \
-                'source_path TEXT, ' \
-                'uploaded BOOLEAN DEFAULT FALSE, ' \
-                'mimetype TEXT DEFAULT NULL, ' \
-                'created_timestamp TEXT DEFAULT NULL,' """ """\
-                'original_filename TEXT DEFAULT NULL, ' \
-                'timestamp INTEGER)',
-             'CREATE TABLE sandbox_species(id INTEGER PRIMARY KEY ASC, ' \
-                'sandbox_file_id INTEGER NOT NULL, ' \
-                'obs_date TEXT, ' \
-                'obs_common TEXT, ' \
-                'obs_scientific TEXT, ' \
-                'obs_count INTEGER)',
-             'CREATE TABLE sandbox_locations(id INTEGER PRIMARY KEY ASC, '\
-                'sandbox_file_id INTEGER NOT NULL, ' \
-                'loc_name TEXT, ' \
-                'loc_id TEXT, ' \
-                'loc_elevation REAL)',
              'CREATE TABLE image_edits(id INTEGER PRIMARY KEY ASC, ' \
                 's3_id TEXT NOT NULL, ' \
                 'bucket TEXT NOT NULL, ' \
@@ -236,7 +208,7 @@ def build_database(path: str, admin_info: tuple=None) -> None:
                 'timestamp INTEGER)',
             'CREATE TABLE sparcd(version TEXT)'
         )
-    version_stmt = 'INSERT INTO sparcd(version) VALUES("1.0")'
+    version_stmt = f'INSERT INTO sparcd(version) VALUES({DB_VERSION})'
     add_user_stmt = 'INSERT INTO users(name, email, s3_id, administrator, auto_added) '\
                                                                             'values(?, ?, ?, 1, 0)'
 
@@ -263,16 +235,83 @@ def build_database(path: str, admin_info: tuple=None) -> None:
         conn.commit()
         cursor.close()
 
+
+def build_sandbox_database(path: str) -> None:
+    """ Builds the sandbox database file
+    Arguments:
+        path: the path to the sandbox database file to create
+    """
+    # Loop through and create all the sandbox database objects
+    stmts = ('CREATE TABLE sandbox(id INTEGER PRIMARY KEY ASC, ' \
+                'name TEXT NOT NULL, ' \
+                'path TEXT NOT NULL, ' \
+                's3_id TEXT NOT NULL, ' \
+                'bucket TEXT NOT NULL, ' \
+                's3_base_path TEXT NOT NULL, ' \
+                'location_id TEXT DEFAULT NULL, ' \
+                'location_name TEXT DEFAULT NULL, ' \
+                'location_lat REAL DEFAULT NULL, ' \
+                'location_lon REAL DEFAULT NULL, ' \
+                'location_ele REAL DEFAULT NULL, ' \
+                'recovered INT DEFAULT 0, ' \
+                'timestamp INTEGER, ' \
+                'upload_id TEXT DEFAULT NULL)',
+             'CREATE TABLE sandbox_files(id INTEGER PRIMARY KEY ASC, ' \
+                'sandbox_id INTEGER NOT NULL, '\
+                'filename TEXT NOT NULL, ' \
+                'source_path TEXT, ' \
+                'uploaded BOOLEAN DEFAULT FALSE, ' \
+                'mimetype TEXT DEFAULT NULL, ' \
+                'created_timestamp TEXT DEFAULT NULL,' """ """\
+                'original_filename TEXT DEFAULT NULL, ' \
+                'timestamp INTEGER)',
+             'CREATE TABLE sandbox_species(id INTEGER PRIMARY KEY ASC, ' \
+                'sandbox_file_id INTEGER NOT NULL, ' \
+                'obs_date TEXT, ' \
+                'obs_common TEXT, ' \
+                'obs_scientific TEXT, ' \
+                'obs_count INTEGER)',
+             'CREATE TABLE sandbox_locations(id INTEGER PRIMARY KEY ASC, '\
+                'sandbox_file_id INTEGER NOT NULL, ' \
+                'loc_name TEXT, ' \
+                'loc_id TEXT, ' \
+                'loc_elevation REAL)',
+            'CREATE TABLE sparcd(version TEXT)'
+        )
+    version_stmt = f'INSERT INTO sparcd(version) VALUES({DB_VERSION})'
+
+    with sqlite3.connect(path) as conn:
+        cursor = conn.cursor()
+
+        # Run the pre-configured commands
+        idx = 1
+        for cmd in stmts:
+            print(f'{idx}.',cmd)
+            cursor.execute(cmd)
+            idx = idx + 1
+
+        # Add the version information
+        cursor.execute(version_stmt)
+
+        conn.commit()
+        cursor.close()
+
 if __name__ == '__main__':
-    database_path, force_overwrite, admin = get_arguments()
-    if not os.path.exists(database_path) or force_overwrite:
+    database_path, sandbox_db_path, force_overwrite, admin = get_arguments()
+    if not (os.path.exists(database_path) and os.path.exists(sandbox_db_path)) or force_overwrite:
         if force_overwrite:
-            print(f'{SCRIPT_NAME}: Forcing the overwrite of existing database file: ' \
-                  f'{database_path}')
+            print(f'{SCRIPT_NAME}: Forcing the overwrite of existing database files: ')
+            print(f'        {database_path}')
+            print(f'        {sandbox_db_path}')
             if os.path.exists(database_path) and not os.path.isdir(database_path):
                 os.unlink(database_path)
+            if os.path.exists(sandbox_db_path) and not os.path.isdir(sandbox_db_path):
+                os.unlink(sandbox_db_path)
         else:
             print(f'{SCRIPT_NAME}: Creating database file: {database_path}')
         build_database(database_path, admin)
+        build_sandbox_database(sandbox_db_path)
     else:
-        print(f'{SCRIPT_NAME}: The specified database file already exists: {database_path}')
+        print(f'{SCRIPT_NAME}: One or more database files already exists:')
+        print(f'        {database_path}')
+        print(f'        {sandbox_db_path}')
