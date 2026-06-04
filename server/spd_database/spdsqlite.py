@@ -123,13 +123,13 @@ class SPDSQLite:
         if self._conn is None:
             raise RuntimeError('Attempting to save tokens to the database before connecting')
 
-        cursor = self._conn.cursor()
-        query = 'INSERT INTO tokens(token, name, password, s3_url, s3_id, timestamp, client_ip, ' \
-                'user_agent) VALUES(?,?,?,?,?,strftime("%s", "now"),?, ?)'
-        cursor.execute(query, (token, user, password, s3_url, s3_id, client_ip, user_agent))
+        with self.transaction():
+            cursor = self._conn.cursor()
+            query = 'INSERT INTO tokens(token, name, password, s3_url, s3_id, timestamp, client_ip, ' \
+                    'user_agent) VALUES(?,?,?,?,?,strftime("%s", "now"),?, ?)'
+            cursor.execute(query, (token, user, password, s3_url, s3_id, client_ip, user_agent))
 
-        self._conn.commit()
-        cursor.close()
+            cursor.close()
 
     def clean_expired_tokens(self, user: str, token_timeout_sec: int) -> None:
         """ Cleans up expired tokens for the user
@@ -140,14 +140,14 @@ class SPDSQLite:
         if self._conn is None:
             raise RuntimeError('Attempting to clean up expired tokens from the database ' \
                                                                                 'before connecting')
-        cursor = self._conn.cursor()
-        cursor.execute('DELETE FROM tokens WHERE tokens.id IN ' \
-                            '(SELECT id from tokens WHERE name=? AND ' \
-                                                '(strftime("%s", "now")-timestamp) >= ?)',
-                    (user, token_timeout_sec))
+        with self.transaction():
+            cursor = self._conn.cursor()
+            cursor.execute('DELETE FROM tokens WHERE tokens.id IN ' \
+                                '(SELECT id from tokens WHERE name=? AND ' \
+                                                    '(strftime("%s", "now")-timestamp) >= ?)',
+                        (user, token_timeout_sec))
 
-        self._conn.commit()
-        cursor.close()
+            cursor.close()
 
     def update_token_timestamp(self, token: str) -> None:
         """Updates the token's timestamp to the database's now
@@ -158,11 +158,11 @@ class SPDSQLite:
             raise RuntimeError('update_token_timestamp: attempting to access database before ' \
                                         'connecting')
 
-        cursor = self._conn.cursor()
-        query = 'UPDATE tokens SET timestamp=strftime("%s", "now") WHERE token=?'
-        cursor.execute(query, (token,))
-        self._conn.commit()
-        cursor.close()
+        with self.transaction():
+            cursor = self._conn.cursor()
+            query = 'UPDATE tokens SET timestamp=strftime("%s", "now") WHERE token=?'
+            cursor.execute(query, (token,))
+            cursor.close()
 
     def remove_token(self, token: str) -> None:
         """ Attempts to remove the token from the database
@@ -172,10 +172,10 @@ class SPDSQLite:
         if self._conn is None:
             raise RuntimeError('remove_token: attempting to access database before connecting')
 
-        cursor = self._conn.cursor()
-        cursor.execute('DELETE FROM tokens WHERE token=(?)', (token,))
-        self._conn.commit()
-        cursor.close()
+        with self.transaction():
+            cursor = self._conn.cursor()
+            cursor.execute('DELETE FROM tokens WHERE token=(?)', (token,))
+            cursor.close()
 
     def get_user_by_token(self, token: str) -> Optional[tuple]:
         """ Looks up token and user information
@@ -235,18 +235,17 @@ class SPDSQLite:
         if self._conn is None:
             raise RuntimeError('auto_add_user: attempting to access database before connecting')
 
-        cursor = self._conn.cursor()
         try:
-            cursor.execute('INSERT INTO users(name, email, species, s3_id) VALUES(?, ?, ?, ?)',
+            with self.transaction():
+                cursor = self._conn.cursor()
+                cursor.execute('INSERT INTO users(name, email, species, s3_id) VALUES(?, ?, ?, ?)',
                                                             (username, email, species, s3_id))
-            self._conn.commit()
+                cursor.close()
         except sqlite3.IntegrityError as ex:
             # If the user already exists, we ignore the error and continue
             if not ex.sqlite_errorcode == sqlite3.SQLITE_CONSTRAINT_UNIQUE:
                 raise
-        finally:
-            cursor.close()
-
+    
     def get_password(self, token: str) -> tuple:
         """ Returns the password associated with the token
         Arguments:
@@ -277,11 +276,11 @@ class SPDSQLite:
             raise RuntimeError('update_user_settings: Attempting to access database before '\
                                     'connecting')
 
-        cursor = self._conn.cursor()
-        cursor.execute('UPDATE users SET settings=?, email=? WHERE name=? and s3_id=?',
+        with self.transaction():
+            cursor = self._conn.cursor()
+            cursor.execute('UPDATE users SET settings=?, email=? WHERE name=? and s3_id=?',
                                                                 (settings, email, username, s3_id))
-        self._conn.commit()
-        cursor.close()
+            cursor.close()
 
     def get_collections(self, s3_id: str) -> tuple:
         """ Gets all the collections associated with the collection
@@ -382,13 +381,13 @@ class SPDSQLite:
             raise RuntimeError('Attempting to add collection information in the database '\
                                                                             'before connecting')
 
-        cursor = self._conn.cursor()
-        cursor.execute('INSERT INTO collections(s3_id, hash_id, name, coll_id, json, timestamp) ' \
-                                                    'VALUES(?, ?, ?, ?, ?, strftime("%s", "now"))',
-                        (s3_id, self.hash2str(s3_id+coll_id), coll_name, coll_id, coll_json))
+        with self.transaction():
+            cursor = self._conn.cursor()
+            cursor.execute('INSERT INTO collections(s3_id, hash_id, name, coll_id, json, timestamp) ' \
+                                                        'VALUES(?, ?, ?, ?, ?, strftime("%s", "now"))',
+                            (s3_id, self.hash2str(s3_id+coll_id), coll_name, coll_id, coll_json))
 
-        self._conn.commit()
-        cursor.close()
+            cursor.close()
 
     def collection_update(self, s3_id: str, coll_id: str, coll_json: str) -> None:
         """ Updates the database with the new collection information
@@ -401,12 +400,12 @@ class SPDSQLite:
             raise RuntimeError('Attempting to update collection information in the database '\
                                                                             'before connecting')
 
-        cursor = self._conn.cursor()
-        cursor.execute('UPDATE collections SET json=? WHERE s3_id=? AND coll_id=?',
+        with self.transaction():
+            cursor = self._conn.cursor()
+            cursor.execute('UPDATE collections SET json=? WHERE s3_id=? AND coll_id=?',
                                                                         (coll_json, s3_id, coll_id))
 
-        self._conn.commit()
-        cursor.close()
+            cursor.close()
 
     def upload_save(self, s3_id: str, bucket: str, collection_id: str, upload_name: str, \
                                                                 upload_json: str) -> Optional[int]:
@@ -680,12 +679,12 @@ class SPDSQLite:
             raise RuntimeError('Attempting to save query paths in the database before connecting')
 
         # Check for expired collection uploads
-        cursor = self._conn.cursor()
-        cursor.execute('INSERT INTO queries(token, path, timestamp) ' \
+        with self.transaction():
+            cursor = self._conn.cursor()
+            cursor.execute('INSERT INTO queries(token, path, timestamp) ' \
                                 'VALUES (?,?,strftime("%s", "now"))', (token, file_path))
 
-        self._conn.commit()
-        cursor.close()
+            cursor.close()
 
         return True
 
@@ -765,16 +764,16 @@ class SPDSQLite:
                                                                                 'before connecting')
 
         # Add the entry to the database
-        cursor = self._conn.cursor()
-        cursor.execute('INSERT INTO collection_edits(s3_id, bucket, s3_base_path, username, ' \
+        with self.transaction():
+            cursor = self._conn.cursor()
+            cursor.execute('INSERT INTO collection_edits(s3_id, bucket, s3_base_path, username, ' \
                                                     'edit_timestamp, loc_id, loc_name, loc_ele, ' \
                                                     'timestamp) '\
                                     'VALUES(?,?,?,?,?,?,?,?,strftime("%s", "now"))', 
                             (s3_id, bucket, upload_path, username, timestamp, loc_id, \
                                                                                 loc_name, loc_ele))
 
-        self._conn.commit()
-        cursor.close()
+            cursor.close()
 
     def add_image_species_edit(self, s3_id: str, bucket: str, file_path: str, username: str, \
                                 timestamp: str, common: str, species: str, count: str,
@@ -797,16 +796,16 @@ class SPDSQLite:
                                                                                 'before connecting')
 
         # Add the entry to the database
-        cursor = self._conn.cursor()
-        cursor.execute('INSERT INTO image_edits(s3_id, bucket, s3_file_path, username, ' \
+        with self.transaction():
+            cursor = self._conn.cursor()
+            cursor.execute('INSERT INTO image_edits(s3_id, bucket, s3_file_path, username, ' \
                                         'edit_timestamp, obs_common, obs_scientific, obs_count,' \
                                         ' request_id, timestamp) '\
                                     'VALUES(?,?,?,?,?,?,?,?,?, strftime("%s", "now"))', 
                                 (s3_id, bucket, file_path, username, timestamp, common, \
                                                                     species, count, request_id))
 
-        self._conn.commit()
-        cursor.close()
+            cursor.close()
 
     def save_user_species(self, s3_id: str, username: str, species: str) -> None:
         """ Saves the species entry for the user
@@ -820,12 +819,12 @@ class SPDSQLite:
                                                                                 'before connecting')
 
         # Add the entry to the database
-        cursor = self._conn.cursor()
-        cursor.execute('UPDATE users SET species=? WHERE name=? AND s3_id=?',
-                                                                        (species, username, s3_id))
+        with self.transaction():
+            cursor = self._conn.cursor()
+            cursor.execute('UPDATE users SET species=? WHERE name=? AND s3_id=?',
+                                                                            (species, username, s3_id))
 
-        self._conn.commit()
-        cursor.close()
+            cursor.close()
 
     def get_image_species_edits(self, s3_id: str, bucket: str, upload_path: str) -> dict:
         """ Returns all the saved edits for this bucket and upload path
@@ -922,11 +921,11 @@ class SPDSQLite:
             query = 'UPDATE users SET email=?, administrator=? WHERE name=? AND s3_id=?'
             params = (new_email, isinstance(admin, bool) and admin is True, old_name, s3_id)
 
-        cursor = self._conn.cursor()
-        cursor.execute(query, params)
+        with self.transaction():
+            cursor = self._conn.cursor()
+            cursor.execute(query, params)
 
-        self._conn.commit()
-        cursor.close()
+            cursor.close()
 
     def update_species(self, s3_id: str, username: str, old_scientific: str, new_scientific: str, \
                                         new_name: str, new_keybind: str, new_icon_url: str) -> bool:
@@ -947,24 +946,26 @@ class SPDSQLite:
             raise RuntimeError('Attempting to add a species update into the database before ' \
                                                                                     'connecting')
 
-        cursor = self._conn.cursor()
-        cursor.execute('SELECT id FROM users WHERE name=? AND s3_id=?', (username, s3_id))
+        updated = False
+        with self.transaction():
+            cursor = self._conn.cursor()
+            cursor.execute('SELECT id FROM users WHERE name=? AND s3_id=?', (username, s3_id))
 
-        res = cursor.fetchall()
-        if not res or len(res) < 1:
-            cursor.close()
-            return False
-        user_id = res[0][0]
+            res = cursor.fetchall()
 
-        cursor.execute('INSERT INTO admin_species_edits(s3_id, user_id, timestamp, ' \
+            if res and len(res) >= 1:
+                user_id = res[0][0]
+
+                cursor.execute('INSERT INTO admin_species_edits(s3_id, user_id, timestamp, ' \
                             'old_scientific_name, new_scientific_name, name, keybind, iconURL) ' \
                             'VALUES(?,?,strftime("%s", "now"),?,?,?,?,?)',
                                     (s3_id, user_id, old_scientific, new_scientific, new_name, \
                                             new_keybind, new_icon_url))
-        self._conn.commit()
-        cursor.close()
+                updated = True
 
-        return True
+            cursor.close()
+
+        return updated
 
     def update_location(self, s3_id: str, username: str, loc_name: str, loc_id: str, \
                         loc_active: bool, loc_ele: float, loc_old_lat: float, loc_old_lng: float, \
@@ -991,26 +992,28 @@ class SPDSQLite:
             raise RuntimeError('Attempting to add a location update into the database before ' \
                                                                                     'connecting')
 
-        cursor = self._conn.cursor()
-        cursor.execute('SELECT id FROM users WHERE name=? AND s3_id=?', (username, s3_id))
+        updated = False
+        with self.transaction():
+            cursor = self._conn.cursor()
+            cursor.execute('SELECT id FROM users WHERE name=? AND s3_id=?', (username, s3_id))
 
-        res = cursor.fetchall()
-        if not res or len(res) < 1:
-            cursor.close()
-            return False
-        user_id = res[0][0]
+            res = cursor.fetchall()
 
-        cursor.execute('INSERT INTO admin_location_edits(s3_id, user_id, timestamp, loc_name, ' \
-                                        'loc_id, loc_active, loc_ele, loc_old_lat, loc_old_lng, ' \
-                                        'loc_new_lat, loc_new_lng, loc_description) ' \
+            if res and len(res) >= 1:
+                user_id = res[0][0]
+
+                cursor.execute('INSERT INTO admin_location_edits(s3_id, user_id, timestamp, ' \
+                                        'loc_name, loc_id, loc_active, loc_ele, loc_old_lat, ' \
+                                        'loc_old_lng, loc_new_lat, loc_new_lng, loc_description) ' \
                             'VALUES(?,?,strftime("%s", "now"),?,?,?,?,?,?,?,?,?)',
                                     (s3_id, user_id, loc_name, loc_id, loc_active, loc_ele, \
                                             loc_old_lat, loc_old_lng, loc_new_lat,loc_new_lng,
                                             description))
-        self._conn.commit()
-        cursor.close()
+                updated = True
 
-        return True
+            cursor.close()
+
+        return updated
 
     def get_admin_locations(self, s3_id: str, username: str) -> dict:
         """ Returns any saved administrative location changes
@@ -1115,13 +1118,13 @@ class SPDSQLite:
             raise RuntimeError('Attempting to clear administrative locations in the database '\
                                                                                 'before connecting')
 
-        cursor = self._conn.cursor()
-        query = 'UPDATE admin_location_edits SET location_updated = 1 WHERE s3_id=? ' \
-                    'AND user_id IN (SELECT id FROM users WHERE name=? AND s3_id=?)'
-        cursor.execute(query, (s3_id, username, s3_id))
+        with self.transaction():
+            cursor = self._conn.cursor()
+            query = 'UPDATE admin_location_edits SET location_updated = 1 WHERE s3_id=? ' \
+                        'AND user_id IN (SELECT id FROM users WHERE name=? AND s3_id=?)'
+            cursor.execute(query, (s3_id, username, s3_id))
 
-        self._conn.commit()
-        cursor.close()
+            cursor.close()
 
     def clear_admin_species_changes(self, s3_id: str, username: str) -> None:
         """ Cleans up the administration species changes for this use
@@ -1133,13 +1136,13 @@ class SPDSQLite:
             raise RuntimeError('Attempting to clear administrative species in the database '\
                                                                                 'before connecting')
 
-        cursor = self._conn.cursor()
-        query = 'UPDATE admin_species_edits SET s3_updated = 1 WHERE s3_id=? AND user_id in ' \
-                    '(SELECT id FROM users where name=? AND s3_id=?)'
-        cursor.execute(query, (s3_id, username, s3_id))
+        with self.transaction():
+            cursor = self._conn.cursor()
+            query = 'UPDATE admin_species_edits SET s3_updated = 1 WHERE s3_id=? AND user_id in ' \
+                        '(SELECT id FROM users where name=? AND s3_id=?)'
+            cursor.execute(query, (s3_id, username, s3_id))
 
-        self._conn.commit()
-        cursor.close()
+            cursor.close()
 
     def remove_edit_locations(self, s3_id: str, location_id: str) -> None:
         """ Removes location edits that reference this location
@@ -1151,12 +1154,12 @@ class SPDSQLite:
             raise RuntimeError('Attempting to remove administrative location edits in the '\
                                                                     'database before connecting')
 
-        cursor = self._conn.cursor()
-        cursor.execute('DELETE FROM admin_location_edits WHERE s3_id=? AND loc_id=?',
-                                                                        (s3_id, location_id))
+        with self.transaction():
+            cursor = self._conn.cursor()
+            cursor.execute('DELETE FROM admin_location_edits WHERE s3_id=? AND loc_id=?',
+                                                                            (s3_id, location_id))
 
-        self._conn.commit()
-        cursor.close()
+            cursor.close()
 
     def get_next_upload_location(self, s3_id: str, username: str) -> Optional[dict]:
         """ Returns the next edit location for this user at the specified endpoint
@@ -1194,13 +1197,14 @@ class SPDSQLite:
             raise RuntimeError('Attempting to get location edits from the database '\
                                                                                 'before connecting')
 
-        cursor = self._conn.cursor()
-        cursor.execute('UPDATE collection_edits SET updated=1 WHERE s3_id=? AND username=? AND ' \
-                            'bucket=? AND s3_base_path=? AND edit_timestamp=strftime("%s", "now")',
-                        (s3_id, username, bucket, base_path))
+        with self.transaction():
+            cursor = self._conn.cursor()
+            cursor.execute('UPDATE collection_edits SET updated=1, ' \
+                                                            'edit_timestamp=strftime("%s", "now") '\
+                                'WHERE s3_id=? AND username=? AND bucket=? AND s3_base_path=?',
+                            (s3_id, username, bucket, base_path))
 
-        self._conn.commit()
-        cursor.close()
+            cursor.close()
 
     def get_next_files_info(self, s3_id: str, username: str, updated_value: int, s3_path:str=None,\
                                             upload_id: str=None, \
@@ -1259,14 +1263,14 @@ class SPDSQLite:
             raise RuntimeError('Attempting to mark collection edits as updated in the database '\
                                                                                 'before connecting')
 
-        cursor = self._conn.cursor()
-        cursor.execute('UPDATE collection_edits SET updated=1 ' \
+        with self.transaction():
+            cursor = self._conn.cursor()
+            cursor.execute('UPDATE collection_edits SET updated=1 ' \
                                     'WHERE s3_id=? AND username=? AND bucket=? AND s3_base_path=?',
                         (collection_info['s3_url'], username, collection_info['bucket'], \
                                                                     collection_info['base_path']))
 
-        self._conn.commit()
-        cursor.close()
+            cursor.close()
 
     def complete_image_edits(self, username: str, files: tuple, old_updated: int, \
                                                                         new_updated: int) -> None:
@@ -1401,12 +1405,12 @@ class SPDSQLite:
             raise RuntimeError('Attempting to release a named lock in the database before ' \
                                                                                     'connecting')
 
-        cursor = self._conn.cursor()
-        cursor.execute('UPDATE db_locks SET value=NULL,timestamp=NULL WHERE name=? AND value=?',
-                                                                                    (name, value))
+        with self.transaction():
+            cursor = self._conn.cursor()
+            cursor.execute('UPDATE db_locks SET value=NULL,timestamp=NULL WHERE name=? AND value=?',
+                                                                                        (name, value))
 
-        self._conn.commit()
-        cursor.close()
+            cursor.close()
 
     def count_admin(self, s3_id: str) -> int:
         """ Counts the number of administrators found in the database for the S3 endpoint
@@ -1504,13 +1508,13 @@ class SPDSQLite:
         if self._conn is None:
             raise RuntimeError('Attempting to add a message to the database before ' \
                                                                                     'connecting')
-        cursor = self._conn.cursor()
-        query = 'INSERT INTO messages(s3_id, sender, receiver, subject, message, priority, ' \
-                'timestamp) VALUES(?,?,?,?,?,?,strftime("%s", "now"))'
-        cursor.execute(query, (s3_id, sender, receiver, subject, message, priority))
+        with self.transaction():
+            cursor = self._conn.cursor()
+            query = 'INSERT INTO messages(s3_id, sender, receiver, subject, message, priority, ' \
+                    'timestamp) VALUES(?,?,?,?,?,?,strftime("%s", "now"))'
+            cursor.execute(query, (s3_id, sender, receiver, subject, message, priority))
 
-        self._conn.commit()
-        cursor.close()
+            cursor.close()
 
     def messages_get(self, s3_id: str, username: str, admin: bool=False) -> tuple:
         """ Adds a message to the database
@@ -1564,14 +1568,14 @@ class SPDSQLite:
         if ids is None or len(ids) <= 0:
             return
 
-        cursor = self._conn.cursor()
-        id_params = ','.join('?' * len(ids))
-        query = 'UPDATE messages SET read_timestamp=strftime("%s", "now") WHERE s3_id=? AND ' \
-                                                        'receiver=? AND id IN (' + id_params + ')'
-        cursor.execute(query, (s3_id, username) + tuple(ids))
+        with self.transaction():
+            cursor = self._conn.cursor()
+            id_params = ','.join('?' * len(ids))
+            query = 'UPDATE messages SET read_timestamp=strftime("%s", "now") WHERE s3_id=? AND ' \
+                                                            'receiver=? AND id IN (' + id_params + ')'
+            cursor.execute(query, (s3_id, username) + tuple(ids))
 
-        self._conn.commit()
-        cursor.close()
+            cursor.close()
 
     def messages_are_deleted(self, s3_id: str, username: str, ids: tuple) -> None:
         """ Marks messages as deleted
@@ -1587,14 +1591,14 @@ class SPDSQLite:
         if ids is None or len(ids) <= 0:
             return
 
-        cursor = self._conn.cursor()
-        id_params = ','.join('?' * len(ids))
-        query = 'UPDATE messages SET deleted=1 WHERE s3_id=? AND receiver=? AND ' \
-                                                                        'id IN (' + id_params + ')'
-        cursor.execute(query, (s3_id, username) + tuple(ids))
+        with self.transaction():
+            cursor = self._conn.cursor()
+            id_params = ','.join('?' * len(ids))
+            query = 'UPDATE messages SET deleted=1 WHERE s3_id=? AND receiver=? AND ' \
+                                                                            'id IN (' + id_params + ')'
+            cursor.execute(query, (s3_id, username) + tuple(ids))
 
-        self._conn.commit()
-        cursor.close()
+            cursor.close()
 
     def message_count(self, s3_id: str, username: str) -> Optional[int]:
         """ Returns the number of messages for a recipient
