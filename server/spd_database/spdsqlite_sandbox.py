@@ -541,6 +541,23 @@ class SPDSQLiteSandbox:
 
         return upload_id
 
+    def sandbox_set_completion_status(self, username: str, upload_id: str, status: int) -> None:
+        """ Sets the completion status of the sandbox upload
+        Arguments:
+            username: the name of the person starting the upload
+            upload_id: the ID of the upload
+            status: the completion status to set
+        """
+        if self._conn is None:
+            raise RuntimeError('Attempting to set sandbox completion status in the database '
+                               'before connecting')
+
+        with self.transaction():
+            cursor = self._conn.cursor()
+            cursor.execute('UPDATE sandbox SET completion_status=? WHERE name=? AND upload_id=?',
+                           (status, username, upload_id))
+            cursor.close()
+
     def sandbox_upload_complete(self, username: str, upload_id: str) -> None:
         """ Marks the sandbox upload as completed by resetting the path
         Arguments:
@@ -554,9 +571,8 @@ class SPDSQLiteSandbox:
         # Update the sandbox
         with self.transaction():
             cursor = self._conn.cursor()
-            cursor.execute('UPDATE sandbox SET path="", recovered=0  WHERE name=? AND upload_id=?',
-                                                                            (username, upload_id))
-
+            cursor.execute('UPDATE sandbox SET path="", recovered=0, completion_status=3 '
+                                            'WHERE name=? AND upload_id=?', (username, upload_id))
             cursor.close()
 
     def sandbox_upload_complete_by_info(self, s3_id: str, username: str, bucket: str, \
@@ -843,6 +859,29 @@ class SPDSQLiteSandbox:
         cursor.close()
 
         return res
+
+    def sandbox_get_completion_status(self, username: str, upload_id: str) -> Optional[int]:
+        """ Returns the completion status of the sandbox upload
+        Arguments:
+            username: the name of the person starting the upload
+            upload_id: the ID of the upload
+        Return:
+            Returns the completion status or None if not found
+        """
+        if self._conn is None:
+            raise RuntimeError('Attempting to get sandbox completion status from the database '
+                               'before connecting')
+
+        cursor = self._conn.cursor()
+        cursor.execute('SELECT completion_status FROM sandbox WHERE name=? AND upload_id=?',
+                       (username, upload_id))
+        res = cursor.fetchone()
+        cursor.close()
+
+        if not res or len(res) < 1:
+            return None
+
+        return res[0]
 
     def sandbox_get_incomplete(self) -> Optional[tuple]:
         """ Returns all sandbox rows that are still in progress

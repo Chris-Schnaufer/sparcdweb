@@ -474,6 +474,15 @@ class SPARCdDatabase:
                                                         location_name, location_lat, location_lon,
                                                         location_ele)
 
+    def sandbox_set_completion_status(self, username: str, upload_id: str, status: int) -> None:
+        """ Sets the completion status of the sandbox upload
+        Arguments:
+            username: the name of the person starting the upload
+            upload_id: the ID of the upload
+            status: the completion status to set
+        """
+        with self._sandbox():
+            self._sandbox_db.sandbox_set_completion_status(username, upload_id, status)
 
     def sandbox_upload_complete(self, username: str, upload_id: str) -> None:
         """ Marks the sandbox upload as completed by resetting the path
@@ -1427,6 +1436,17 @@ class SPARCdDatabase:
                 self._sandbox_db.sandbox_file_processing_complete(file_id)
 
         return True
+
+    def sandbox_get_completion_status(self, username: str, upload_id: str) -> Optional[int]:
+        """ Returns the completion status of the sandbox upload
+        Arguments:
+            username: the name of the person starting the upload
+            upload_id: the ID of the upload
+        Return:
+            Returns the completion status or None if not found
+        """
+        with self._sandbox():
+            return self._sandbox_db.sandbox_get_completion_status(username, upload_id)
 
     def sandbox_get_incomplete(self) -> tuple:
         """ Returns all sandbox rows that are still in progress
