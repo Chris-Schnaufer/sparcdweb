@@ -82,6 +82,7 @@ export default function Home() {
   // TODO: end of above
   const [editing, setEditing] = React.useState(false);
   const [isNarrow, setIsNarrow] = React.useState(null);
+  const [isOnline, setIsOnline] = React.useState(true);
   const [lastToken, setLastToken] = React.useState(null);
   const [loadingCollections, setLoadingCollections] = React.useState(false);
   const [loadingLocations, setLoadingLocations] = React.useState(false);
@@ -109,7 +110,6 @@ export default function Home() {
   const [userMessages, setUserMessages] =  React.useState({count:null, messages:null});
   const [userNames, setUserNames] =  React.useState({names:null, loading:false});       // Names of users on the system
   const [userSettings, setUserSettings] =  React.useState(DEFAULT_USER_SETTINGS);
-
 
   /**
    * Handles the idle events
@@ -170,6 +170,22 @@ export default function Home() {
       idleListenEvents.forEach((name) => window.removeEventListener(name, idleListener, { passive:true } ));
     }
   }, [checkIdleTimeout, idleListener]);
+
+  // Used for online/offline detection
+  React.useEffect(() => {
+    setIsOnline(navigator.onLine);
+
+    const handleOnline  = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online',  handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online',  handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   /**
    * Adds a message to the message list
@@ -1274,7 +1290,7 @@ export default function Home() {
               {!loggedIn || createNewInstance === true || repairInstance === true ? 
                 <LoginValidContext.Provider value={loginValid}>
                   <Login prevUrl={dbURL} prevUser={dbUser} prevRemember={dbRemember} onLogin={handleLogin}
-                         onRememberChange={handleRememberChanged} />
+                         onRememberChange={handleRememberChanged} isOnline={isOnline} />
                 </LoginValidContext.Provider>
                 :
                   <ActionsRouter 
@@ -1293,6 +1309,22 @@ export default function Home() {
               </Box>
             <FooterBar />
           </Grid>
+          { !isOnline &&
+            <Grid container direction="row" alignItems="center" justifyContent="center"
+                  sx={{...theme.palette.screen_overlay_grey, position:'fixed', zIndex:9999}}>
+              <Box sx={{backgroundColor:'rgb(212, 230, 241, 0.95)', border:'1px solid grey', 
+                        borderRadius:'15px', padding:'25px 10px'}}>
+                <Grid container direction="column" alignItems="center" justifyContent="center" gap={2}>
+                  <Typography variant="body2">
+                    No network connection
+                  </Typography>
+                  <Typography variant="body2">
+                    Any pending uploads will resume automatically when connectivity returns
+                  </Typography>
+                </Grid>
+              </Box>
+            </Grid>
+          }
           { !checkedToken &&
             <Grid id="login-checking-wrapper" container direction="row" alignItems="center" justifyContent="center"
                   sx={{...theme.palette.login_checking_wrapper}}
