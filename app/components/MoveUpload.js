@@ -44,6 +44,7 @@ export default function MoveUploads({collectionId, upload, admin, buckets, getBu
   const collectionsItems = React.useContext(CollectionsInfoContext);
   const userName = React.useContext(UserNameContext);
   const successMessageTORef = React.useRef(null);     // Used to keep track of the success message timer
+  const [isMoving, setIsMoving] = React.useState(false);  // Flags that a move is in progress
   const [showSuccessMessage, setShowSuccessMessage] = React.useState(false);
   const [selectedCollection, setSelectedCollection] = React.useState(null);
   const [showBuckets, setShowBuckets] = React.useState(false);  // Show additional destinations when admin
@@ -114,13 +115,19 @@ export default function MoveUploads({collectionId, upload, admin, buckets, getBu
    * @function
    */
   const handleMove = React.useCallback(() => {
+    if (isMoving) return;           // guard against double click
+    setIsMoving(true);
     onMove?.(collectionId, upload, selectedCollection,
               (respData) => { // Success
+                setIsMoving(false);
                 setShowSuccessMessage(true);
                 successMessageTORef.current = window.setTimeout(handleSuccessClose, SUCCESS_WINDOW_AUTOCLOSE_MS);
+              },
+              (err) => {
+                setIsMoving(false);
               }
     )
-  }, [collectionId, handleSuccessClose, onMove, selectedCollection, upload]);
+  }, [collectionId, handleSuccessClose, isMoving, onMove, selectedCollection, upload]);
 
   /**
    * Function to handle selected collection
@@ -179,7 +186,7 @@ export default function MoveUploads({collectionId, upload, admin, buckets, getBu
           }
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleMove} disabled={!selectedCollection}>Move</Button>
+          <Button onClick={handleMove} disabled={!selectedCollection || isMoving}>Move</Button>
           <Button onClick={onClose}>Done</Button>
         </DialogActions>
       </ModalDialog>

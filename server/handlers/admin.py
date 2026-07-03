@@ -866,6 +866,8 @@ def handle_move_upload(db:SPARCdDatabase, user_info: UserInfo, s3_info: S3Info,
     path_func = __make_dest_path_func(len(start_path), dest_path) if dst_coll else lambda x: x
 
     # Move the data
+    print(f'MOVE UPLOAD user={user_info.name} source: {src_coll["bucket"]} {start_path}  ' \
+                f'dest: {dst_bucket} {path_func(start_path)}',flush=True)
     res = s3u.move_upload(s3_info, src_coll['bucket'], dst_bucket, start_path, path_func)
 
     # Update the collections to reflect the changed
