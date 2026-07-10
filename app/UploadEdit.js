@@ -337,7 +337,9 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
       console.log('Warning: Unable to find species',speciesName,'for updating count in image',imageName);
       return;
     }
-    curUpload.images[curImageIdx].species = curUpload.images[curImageIdx].species.map((item, idx) => {if (idx === curSpeciesIdx) item.count = speciesCount; return item;});
+
+    curUpload.images[curImageIdx].species = curUpload.images[curImageIdx].species.map((item, idx) => 
+                                                                  {if (idx === curSpeciesIdx) item.count = speciesCount; return item;});
 
     const curKeySpeciesIdx = speciesItems.findIndex((item) => item.scientificName === curUpload.images[curImageIdx].species[curSpeciesIdx].scientificName);
     if (curKeySpeciesIdx <= -1) {
@@ -1674,7 +1676,6 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
                        'maxWidth':(workspaceWidth-sidebarWidthLeft)+'px',
                        'width':(workspaceWidth-sidebarWidthLeft)+'px', 
                        'position':'absolute', backgroundColor:'rgb(0,0,0,0.7)' }}>
-              <Grid size={{ xs: 12, sm: 12, md:12 }}>
                 <ImageEdit url={speciesItems.find((item)=>item.name===speciesZoomName).speciesIconURL}
                            type='image'
                            name={speciesZoomName}
@@ -1685,7 +1686,6 @@ export default function UploadEdit({selectedUpload, onCancel, searchSetup, uploa
                            onClose={() => setSpeciesZoomName(null)}
                            adjustments={false}
                 />
-            </Grid>
           </Grid>
         : null
       }
