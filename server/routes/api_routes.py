@@ -13,7 +13,7 @@ import spd_crypt as crypt
 
 api_bp = Blueprint('api', __name__)
 
-@admin_bp.route('/api/login', methods=['POST'])
+@api_bp.route('/api/login', methods=['POST'])
 @cross_origin(origins="*", supports_credentials=True)
 def api_login():
     """ Returns a token representing the login
