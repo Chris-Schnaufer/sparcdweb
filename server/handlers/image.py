@@ -344,11 +344,14 @@ def handle_species_keybind(db: SPARCdDatabase, user_info: UserInfo, s3_info: S3I
                                             temp_species_filename,
                                             s3_info)
 
+    # Map the key when needed
+    new_key = params.new_key if params.new_key != 'null' else None
+
     # Update the species
     found = False
     for one_species in cur_species:
         if one_species['scientificName'] == params.scientific:
-            one_species['keyBinding'] = params.new_key[0]
+            one_species['keyBinding'] = new_key
             found = True
             break
 
@@ -356,7 +359,7 @@ def handle_species_keybind(db: SPARCdDatabase, user_info: UserInfo, s3_info: S3I
     if not found:
         cur_species.append({'name':params.common,
                             'scientificName':params.scientific,
-                            'keyBinding':params.new_key[0],
+                            'keyBinding':new_key,
                             'speciesIconURL': 'https://i.imgur.com/4qz5mI0.png'})
 
     db.save_user_species(s3_info.id, user_info.name, json.dumps(cur_species))

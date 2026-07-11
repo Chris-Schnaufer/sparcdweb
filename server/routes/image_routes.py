@@ -269,6 +269,7 @@ def species_keybind(*, db, user_info, s3_info, **_):
     common = request.form.get('common') # Species name
     scientific = request.form.get('scientific') # Species scientific name
     new_key = request.form.get('key')
+    print(f'SPECIES KEYBIND species={common}  new key: {new_key}', flush=True)
 
     # Check what we have from the requestor
     if not common or not scientific or not new_key:
